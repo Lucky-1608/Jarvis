@@ -1,0 +1,92 @@
+[project]
+name = "jarvis-os"
+version = "0.1.0"
+description = "Jarvis OS — AI Operating System for knowledge work, automation, and software engineering"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Hrishikesh Vuppala" }]
+
+dependencies = [
+    # --- Core ---
+    "pydantic>=2.0,<3.0",
+    "pydantic-settings>=2.0,<3.0",
+    "python-dotenv>=1.0",
+
+    # --- AI / LLM ---
+    "httpx>=0.27",
+    "openai>=1.30",
+
+    # --- Memory / Vector DB ---
+    "chromadb>=0.5",
+    "sentence-transformers>=3.0",
+
+    # --- Backend ---
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "websockets>=12.0",
+
+    # --- CLI ---
+    "rich>=13.0",
+    "click>=8.1",
+
+    # --- Scheduling ---
+    "apscheduler>=3.10,<4.0",
+
+    # --- Logging ---
+    "structlog>=24.0",
+
+    # --- Utilities ---
+    "psutil>=5.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.5",
+    "httpx",  # for TestClient
+]
+
+voice = [
+    "faster-whisper>=1.0",
+    "edge-tts>=6.1",
+    "sounddevice>=0.4",
+    "pyttsx3>=2.90",
+    "numpy>=1.24",
+    "webrtcvad>=2.0.10",
+]
+
+vision = [
+    "pillow>=10.0",
+]
+
+automation = [
+    "playwright>=1.40",
+    "pyautogui>=0.9",
+]
+
+all = [
+    "jarvis-os[dev,voice,vision,automation]",
+]
+
+[project.scripts]
+jarvis = "jarvis.cli.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["jarvis"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

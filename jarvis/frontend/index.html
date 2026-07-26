@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>JARVIS OS - HUD</title>
+    <!-- Google Fonts for Tech Aesthetics -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./style.css">
+    
+    <!-- Three.js Import Map -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div class="hud-container">
+      
+      <!-- Top Header -->
+      <header class="hud-header">
+        <div class="header-left">
+          <div class="sys-status">SYS: <span class="status-ok">ONLINE</span></div>
+          <div class="mem-status">MEM: <span class="status-ok">ACTIVE</span></div>
+        </div>
+        <div class="header-title">J.A.R.V.I.S.</div>
+        <div class="header-right">
+          <div id="clock">00:00:00</div>
+        </div>
+      </header>
+
+      <!-- Main Layout -->
+      <main class="hud-main">
+        
+        <!-- Left Panel: Diagnostics & Logs -->
+        <aside class="panel left-panel">
+          <div class="panel-header">DIAGNOSTICS</div>
+          <div class="panel-content">
+            <ul class="diag-list">
+              <li>Brain Core <span class="diag-bar"><div class="fill" style="width: 100%"></div></span></li>
+              <li>Router <span class="diag-bar"><div class="fill" style="width: 100%"></div></span></li>
+              <li>Vision Engine <span class="diag-bar"><div class="fill" style="width: 0%" id="vision-status"></div></span></li>
+              <li>Voice Engine <span class="diag-bar"><div class="fill" style="width: 100%"></div></span></li>
+            </ul>
+          </div>
+
+          <div class="panel-header" style="margin-top: 20px;">SYSTEM LOGS</div>
+          <div class="panel-content log-container" id="sys-logs">
+            <div class="log-entry">System booted successfully.</div>
+            <div class="log-entry">Awaiting user input...</div>
+          </div>
+        </aside>
+
+        <!-- Center: Arc Reactor & Primary Display -->
+        <section class="center-display">
+          <div class="arc-reactor-container" id="three-container">
+            <!-- Three.js Canvas will be injected here -->
+            <div class="status-text" id="main-status">LISTENING</div>
+          </div>
+        </section>
+
+        <!-- Right Panel: Chat Terminal -->
+        <aside class="panel right-panel">
+          <div class="panel-header">TERMINAL LINK</div>
+          <div class="panel-content chat-container" id="chat-history">
+            <div class="chat-message jarvis">Hello. I am JARVIS. How may I assist you today?</div>
+          </div>
+          <div class="chat-input-container">
+            <span class="prompt-sym">></span>
+            <input type="text" id="chat-input" placeholder="Enter command..." autocomplete="off"/>
+          </div>
+        </aside>
+
+      </main>
+      
+      <!-- Bottom Footer/Visualizers -->
+      <footer class="hud-footer">
+        <div class="audio-visualizer">
+          <!-- Fake audio bars for aesthetics -->
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+        </div>
+      </footer>
+
+    </div>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
