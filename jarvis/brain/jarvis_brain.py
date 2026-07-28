@@ -117,6 +117,8 @@ class JarvisBrain:
         self._tools.register_many(get_desktop_tools())
         from jarvis.tools.builtin.team_tools import get_team_tools
         self._tools.register_many(get_team_tools(self._router))
+        from jarvis.tools.builtin.n8n_tools import get_n8n_tools
+        self._tools.register_many(get_n8n_tools())
 
         # 3.5 Plugins
         from jarvis.plugins.manager import PluginManager

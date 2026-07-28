@@ -21,6 +21,7 @@ export function WorkflowsPage() {
   const [workflows, setWorkflows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedWorkflow, setSelectedWorkflow] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'execution' | 'n8n'>('execution');
 
   useEffect(() => {
     fetch('/api/workflows', { headers: { 'X-API-Key': 'JARVIS_DEV_KEY' } })
@@ -63,16 +64,26 @@ export function WorkflowsPage() {
     <PageShell>
       <PageHeader 
         title="Execution Workflows" 
-        description="Visualize how the AI Planner decomposes complex tasks into ordered tool operations."
+        description="Visualize how the AI Planner decomposes complex tasks into ordered tool operations, or build custom workflows with n8n."
         actions={
-          <button 
-            onClick={() => toast({ title: 'Not connected', description: 'History will be available once the backend API is connected.' })}
-            className="px-4 py-2 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] text-white rounded-md text-sm font-medium hover:bg-[rgba(255,255,255,0.1)] transition-colors flex items-center gap-2">
-            <Clock size={16} /> History
-          </button>
+          <div className="flex items-center gap-2 bg-[rgba(255,255,255,0.05)] p-1 rounded-lg">
+            <button
+              onClick={() => setActiveTab('execution')}
+              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${activeTab === 'execution' ? 'bg-[var(--accent-cyan)]/20 text-[var(--accent-cyan)] shadow-sm' : 'text-zinc-400 hover:text-white'}`}
+            >
+              <Network size={16} /> Execution Plans
+            </button>
+            <button
+              onClick={() => setActiveTab('n8n')}
+              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${activeTab === 'n8n' ? 'bg-[var(--accent-cyan)]/20 text-[var(--accent-cyan)] shadow-sm' : 'text-zinc-400 hover:text-white'}`}
+            >
+              <Waypoints size={16} /> Custom Workflows
+            </button>
+          </div>
         }
       />
       
+      {activeTab === 'execution' ? (
       <div className="flex-1 flex flex-col lg:flex-row p-6 gap-6 max-w-7xl mx-auto w-full">
         {/* Left Column - Workflow List */}
         <div className="w-full lg:w-1/3 flex flex-col gap-4 overflow-y-auto max-h-[calc(100vh-180px)] pr-2 scrollbar-thin">
@@ -196,6 +207,22 @@ export function WorkflowsPage() {
           )}
         </div>
       </div>
+      ) : (
+        <div className="flex-1 flex flex-col p-6 max-w-[1600px] mx-auto w-full h-[calc(100vh-140px)]">
+          <div className="bg-[rgba(0,0,0,0.3)] border border-[rgba(255,255,255,0.05)] rounded-xl overflow-hidden h-full flex flex-col relative">
+            <div className="absolute top-0 left-0 w-full p-3 bg-[#0a0a0a] border-b border-[rgba(255,255,255,0.05)] flex justify-between items-center z-10 text-xs text-zinc-400 font-medium shadow-sm">
+              <span className="flex items-center gap-2"><Waypoints size={14} className="text-[var(--accent-cyan)]"/> Embedded n8n Instance (localhost:5678)</span>
+              <a href="http://localhost:5678" target="_blank" rel="noopener noreferrer" className="hover:text-[var(--accent-cyan)] flex items-center gap-1 transition-colors">Open in New Tab <ArrowRight size={12}/></a>
+            </div>
+            <iframe 
+              src="http://localhost:5678" 
+              title="n8n Custom Workflows"
+              className="w-full h-full flex-1 pt-[44px] border-0"
+              allow="clipboard-read; clipboard-write"
+            />
+          </div>
+        </div>
+      )}
     </PageShell>
   );
 }

@@ -1,18 +1,24 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Mic, Paperclip, Send } from 'lucide-react';
+import { Mic, Paperclip, Send, Square } from 'lucide-react';
 import { useJarvisStore } from '../../store/jarvisStore';
 import { apiFetch } from '../../lib/api';
+import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
+import { useToast } from '../../hooks/use-toast';
 
 export function ConversationInput() {
   const [value, setValue] = useState('');
   const setAIState = useJarvisStore((s) => s.setAIState);
   const aiState = useJarvisStore((s) => s.aiState);
+  const { toast } = useToast();
+  
+  // Track if we should auto-send after recording stops
+  const shouldAutoSend = useRef(false);
 
-  const handleSend = async () => {
-    if (!value.trim()) return;
+  const handleSend = useCallback(async (textToSend: string = value) => {
+    if (!textToSend.trim()) return;
 
-    const userText = value.trim();
+    const userText = textToSend.trim();
     setValue('');
     setAIState('thinking');
 
@@ -29,7 +35,6 @@ export function ConversationInput() {
       setAIState('idle');
       store.addMessage(result.data.content, false);
       store.addLog({ message: 'Command executed successfully.' });
-      // Reset error state if it was set by a previous failed call
       if (store.aiState === 'error') {
         setAIState('idle');
       }
@@ -38,7 +43,42 @@ export function ConversationInput() {
       store.addMessage('I am JARVIS. I am currently running in offline demo mode. Please start the backend server to enable AI capabilities.', false);
       store.addLog({ message: 'Backend not reachable — running in offline mode.', type: 'warning' });
     }
+  }, [value, setAIState]);
+
+  const { isRecording, startRecording, stopRecording, error } = useVoiceRecorder((text: string) => {
+    setValue(text);
+  });
+
+  useEffect(() => {
+    if (error) {
+      toast({
+        title: "Voice Error",
+        description: error,
+        variant: "destructive"
+      });
+    }
+  }, [error, toast]);
+
+  const toggleRecording = async () => {
+    if (isRecording) {
+      shouldAutoSend.current = true;
+      await stopRecording();
+    } else {
+      shouldAutoSend.current = false;
+      setValue('');
+      await startRecording();
+    }
   };
+
+  useEffect(() => {
+    // If we just stopped recording and we are supposed to auto-send, send the latest value
+    if (!isRecording && shouldAutoSend.current) {
+      shouldAutoSend.current = false;
+      if (value.trim()) {
+        handleSend(value);
+      }
+    }
+  }, [isRecording, value, handleSend]);
 
   const isGenerating = aiState === 'thinking' || aiState === 'executing' || aiState === 'listening';
 
@@ -51,7 +91,7 @@ export function ConversationInput() {
     >
       <div className="relative group">
         {/* Animated border glow */}
-        <div className={`absolute -inset-0.5 rounded-2xl blur-md opacity-20 group-hover:opacity-40 transition duration-1000 group-hover:duration-200 ${isGenerating ? 'bg-gradient-to-r from-[var(--accent-cyan)] via-[var(--accent-violet)] to-[var(--accent-cyan)] animate-pulse' : 'bg-[var(--accent-cyan)]'}`} />
+        <div className={`absolute -inset-0.5 rounded-2xl blur-md opacity-20 group-hover:opacity-40 transition duration-1000 group-hover:duration-200 ${isGenerating || isRecording ? 'bg-gradient-to-r from-[var(--accent-cyan)] via-[var(--accent-violet)] to-[var(--accent-cyan)] animate-pulse' : 'bg-[var(--accent-cyan)]'}`} />
         
         <div className="relative flex items-center bg-[rgba(10,15,30,0.6)] backdrop-blur-xl border border-[rgba(255,255,255,0.1)] rounded-2xl p-2 shadow-2xl">
           
@@ -64,21 +104,25 @@ export function ConversationInput() {
             value={value}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-            placeholder={isGenerating ? "Processing instruction..." : "Ask Jarvis anything..."}
-            disabled={isGenerating}
+            placeholder={isRecording ? "Listening..." : (isGenerating ? "Processing instruction..." : "Ask Jarvis anything...")}
+            disabled={isGenerating || isRecording}
             className="flex-1 bg-transparent border-none outline-none text-white placeholder-zinc-500 px-2 font-medium tracking-wide disabled:opacity-50"
           />
           
           <div className="flex items-center gap-2 pr-1">
-            <button className="p-3 text-zinc-400 hover:text-[var(--accent-cyan)] transition-colors rounded-xl hover:bg-[rgba(255,255,255,0.05)]">
-              <Mic size={20} />
+            <button 
+              onClick={toggleRecording}
+              disabled={isGenerating}
+              className={`p-3 transition-colors rounded-xl ${isRecording ? 'text-red-500 bg-red-500/10 hover:bg-red-500/20 shadow-[0_0_15px_rgba(239,68,68,0.4)] animate-pulse' : 'text-zinc-400 hover:text-[var(--accent-cyan)] hover:bg-[rgba(255,255,255,0.05)]'} disabled:opacity-50`}
+            >
+              {isRecording ? <Square size={20} className="fill-current" /> : <Mic size={20} />}
             </button>
             <button 
-              onClick={handleSend}
-              disabled={isGenerating || !value.trim()}
-              className={`p-3 rounded-xl transition-all duration-300 ${value.trim() && !isGenerating ? 'bg-[var(--accent-cyan)] text-black shadow-[0_0_15px_rgba(0,212,255,0.4)]' : 'bg-[rgba(255,255,255,0.05)] text-zinc-500'}`}
+              onClick={() => handleSend(value)}
+              disabled={isGenerating || (!value.trim() && !isRecording)}
+              className={`p-3 rounded-xl transition-all duration-300 ${(value.trim() || isRecording) && !isGenerating ? 'bg-[var(--accent-cyan)] text-black shadow-[0_0_15px_rgba(0,212,255,0.4)]' : 'bg-[rgba(255,255,255,0.05)] text-zinc-500'}`}
             >
-              <Send size={20} className={value.trim() && !isGenerating ? 'translate-x-0.5 -translate-y-0.5' : ''} />
+              <Send size={20} className={(value.trim() || isRecording) && !isGenerating ? 'translate-x-0.5 -translate-y-0.5' : ''} />
             </button>
           </div>
         </div>

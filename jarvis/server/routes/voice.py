@@ -12,7 +12,7 @@ import base64
 import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, File, UploadFile
+from fastapi import APIRouter, File, UploadFile, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
 router = APIRouter()
@@ -98,3 +98,48 @@ async def list_voices(language: str = "en"):
 
     voices = await TextToSpeech.list_voices(language)
     return {"language": language, "count": len(voices), "voices": voices}
+
+
+@router.websocket("/voice/stream")
+async def transcribe_stream(ws: WebSocket):
+    """
+    WebSocket endpoint for real-time transcription.
+    Client sends binary audio (webm/mp4/wav) chunks.
+    Server writes cumulative audio to a temp file, runs STT, and returns text.
+    """
+    await ws.accept()
+    from jarvis.voice.stt import SpeechToText
+    import structlog
+    logger = structlog.get_logger(__name__)
+
+    stt = SpeechToText(model_size="base")
+
+    try:
+        while True:
+            # Receive cumulative audio payload from client
+            audio_bytes = await ws.receive_bytes()
+            if not audio_bytes:
+                continue
+
+            with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
+                tmp.write(audio_bytes)
+                tmp_path = tmp.name
+
+            try:
+                # Transcribe the cumulative audio file
+                text = await stt.transcribe_file(tmp_path)
+                await ws.send_json({"text": text, "done": False})
+            except Exception as e:
+                logger.error("voice.stream.error", error=str(e))
+                await ws.send_json({"error": str(e)})
+            finally:
+                Path(tmp_path).unlink(missing_ok=True)
+
+    except WebSocketDisconnect:
+        logger.debug("voice.stream.disconnected")
+    except Exception as exc:
+        logger.error("voice.stream.fatal", error=str(exc))
+        try:
+            await ws.send_json({"error": str(exc)})
+        except Exception:
+            pass
