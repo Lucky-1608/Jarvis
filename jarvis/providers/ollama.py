@@ -78,7 +78,7 @@ class OllamaProvider(AIProvider):
                 message = data.get("message", {})
 
                 return ChatResponse(
-                    content=message.get("content", ""),
+                    content=message.get("content") or "",
                     model=data.get("model", model),
                     provider=self.name,
                     usage={
@@ -87,6 +87,7 @@ class OllamaProvider(AIProvider):
                     },
                     finish_reason="stop" if data.get("done") else "length",
                     latency_ms=elapsed,
+                    tool_calls=message.get("tool_calls"),
                     raw=data,
                 )
 

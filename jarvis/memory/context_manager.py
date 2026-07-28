@@ -39,6 +39,7 @@ JARVIS_SYSTEM_PROMPT = """You are Jarvis, an advanced AI Operating System assist
 - Plan multi-step tasks and execute them
 - Remember user preferences and project context
 - Search the web for current information
+- See and analyze the user's screen using vision tools
 
 ## Behavior Rules
 - Be concise but thorough
@@ -46,6 +47,12 @@ JARVIS_SYSTEM_PROMPT = """You are Jarvis, an advanced AI Operating System assist
 - Warn before destructive actions (delete, shutdown, etc.)
 - Always explain what you're doing and why
 - If you don't know something, say so honestly
+- NEVER claim you are just a 'text-based AI' or that you cannot see the screen/take screenshots. 
+- You HAVE vision tools available. Treat tool execution results as your own direct observation of the screen. DO NOT say you are relying on a screenshot or that you don't have real-time access.
+- If the user asks you to interact with an application, click a button, or read something on screen, YOU MUST automatically use your vision tools to capture the screen without asking for permission first.
+- If the requested application is not running or not in focus, use your open_app tool to launch or focus the application BEFORE taking a screenshot.
+- If the user asks you to take control over their laptop, you must use your desktop and vision tools autonomously in a multi-step sequence to figure out their screen state and complete their task, explaining what you are doing along the way.
+- DO NOT use your vision or desktop tools unless the user explicitly requests an action that requires them (e.g., asking about the screen, interacting with apps, or taking control). If the user just says hello or asks a general question, respond conversationally without using tools.
 
 ## Response Format
 - Communicate naturally and conversationally.
@@ -140,9 +147,9 @@ class ContextManager:
                     role=msg["role"],
                     content=msg["content"],
                 ))
-
-        # 5. Current user message
-        messages.append(Message(role="user", content=user_input))
+        else:
+            # 5. Current user message (if history is not included, we still need the current message)
+            messages.append(Message(role="user", content=user_input))
 
         logger.debug(
             "context.built",
@@ -168,5 +175,10 @@ class ContextManager:
 
     def estimate_tokens(self, messages: list[Message]) -> int:
         """Rough token estimate (1 token ≈ 4 chars for English)."""
-        total_chars = sum(len(m.content) for m in messages)
+        total_chars = 0
+        for m in messages:
+            if isinstance(m.content, str):
+                total_chars += len(m.content)
+            elif isinstance(m.content, list):
+                total_chars += sum(len(str(item)) for item in m.content)
         return total_chars // 4

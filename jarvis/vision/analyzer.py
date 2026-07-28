@@ -130,19 +130,18 @@ class VisionAnalyzer:
             Message(role="system", content=VISION_SYSTEM_PROMPT),
             Message(
                 role="user",
-                content=json.dumps([
+                content=[
                     {
                         "type": "image_url",
                         "image_url": {
-                            "url": f"data:image/png;base64,{image_base64}",
-                            "detail": detail,
+                            "url": f"data:image/png;base64,{image_base64}"
                         },
                     },
                     {
                         "type": "text",
                         "text": query,
                     },
-                ]),
+                ],
             ),
         ]
 
@@ -151,6 +150,8 @@ class VisionAnalyzer:
                 messages,
                 temperature=0.2,
                 max_tokens=2048,
+                provider="nvidia",
+                model="meta/llama-3.2-11b-vision-instruct",
                 response_format={"type": "json_object"},
             )
 
@@ -234,8 +235,21 @@ class VisionAnalyzer:
 
     def _parse_vision_response(self, content: str) -> VisionResult:
         """Parse the LLM's JSON response into a VisionResult."""
+        content = content.strip()
+        
+        # Try to extract JSON from markdown blocks or braces if direct load fails
+        import re
+        json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", content, re.DOTALL)
+        brace_match = re.search(r"(\{.*\})", content, re.DOTALL)
+        
+        json_str = content
+        if json_match:
+            json_str = json_match.group(1)
+        elif brace_match:
+            json_str = brace_match.group(1)
+
         try:
-            data = json.loads(content)
+            data = json.loads(json_str)
             return VisionResult(
                 summary=data.get("summary", ""),
                 elements=data.get("elements", []),
@@ -247,6 +261,6 @@ class VisionAnalyzer:
         except (json.JSONDecodeError, KeyError) as exc:
             logger.warning("vision.parse_error", error=str(exc))
             return VisionResult(
-                summary=content[:500],
+                summary=content,  # Return the full original content as fallback
                 confidence=0.3,
             )

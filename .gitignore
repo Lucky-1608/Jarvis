@@ -46,3 +46,18 @@ htmlcov/
 
 # Build
 *.whl
+
+# Frontend
+node_modules/
+dist/
+
+# Agent and AI config
+.agents/
+.claude/
+.claude-flow/
+.swarm/
+.mcp.json
+CLAUDE.md
+
+# WhatsApp Auth (Sensitive Credentials - DO NOT PUSH)
+auth_info_baileys/

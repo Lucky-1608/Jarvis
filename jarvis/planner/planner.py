@@ -47,6 +47,7 @@ class PlanStep:
     description: str
     tool_name: str | None = None  # None means "ask the AI"
     tool_params: dict[str, Any] = field(default_factory=dict)
+    tool_call_id: str | None = None
     depends_on: list[int] = field(default_factory=list)
     status: StepStatus = StepStatus.PENDING
     result: Any = None
@@ -117,8 +118,10 @@ You MUST output ONLY valid JSON. NEVER reply with conversational text.
 1. Break the user's request into clear, ordered steps.
 2. Assign each step to a tool from the list. If the user asks to "open", "run", "search", "navigate", or perform an action, you MUST use a tool. Do NOT just reply with a URL or text.
 3. If the user asks to open a website in their default browser, Edge, or Chrome, use the 'open_app' tool with the URL as the app_name. Do NOT use browser_navigate unless they specifically want Jarvis to automate/read the page.
-4. Identify dependencies between steps.
-5. Flag if any step requires user confirmation (dangerous operations).
+4. If the user asks to close, quit, exit, stop, kill, or terminate an app/window, you MUST use the 'close_app' tool. For vague requests like "close this app", "close current app", or "close the app", set app_name to "current".
+5. If the user asks about their screen, what they are looking at, "what is this", "what's this", or asks to take a screenshot, you MUST use the `analyze_screen` or `take_screenshot` tool to get visual context.
+6. Identify dependencies between steps.
+7. Flag if any step requires user confirmation (dangerous operations).
 
 ## Response Format
 Respond with ONLY valid JSON matching this exact structure:
@@ -138,7 +141,7 @@ Respond with ONLY valid JSON matching this exact structure:
 }}
 ```
 
-If the request is purely a conversational question that requires NO action, respond with:
+If the request is purely a conversational question that requires NO action and NO tools, respond with:
 ```json
 {{
   "reasoning": "Simple question — no tools needed",

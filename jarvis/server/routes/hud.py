@@ -22,6 +22,11 @@ async def hud_websocket(websocket: WebSocket):
 
     bus.subscribe("hud.notification", _queue_event)
     bus.subscribe(EventTypes.SYSTEM_READY, _queue_event)
+    bus.subscribe(EventTypes.VISION_STARTED, _queue_event)
+    bus.subscribe(EventTypes.VISION_COMPLETED, _queue_event)
+    bus.subscribe("whatsapp.qr", _queue_event)
+    bus.subscribe("whatsapp.status", _queue_event)
+    bus.subscribe("telegram.status", _queue_event)
     
     logger.info("hud.websocket_connected", id=subscriber_id)
     
@@ -44,3 +49,8 @@ async def hud_websocket(websocket: WebSocket):
     finally:
         bus.unsubscribe("hud.notification", _queue_event)
         bus.unsubscribe(EventTypes.SYSTEM_READY, _queue_event)
+        bus.unsubscribe(EventTypes.VISION_STARTED, _queue_event)
+        bus.unsubscribe(EventTypes.VISION_COMPLETED, _queue_event)
+        bus.unsubscribe("whatsapp.qr", _queue_event)
+        bus.unsubscribe("whatsapp.status", _queue_event)
+        bus.unsubscribe("telegram.status", _queue_event)

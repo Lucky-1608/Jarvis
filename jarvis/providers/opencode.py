@@ -87,12 +87,13 @@ class OpenCodeProvider(AIProvider):
                 elapsed = self._timer() - start
 
                 return ChatResponse(
-                    content=choice["message"].get("content", ""),
+                    content=choice["message"].get("content") or "",
                     model=data.get("model", model),
                     provider=self.name,
                     usage=data.get("usage", {}),
                     finish_reason=choice.get("finish_reason", "stop"),
                     latency_ms=elapsed,
+                    tool_calls=choice["message"].get("tool_calls"),
                     raw=data,
                 )
 

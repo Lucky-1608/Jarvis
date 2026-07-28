@@ -1,0 +1,14 @@
+{
+  "name": "telegram-bridge",
+  "version": "1.0.0",
+  "description": "Telegram bridge for Jarvis OS using node-telegram-bot-api",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "node-telegram-bot-api": "^0.66.0",
+    "axios": "^1.7.2",
+    "dotenv": "^16.4.5"
+  }
+}

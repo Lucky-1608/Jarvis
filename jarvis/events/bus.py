@@ -99,6 +99,11 @@ class EventTypes:
     SYSTEM_SHUTDOWN = "system.shutdown"
     HEALTH_CHECK = "system.health_check"
 
+    # Messaging bridges
+    WHATSAPP_QR = "whatsapp.qr"
+    WHATSAPP_STATUS = "whatsapp.status"
+    TELEGRAM_STATUS = "telegram.status"
+
 
 # ---------------------------------------------------------------------------
 # Event Bus

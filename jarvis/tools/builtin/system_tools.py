@@ -19,6 +19,8 @@ import datetime
 import os
 import platform
 import subprocess
+import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -141,6 +143,44 @@ class OpenAppTool(Tool):
         "spotify": "start spotify",
     }
 
+    @staticmethod
+    def _find_app_shortcut(app_name: str) -> str | None:
+        if sys.platform != "win32":
+            return None
+            
+        import os
+        from pathlib import Path
+        
+        def clean_name(name: str) -> str:
+            return "".join(c for c in name.lower() if c.isalnum())
+            
+        app_name_clean = clean_name(app_name)
+        if not app_name_clean:
+            return None
+            
+        start_menu_paths = [
+            Path(os.environ.get("ProgramData", "C:\\ProgramData")) / "Microsoft\\Windows\\Start Menu\\Programs",
+            Path(os.environ.get("APPDATA", "")) / "Microsoft\\Windows\\Start Menu\\Programs",
+            Path(os.environ.get("PUBLIC", "C:\\Users\\Public")) / "Desktop",
+            Path(os.environ.get("USERPROFILE", "")) / "Desktop",
+        ]
+
+        for menu_path in start_menu_paths:
+            if not menu_path.exists():
+                continue
+            for p in menu_path.rglob("*.lnk"):
+                if clean_name(p.stem) == app_name_clean:
+                    return str(p)
+
+        for menu_path in start_menu_paths:
+            if not menu_path.exists():
+                continue
+            for p in menu_path.rglob("*.lnk"):
+                if app_name_clean in clean_name(p.stem):
+                    return str(p)
+                    
+        return None
+
     async def execute(self, **params: Any) -> ToolResult:
         app_name = params.get("app_name", "").strip().lower()
         target_url = params.get("target_url", "").strip()
@@ -154,11 +194,35 @@ class OpenAppTool(Tool):
                 if "." in app_name and " " not in app_name and not app_name.startswith("http"):
                     app_name = f"https://{app_name}"
                     
-                cmd = self._APP_MAP_WINDOWS.get(app_name, f"start {app_name}")
-                if target_url:
-                    cmd = f"{cmd} {target_url}"
-                    
-                subprocess.Popen(cmd, shell=True)
+                cmd = self._APP_MAP_WINDOWS.get(app_name)
+                
+                if cmd:
+                    if target_url:
+                        cmd = f"{cmd} {target_url}"
+                    subprocess.Popen(cmd, shell=True)
+                else:
+                    shortcut = self._find_app_shortcut(app_name)
+                    if shortcut:
+                        if target_url:
+                            os.startfile(shortcut, "open", target_url)
+                        else:
+                            os.startfile(shortcut)
+                    else:
+                        app_name_clean = "".join(c for c in app_name.lower() if c.isalnum())
+                        ps_cmd = f"Get-StartApps | Where-Object {{ ($_.Name -replace '[^a-zA-Z0-9]', '') -match '{app_name_clean}' }} | Select-Object -ExpandProperty AppID"
+                        proc = subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd], capture_output=True, text=True, creationflags=0x08000000)
+                        app_ids = [line.strip() for line in proc.stdout.strip().split("\n") if line.strip()]
+                        
+                        if app_ids:
+                            subprocess.Popen(f'explorer.exe shell:AppsFolder\\{app_ids[0]}', shell=True)
+                        else:
+                            try:
+                                if target_url:
+                                    os.startfile(app_name, arguments=target_url)
+                                else:
+                                    os.startfile(app_name)
+                            except OSError:
+                                return ToolResult(success=False, error=f"Could not find or open application '{app_name}'.")
             elif platform.system() == "Darwin":
                 subprocess.Popen(["open", "-a", app_name])
             else:  # Linux
@@ -170,6 +234,336 @@ class OpenAppTool(Tool):
             )
         except Exception as exc:
             return ToolResult(success=False, error=f"Failed to open '{app_name}': {exc}")
+
+
+# ---------------------------------------------------------------------------
+# Close Application
+# ---------------------------------------------------------------------------
+class CloseAppTool(Tool):
+    """Close/kill a desktop application."""
+
+    @property
+    def metadata(self) -> ToolMetadata:
+        return ToolMetadata(
+            name="close_app",
+            description="Close a desktop application by name, or close the current active app/window when app_name is 'current', 'active', or 'this app'.",
+            category=ToolCategory.SYSTEM,
+            parameters=[
+                ToolParameter(
+                    name="app_name",
+                    type="string",
+                    description="Name of the application to close, or 'current'/'active'/'this app' to close the foreground window.",
+                ),
+            ],
+        )
+
+    _CLOSE_MAP_WINDOWS = {
+        "chrome": "chrome.exe",
+        "google chrome": "chrome.exe",
+        "firefox": "firefox.exe",
+        "edge": "msedge.exe",
+        "microsoft edge": "msedge.exe",
+        "brave": "brave.exe",
+        "notepad": "notepad.exe",
+        "calculator": "CalculatorApp.exe",
+        "explorer": "explorer.exe",
+        "file explorer": "explorer.exe",
+        "vscode": "Code.exe",
+        "vs code": "Code.exe",
+        "visual studio code": "Code.exe",
+        "task manager": "Taskmgr.exe",
+        "spotify": "Spotify.exe",
+        "word": "WINWORD.EXE",
+        "microsoft word": "WINWORD.EXE",
+        "excel": "EXCEL.EXE",
+        "microsoft excel": "EXCEL.EXE",
+        "powerpoint": "POWERPNT.EXE",
+        "microsoft powerpoint": "POWERPNT.EXE",
+        "paint": "mspaint.exe",
+        "cmd": "cmd.exe",
+        "terminal": "WindowsTerminal.exe",
+        "windows terminal": "WindowsTerminal.exe",
+    }
+
+    _CURRENT_WINDOW_ALIASES = {
+        "active",
+        "active app",
+        "active application",
+        "active window",
+        "any",
+        "any app",
+        "any application",
+        "any window",
+        "app",
+        "application",
+        "current",
+        "current app",
+        "current application",
+        "current window",
+        "foreground",
+        "foreground app",
+        "foreground window",
+        "this",
+        "this app",
+        "this application",
+        "this window",
+        "the app",
+        "the application",
+        "the window",
+        "that app",
+        "opened app",
+        "open app",
+        "window",
+    }
+
+    _WINDOW_ONLY_APPS = {"explorer", "file explorer"}
+
+    async def execute(self, **params: Any) -> ToolResult:
+        raw_app_name = params.get("app_name", "")
+        app_name = self._normalize_app_name(str(raw_app_name))
+        if not app_name:
+            return ToolResult(success=False, error="No application name provided.")
+
+        try:
+            if platform.system() == "Windows":
+                if app_name in self._CURRENT_WINDOW_ALIASES:
+                    closed = self._close_active_window()
+                    if closed:
+                        return ToolResult(success=True, output=closed)
+
+                    hotkey_result = self._send_alt_f4()
+                    if hotkey_result:
+                        return ToolResult(success=True, output=hotkey_result)
+
+                    return ToolResult(
+                        success=False,
+                        error="Could not close the active window. Install pygetwindow or pyautogui for active-window control.",
+                    )
+
+                window_result = self._close_matching_window(app_name)
+                if window_result:
+                    return ToolResult(success=True, output=window_result)
+
+                if app_name in self._WINDOW_ONLY_APPS:
+                    return ToolResult(
+                        success=True,
+                        output=f"No File Explorer window matching '{app_name}' was open.",
+                    )
+
+                process_names = self._resolve_windows_process_names(app_name)
+
+                for process_name in process_names:
+                    result = await self._taskkill(process_name)
+                    if result.success:
+                        return result
+
+                psutil_result = self._terminate_matching_processes(app_name)
+                if psutil_result:
+                    if "Failed to terminate: Access Denied" in psutil_result:
+                        return ToolResult(success=False, error=psutil_result)
+                    return ToolResult(success=True, output=psutil_result)
+
+                tried = ", ".join(process_names)
+                return ToolResult(
+                    success=True,
+                    output=f"'{raw_app_name}' is not currently running (or was already successfully closed). Tried checking: {tried}.",
+                )
+            
+            elif platform.system() == "Darwin":
+                proc = await asyncio.create_subprocess_shell(f'killall "{app_name}"', stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+                stdout, stderr = await proc.communicate()
+                if proc.returncode == 0:
+                    return ToolResult(success=True, output=f"Closed '{app_name}' successfully.")
+                return ToolResult(success=False, error=f"Failed to close '{app_name}'.")
+            else:  # Linux
+                proc = await asyncio.create_subprocess_shell(f'pkill -f "{app_name}"', stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+                stdout, stderr = await proc.communicate()
+                if proc.returncode == 0:
+                    return ToolResult(success=True, output=f"Closed '{app_name}' successfully.")
+                return ToolResult(success=False, error=f"Failed to close '{app_name}'.")
+
+        except Exception as exc:
+            return ToolResult(success=False, error=f"Error closing '{app_name}': {exc}")
+
+    @classmethod
+    def _normalize_app_name(cls, app_name: str) -> str:
+        normalized = " ".join(app_name.strip().lower().split())
+        for prefix in ("please close ", "close ", "quit ", "exit ", "kill ", "terminate ", "stop "):
+            if normalized.startswith(prefix):
+                normalized = normalized[len(prefix):].strip()
+        for suffix in (" app", " application", " browser", " window"):
+            if normalized.endswith(suffix) and normalized not in cls._CURRENT_WINDOW_ALIASES:
+                normalized = normalized[: -len(suffix)].strip()
+        return normalized
+
+    @classmethod
+    def _resolve_windows_process_names(cls, app_name: str) -> list[str]:
+        names: list[str] = []
+        for key, exe in cls._CLOSE_MAP_WINDOWS.items():
+            if key in app_name:
+                names.append(exe)
+
+        if not names:
+            names.append(app_name if app_name.endswith(".exe") else f"{app_name}.exe")
+
+        return list(dict.fromkeys(names))
+
+    @staticmethod
+    async def _taskkill(process_name: str) -> ToolResult:
+        proc = await asyncio.create_subprocess_exec(
+            "taskkill",
+            "/F",
+            "/IM",
+            process_name,
+            "/T",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await proc.communicate()
+
+        out_str = stdout.decode("utf-8", errors="replace").strip()
+        err_str = stderr.decode("utf-8", errors="replace").strip()
+        combined = f"{out_str}\n{err_str}".lower()
+
+        if proc.returncode == 0 or "success:" in combined:
+            return ToolResult(
+                success=True,
+                output=f"Closed '{process_name}' successfully. {out_str or err_str}",
+            )
+
+        if "not found" in combined or "no tasks" in combined:
+            return ToolResult(success=False, error=f"'{process_name}' is not running.")
+
+        return ToolResult(
+            success=False,
+            error=f"Failed to close '{process_name}'. ReturnCode: {proc.returncode} | Error: {err_str} | Output: {out_str}",
+        )
+
+    @staticmethod
+    def _close_active_window() -> str | None:
+        if sys.platform != "win32":
+            return None
+
+        try:
+            import pygetwindow as gw
+            import ctypes
+            import psutil
+        except ImportError:
+            return None
+
+        window = gw.getActiveWindow()
+        if not window:
+            return None
+
+        title = window.title or "active window"
+        hwnd = window._hWnd
+        window.close()
+        time.sleep(0.5)
+        
+        # Verify and force kill if still open
+        remaining_hwnds = {w._hWnd for w in gw.getAllWindows()}
+        if hwnd in remaining_hwnds:
+            pid = ctypes.c_ulong()
+            ctypes.windll.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            if pid.value > 0:
+                try:
+                    p = psutil.Process(pid.value)
+                    p.terminate()
+                    p.wait(timeout=3)
+                except Exception:
+                    pass
+
+        return f"Closed active window '{title}'."
+
+    @staticmethod
+    def _close_matching_window(app_name: str) -> str | None:
+        if sys.platform != "win32":
+            return None
+
+        try:
+            import pygetwindow as gw
+            import ctypes
+            import psutil
+        except ImportError:
+            return None
+
+        matches = []
+        for window in gw.getAllWindows():
+            title = (window.title or "").strip()
+            if title and app_name in title.lower():
+                matches.append(window)
+
+        if not matches:
+            return None
+
+        closed_titles = []
+        for window in matches:
+            if window.isMinimized:
+                window.restore()
+            closed_titles.append(window.title)
+            window.close()
+
+        time.sleep(0.5)
+        
+        # Verify and force kill if still open
+        remaining_hwnds = {w._hWnd for w in gw.getAllWindows()}
+        for window in matches:
+            if window._hWnd in remaining_hwnds:
+                pid = ctypes.c_ulong()
+                ctypes.windll.user32.GetWindowThreadProcessId(window._hWnd, ctypes.byref(pid))
+                if pid.value > 0:
+                    try:
+                        p = psutil.Process(pid.value)
+                        p.terminate()
+                        p.wait(timeout=3)
+                    except Exception:
+                        pass
+
+        return f"Closed {len(closed_titles)} window(s): {', '.join(closed_titles[:5])}."
+
+    @staticmethod
+    def _send_alt_f4() -> str | None:
+        try:
+            import pyautogui
+        except ImportError:
+            return None
+
+        pyautogui.hotkey("alt", "f4")
+        time.sleep(0.5)
+        return "Sent Alt+F4 to the active window."
+
+    @staticmethod
+    def _terminate_matching_processes(app_name: str) -> str | None:
+        matches: list[psutil.Process] = []
+        for proc in psutil.process_iter(["pid", "name", "exe"]):
+            try:
+                name = (proc.info.get("name") or "").lower()
+                exe = Path(proc.info.get("exe") or "").stem.lower()
+            except (psutil.Error, OSError):
+                continue
+
+            if app_name in name or app_name in exe:
+                matches.append(proc)
+
+        if not matches:
+            return None
+
+        terminated = []
+        for proc in matches:
+            try:
+                terminated.append(f"{proc.name()} ({proc.pid})")
+                proc.terminate()
+            except psutil.Error:
+                continue
+
+        _, alive = psutil.wait_procs(matches, timeout=3)
+        for proc in alive:
+            try:
+                proc.kill()
+            except psutil.Error:
+                pass
+
+        return f"Closed matching process(es): {', '.join(terminated[:8])}."
 
 
 # ---------------------------------------------------------------------------
@@ -506,6 +900,7 @@ def get_system_tools() -> list[Tool]:
     return [
         SystemInfoTool(),
         OpenAppTool(),
+        CloseAppTool(),
         RunCommandTool(),
         ListFilesTool(),
         ReadFileTool(),

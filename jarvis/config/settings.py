@@ -70,6 +70,30 @@ class NvidiaNimSettings(BaseSettings):
     max_retries: int = 3
 
 
+class GrokSettings(BaseSettings):
+    """Grok (xAI) provider configuration (cloud fallback)."""
+
+    model_config = SettingsConfigDict(env_prefix="GROK_", env_file=".env", extra="ignore")
+
+    api_key: str = ""
+    base_url: str = "https://api.x.ai/v1"
+    model: str = "grok-3-mini"
+    timeout: int = 120
+    max_retries: int = 3
+
+
+class GeminiSettings(BaseSettings):
+    """Google Gemini provider configuration (cloud fallback)."""
+
+    model_config = SettingsConfigDict(env_prefix="GEMINI_", env_file=".env", extra="ignore")
+
+    api_key: str = ""
+    base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai"
+    model: str = "gemini-2.5-flash"
+    timeout: int = 120
+    max_retries: int = 3
+
+
 # ---------------------------------------------------------------------------
 # Memory settings
 # ---------------------------------------------------------------------------
@@ -120,8 +144,8 @@ class JarvisSettings(BaseSettings):
     )
 
     # --- AI routing ---------------------------------------------------------
-    ai_primary_provider: Literal["opencode", "openrouter", "ollama", "nvidia"] = "opencode"
-    ai_fallback_provider: Literal["opencode", "openrouter", "ollama", "nvidia"] = "ollama"
+    ai_primary_provider: Literal["opencode", "openrouter", "ollama", "nvidia", "grok", "gemini"] = "opencode"
+    ai_fallback_provider: Literal["opencode", "openrouter", "ollama", "nvidia", "grok", "gemini"] = "ollama"
 
     # --- Logging ------------------------------------------------------------
     log_level: str = "INFO"
@@ -132,6 +156,8 @@ class JarvisSettings(BaseSettings):
     openrouter: OpenRouterSettings = Field(default_factory=OpenRouterSettings)
     ollama: OllamaSettings = Field(default_factory=OllamaSettings)
     nvidia: NvidiaNimSettings = Field(default_factory=NvidiaNimSettings)
+    grok: GrokSettings = Field(default_factory=GrokSettings)
+    gemini: GeminiSettings = Field(default_factory=GeminiSettings)
     memory: MemorySettings = Field(default_factory=MemorySettings)
     server: ServerSettings = Field(default_factory=ServerSettings)
 

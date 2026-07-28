@@ -64,6 +64,7 @@ vision = [
 automation = [
     "playwright>=1.40",
     "pyautogui>=0.9",
+    "pygetwindow>=0.0.9",
 ]
 
 all = [

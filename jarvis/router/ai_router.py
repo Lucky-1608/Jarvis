@@ -30,6 +30,8 @@ from jarvis.providers.ollama import OllamaProvider
 from jarvis.providers.opencode import OpenCodeProvider
 from jarvis.providers.openrouter import OpenRouterProvider
 from jarvis.providers.nvidia import NvidiaNimProvider
+from jarvis.providers.grok import GrokProvider
+from jarvis.providers.gemini import GeminiProvider
 
 logger = structlog.get_logger(__name__)
 
@@ -39,6 +41,8 @@ PROVIDER_REGISTRY: dict[str, type[AIProvider]] = {
     "ollama": OllamaProvider,
     "openrouter": OpenRouterProvider,
     "nvidia": NvidiaNimProvider,
+    "grok": GrokProvider,
+    "gemini": GeminiProvider,
 }
 
 

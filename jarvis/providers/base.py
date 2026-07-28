@@ -18,7 +18,7 @@ class Message:
     """A single message in a conversation."""
 
     role: str  # "system" | "user" | "assistant" | "tool"
-    content: str
+    content: str | list[dict[str, Any]]
     name: str | None = None
     tool_calls: list[dict[str, Any]] | None = None
     tool_call_id: str | None = None
@@ -34,6 +34,7 @@ class ChatResponse:
     usage: dict[str, int] = field(default_factory=dict)  # prompt_tokens, completion_tokens
     finish_reason: str = "stop"
     latency_ms: float = 0.0
+    tool_calls: list[dict[str, Any]] | None = None
     raw: dict[str, Any] = field(default_factory=dict)
 
 
