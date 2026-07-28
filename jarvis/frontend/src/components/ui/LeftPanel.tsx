@@ -76,12 +76,6 @@ export function LeftPanel() {
 
       {/* Footer */}
       <div className="mt-auto p-4 border-t border-[var(--border-subtle)]">
-        <Link href="/settings" className="block w-full">
-          <div className="flex items-center gap-3 px-3 py-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors rounded-md hover:bg-[rgba(255,255,255,0.03)] cursor-pointer">
-            <Settings size={18} />
-            <span className="text-sm font-medium tracking-wide">Settings</span>
-          </div>
-        </Link>
         
         <div className="mt-4 flex items-center gap-3 px-3 py-2 bg-[rgba(0,0,0,0.3)] rounded-lg border border-[rgba(255,255,255,0.05)]">
           <div className="relative">

@@ -164,6 +164,7 @@ export const useJarvisStore = create<JarvisStore>((set, get) => ({
     wsInstance = new WebSocket(`${wsProtocol}//${window.location.host}/api/hud/ws?token=JARVIS_DEV_KEY`);
     
     wsInstance.onopen = () => {
+      set({ backendConnected: true });
       get().addLog({ message: 'WebSocket connected. Listening for telemetry...' });
     };
 
@@ -200,6 +201,7 @@ export const useJarvisStore = create<JarvisStore>((set, get) => ({
     };
 
     wsInstance.onclose = () => {
+      set({ backendConnected: false });
       get().addLog({ message: 'WebSocket disconnected.', type: 'warning' });
       wsInstance = null;
     };
