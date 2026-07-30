@@ -10,6 +10,12 @@ Commands:
 
 from __future__ import annotations
 
+import traceroot
+from dotenv import load_dotenv
+
+load_dotenv()
+traceroot.initialize()
+
 import asyncio
 import sys
 

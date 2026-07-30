@@ -87,7 +87,7 @@ export function ChatHistory() {
     <div className="absolute bottom-[5.5rem] left-1/2 -translate-x-1/2 w-full max-w-2xl px-4 z-20 pointer-events-none">
       <div 
         ref={scrollRef}
-        className="max-h-[60vh] overflow-y-auto pointer-events-auto pr-2 scrollbar-thin scrollbar-thumb-[var(--accent-cyan)] scrollbar-track-transparent"
+        className="max-h-[60vh] overflow-y-auto pointer-events-auto pr-2"
         style={{
           maskImage: 'linear-gradient(to bottom, transparent, black 15%, black 85%, transparent)',
           WebkitMaskImage: 'linear-gradient(to bottom, transparent, black 15%, black 85%, transparent)'

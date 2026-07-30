@@ -8,6 +8,12 @@ and all API routes mounted. Also serves the built frontend.
 from __future__ import annotations
 
 import os
+import traceroot
+from dotenv import load_dotenv
+
+load_dotenv()
+traceroot.initialize()
+
 from contextlib import asynccontextmanager
 from pathlib import Path
 
