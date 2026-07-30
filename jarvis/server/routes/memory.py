@@ -71,6 +71,35 @@ async def search_memory(
     }
 
 
+@router.get("/memory/recent")
+async def recent_memory(
+    memory_type: str | None = Query(None, description="Filter by memory type"),
+    limit: int = Query(20, ge=1, le=50, description="Max results"),
+):
+    """Fetch recent memories."""
+    brain = get_brain()
+    mem_type = MemoryType(memory_type) if memory_type else None
+
+    entries = await brain.memory.get_recent(
+        memory_type=mem_type,
+        limit=limit,
+    )
+
+    return {
+        "results": [
+            {
+                "id": entry.id,
+                "content": entry.content,
+                "memory_type": entry.memory_type.value,
+                "score": 1.0,  # Max score for recent fetch
+                "importance": entry.importance,
+                "timestamp": entry.timestamp,
+            }
+            for entry in entries
+        ],
+    }
+
+
 @router.post("/memory")
 async def store_memory(request: StoreMemoryRequest):
     """Store a new memory entry."""

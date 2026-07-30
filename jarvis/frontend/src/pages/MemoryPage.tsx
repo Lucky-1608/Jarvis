@@ -31,15 +31,43 @@ export function MemoryPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [memoryStats, setMemoryStats] = useState<any>(null);
 
+  const loadRecentMemories = () => {
+    fetch(`${BASE}/api/memory/recent?limit=20`, {
+      headers: { 'X-API-Key': 'JARVIS_DEV_KEY' }
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.results) {
+          setMemories(data.results.map((r: any) => ({
+            id: r.id,
+            title: r.content.substring(0, 60) + (r.content.length > 60 ? '...' : ''),
+            content: r.content,
+            type: r.memory_type === 'conversations' ? 'episodic' : r.memory_type === 'knowledge' ? 'semantic' : 'procedural',
+            timestamp: new Date(r.timestamp * 1000).toLocaleDateString(),
+            relevance: Math.round(r.score * 100),
+            importance: r.importance,
+            tags: [],
+            connections: [],
+          })));
+        }
+      })
+      .catch(console.error);
+  };
+
   useEffect(() => {
     fetch(`${BASE}/api/memory/stats`, { headers: { 'X-API-Key': 'JARVIS_DEV_KEY' } })
       .then(r => r.json())
       .then(setMemoryStats)
       .catch(console.error);
+      
+    loadRecentMemories();
   }, []);
 
   const searchMemories = (query: string) => {
-    if (!query.trim()) { setMemories([]); return; }
+    if (!query.trim()) { 
+      loadRecentMemories();
+      return; 
+    }
     fetch(`${BASE}/api/memory/search?query=${encodeURIComponent(query)}&limit=20`, {
       headers: { 'X-API-Key': 'JARVIS_DEV_KEY' }
     })

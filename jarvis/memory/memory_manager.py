@@ -297,6 +297,48 @@ class MemoryManager:
 
         return results[:limit]
 
+    async def get_recent(
+        self,
+        memory_type: MemoryType | None = None,
+        limit: int = 20,
+    ) -> list[MemoryEntry]:
+        """
+        Fetch recent memories, optionally filtered by type.
+        """
+        self._ensure_client()
+        
+        collections_to_search = (
+            [self._collections[memory_type.value]]
+            if memory_type
+            else list(self._collections.values())
+        )
+        
+        all_entries: list[MemoryEntry] = []
+        for collection in collections_to_search:
+            try:
+                data = collection.get()
+                if not data or not data.get("documents"):
+                    continue
+                
+                for doc, meta, doc_id in zip(data["documents"], data["metadatas"], data["ids"]):
+                    all_entries.append(
+                        MemoryEntry(
+                            id=doc_id,
+                            content=doc,
+                            memory_type=MemoryType(meta.get("memory_type", "conversations")),
+                            metadata=meta,
+                            timestamp=meta.get("timestamp", 0),
+                            importance=meta.get("importance", 0.5),
+                        )
+                    )
+            except Exception as exc:
+                logger.warning("memory.get_recent_error", error=str(exc))
+                continue
+                
+        # Sort by timestamp descending
+        all_entries.sort(key=lambda e: e.timestamp, reverse=True)
+        return all_entries[:limit]
+
     # -- Stats & maintenance ------------------------------------------------
 
     def get_stats(self) -> dict[str, Any]:

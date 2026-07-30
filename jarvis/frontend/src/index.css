@@ -60,13 +60,19 @@
   --glow-blob: 0 0 120px rgba(0,150,255,0.25);
 }
 
-.dark {
-  /* Everything uses same variables, forced dark mode */
-}
 
 @layer base {
   * {
     @apply border-border;
+  }
+  
+  /* Hide scrollbars globally but keep scrollability */
+  *::-webkit-scrollbar {
+    display: none;
+  }
+  * {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
 
   body {
