@@ -1,5 +1,5 @@
-import { Buffer } from 'buffer';
-window.Buffer = window.Buffer || Buffer;
+// import { Buffer } from 'buffer';
+// window.Buffer = window.Buffer || Buffer;
 import { createRoot } from 'react-dom/client';
 import React from 'react';
 import App from './App';

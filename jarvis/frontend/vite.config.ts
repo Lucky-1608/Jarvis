@@ -10,6 +10,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export default defineConfig({
+  base: './',
   plugins: [
     react(),
     tailwindcss(),
@@ -20,7 +21,6 @@ export default defineConfig({
       preload: {
         input: 'electron/preload.ts',
       },
-      renderer: {},
     }),
   ],
   resolve: {
@@ -29,7 +29,7 @@ export default defineConfig({
     ],
   },
   server: {
-    port: 3001,
+    port: 3000,
     host: '0.0.0.0',
     proxy: {
       '/api': {
@@ -41,5 +41,8 @@ export default defineConfig({
   },
   define: {
     global: 'globalThis',
+  },
+  optimizeDeps: {
+    entries: ['src/**/*.{ts,tsx}'],
   },
 });

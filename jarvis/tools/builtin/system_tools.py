@@ -180,6 +180,112 @@ class OpenAppTool(Tool):
                     return str(p)
                     
         return None
+    _WEBSITE_MAP = {
+        # E-commerce & Shopping (India Focus)
+        "amazon": "https://www.amazon.in",
+        "flipkart": "https://www.flipkart.com",
+        "myntra": "https://www.myntra.com",
+        "meesho": "https://www.meesho.com",
+        "nykaa": "https://www.nykaa.com",
+        "ajio": "https://www.ajio.com",
+        "snapdeal": "https://www.snapdeal.com",
+        "firstcry": "https://www.firstcry.com",
+        "lenskart": "https://www.lenskart.com",
+        "purplle": "https://www.purplle.com",
+        "croma": "https://www.croma.com",
+        "reliancedigital": "https://www.reliancedigital.in",
+        "jiomart": "https://www.jiomart.com",
+        "tataneu": "https://www.tatadigital.com",
+        
+        # Quick Commerce & Food Delivery (India)
+        "blinkit": "https://blinkit.com",
+        "zepto": "https://www.zeptonow.com",
+        "bigbasket": "https://www.bigbasket.com",
+        "swiggy": "https://www.swiggy.com",
+        "zomato": "https://www.zomato.com",
+        
+        # Pharmacies & Health (India)
+        "pharmeasy": "https://pharmeasy.in",
+        "1mg": "https://www.1mg.com",
+        "netmeds": "https://www.netmeds.com",
+        "apollo": "https://www.apollopharmacy.in",
+        
+        # Travel, Tickets & Utilities (India)
+        "makemytrip": "https://www.makemytrip.com",
+        "cleartrip": "https://www.cleartrip.com",
+        "goibibo": "https://www.goibibo.com",
+        "yatra": "https://www.yatra.com",
+        "irctc": "https://www.irctc.co.in",
+        "bookmyshow": "https://in.bookmyshow.com",
+        "ola": "https://www.olacabs.com",
+        "uber": "https://www.uber.com/in/en/",
+        "urbancompany": "https://www.urbancompany.com",
+        
+        # Global E-commerce
+        "ebay": "https://www.ebay.com",
+        "walmart": "https://www.walmart.com",
+        "target": "https://www.target.com",
+        "bestbuy": "https://www.bestbuy.com",
+        "etsy": "https://www.etsy.com",
+        "aliexpress": "https://www.aliexpress.com",
+        "alibaba": "https://www.alibaba.com",
+        "temu": "https://www.temu.com",
+        "shein": "https://www.shein.com",
+        "wayfair": "https://www.wayfair.com",
+        "costco": "https://www.costco.com",
+        "ikea": "https://www.ikea.com",
+        "shopify": "https://www.shopify.com",
+        "youtube": "https://www.youtube.com",
+        "google": "https://www.google.com",
+        "github": "https://github.com",
+        "netflix": "https://www.netflix.com",
+        "gmail": "https://mail.google.com",
+        "twitter": "https://twitter.com",
+        "x": "https://twitter.com",
+        "reddit": "https://www.reddit.com",
+        "facebook": "https://www.facebook.com",
+        "instagram": "https://www.instagram.com",
+        "linkedin": "https://www.linkedin.com",
+        "whatsapp": "https://web.whatsapp.com",
+        
+        # Social Media & Messaging
+        "tiktok": "https://www.tiktok.com",
+        "snapchat": "https://www.snapchat.com",
+        "pinterest": "https://www.pinterest.com",
+        "discord": "https://discord.com/app",
+        "telegram": "https://web.telegram.org",
+        "twitch": "https://www.twitch.tv",
+        "threads": "https://www.threads.net",
+        "bluesky": "https://bsky.app",
+        "mastodon": "https://joinmastodon.org",
+        "tumblr": "https://www.tumblr.com",
+        "wechat": "https://web.wechat.com",
+        "viber": "https://www.viber.com",
+        "line": "https://line.me",
+        "signal": "https://signal.org",
+        
+        # AI Tools & Platforms
+        "chatgpt": "https://chatgpt.com",
+        "claude": "https://claude.ai",
+        "perplexity": "https://www.perplexity.ai",
+        "gemini": "https://gemini.google.com",
+        "huggingface": "https://huggingface.co",
+        "midjourney": "https://www.midjourney.com",
+        "poe": "https://poe.com",
+        "characterai": "https://character.ai",
+        "runway": "https://runwayml.com",
+        "mistral": "https://chat.mistral.ai",
+        "v0": "https://v0.dev",
+        "cursor": "https://cursor.com",
+        "replicate": "https://replicate.com",
+        "anthropic": "https://www.anthropic.com",
+        "openai": "https://openai.com",
+        "grok": "https://x.com/i/grok",
+        "civitai": "https://civitai.com",
+        "elevenlabs": "https://elevenlabs.io",
+        "suno": "https://suno.com",
+        "udio": "https://www.udio.com",
+    }
 
     async def execute(self, **params: Any) -> ToolResult:
         app_name = params.get("app_name", "").strip().lower()
@@ -189,6 +295,9 @@ class OpenAppTool(Tool):
             return ToolResult(success=False, error="No application name provided.")
 
         try:
+            if app_name in self._WEBSITE_MAP:
+                app_name = self._WEBSITE_MAP[app_name]
+
             if platform.system() == "Windows":
                 # Handle URLs provided directly in app_name
                 if "." in app_name and " " not in app_name and not app_name.startswith("http"):
@@ -201,32 +310,41 @@ class OpenAppTool(Tool):
                         cmd = f"{cmd} {target_url}"
                     subprocess.Popen(cmd, shell=True)
                 else:
-                    shortcut = self._find_app_shortcut(app_name)
-                    if shortcut:
-                        if target_url:
-                            os.startfile(shortcut, "open", target_url)
-                        else:
-                            os.startfile(shortcut)
+                    if app_name.startswith("http"):
+                        os.startfile(app_name)
                     else:
-                        app_name_clean = "".join(c for c in app_name.lower() if c.isalnum())
-                        ps_cmd = f"Get-StartApps | Where-Object {{ ($_.Name -replace '[^a-zA-Z0-9]', '') -match '{app_name_clean}' }} | Select-Object -ExpandProperty AppID"
-                        proc = subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd], capture_output=True, text=True, creationflags=0x08000000)
-                        app_ids = [line.strip() for line in proc.stdout.strip().split("\n") if line.strip()]
-                        
-                        if app_ids:
-                            subprocess.Popen(f'explorer.exe shell:AppsFolder\\{app_ids[0]}', shell=True)
+                        shortcut = self._find_app_shortcut(app_name)
+                        if shortcut:
+                            if target_url:
+                                os.startfile(shortcut, "open", target_url)
+                            else:
+                                os.startfile(shortcut)
                         else:
-                            try:
-                                if target_url:
-                                    os.startfile(app_name, arguments=target_url)
-                                else:
-                                    os.startfile(app_name)
-                            except OSError:
-                                return ToolResult(success=False, error=f"Could not find or open application '{app_name}'.")
+                            app_name_clean = "".join(c for c in app_name.lower() if c.isalnum())
+                            ps_cmd = f"Get-StartApps | Where-Object {{ ($_.Name -replace '[^a-zA-Z0-9]', '') -match '{app_name_clean}' }} | Select-Object -ExpandProperty AppID"
+                            proc = subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd], capture_output=True, text=True, creationflags=0x08000000)
+                            app_ids = [line.strip() for line in proc.stdout.strip().split("\n") if line.strip()]
+                            
+                            if app_ids:
+                                subprocess.Popen(f'explorer.exe shell:AppsFolder\\{app_ids[0]}', shell=True)
+                            else:
+                                try:
+                                    if target_url:
+                                        os.startfile(app_name, arguments=target_url)
+                                    else:
+                                        os.startfile(app_name)
+                                except OSError:
+                                    return ToolResult(success=False, error=f"Could not find or open application '{app_name}'.")
             elif platform.system() == "Darwin":
-                subprocess.Popen(["open", "-a", app_name])
+                if app_name.startswith("http"):
+                    subprocess.Popen(["open", app_name])
+                else:
+                    subprocess.Popen(["open", "-a", app_name])
             else:  # Linux
-                subprocess.Popen(f"{app_name} &", shell=True)
+                if app_name.startswith("http"):
+                    subprocess.Popen(f"xdg-open {app_name} &", shell=True)
+                else:
+                    subprocess.Popen(f"{app_name} &", shell=True)
 
             return ToolResult(
                 success=True,
