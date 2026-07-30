@@ -89,6 +89,11 @@ class EventTypes:
     MEMORY_RETRIEVED = "memory.retrieved"
     MEMORY_UPDATED = "memory.updated"
 
+    # Knowledge Graph
+    GRAPH_BUILT = "graph.built"
+    GRAPH_UPDATED = "graph.updated"
+    GRAPH_QUERIED = "graph.queried"
+
     # Vision
     VISION_STARTED = "vision.started"
     VISION_COMPLETED = "vision.completed"

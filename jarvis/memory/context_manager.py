@@ -17,6 +17,7 @@ from typing import Any
 
 import structlog
 
+from jarvis.config.settings import get_settings
 from jarvis.memory.memory_manager import MemoryManager, MemoryType
 from jarvis.providers.base import Message
 
@@ -70,11 +71,13 @@ class ContextManager:
     and the AI router — it decides *what* the LLM sees.
     """
 
-    def __init__(self, memory: MemoryManager) -> None:
+    def __init__(self, memory: MemoryManager, graph_registry: "GraphifyRegistry | None" = None) -> None:
         self._memory = memory
         self._max_context_memories = 10
         self._max_context_tokens = 4000  # approximate budget
         self._system_prompt = JARVIS_SYSTEM_PROMPT
+        self._graph_registry = graph_registry
+        self._max_graph_entities = get_settings().memory.graphify_max_context_entities
 
     def set_system_prompt(self, prompt: str) -> None:
         """Override the default system prompt."""
@@ -115,6 +118,18 @@ class ContextManager:
                     for r in memories[:5]
                 )
                 context_parts.append(f"## Relevant Memories\n{memory_text}")
+
+        # 1b. Knowledge graph context (entity relationships)
+        if self._graph_registry:
+            active_project = self._memory.get_working("active_project")
+            if active_project:
+                graph = self._graph_registry.get_graph(active_project)
+                if graph and graph.is_available():
+                    graph_context = graph.get_context_for_query(
+                        user_input, max_entities=self._max_graph_entities
+                    )
+                    if graph_context:
+                        context_parts.append(f"## Knowledge Graph\n{graph_context}")
 
         # 2. Working memory (active task, goals, etc.)
         if include_working:

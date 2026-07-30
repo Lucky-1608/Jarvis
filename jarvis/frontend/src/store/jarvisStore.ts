@@ -88,6 +88,7 @@ interface JarvisStore {
   
   whatsappStatus: 'disconnected' | 'waiting_qr' | 'connected';
   whatsappQr: string | null;
+  telegramStatus: 'disconnected' | 'connected';
 
   backendConnected: boolean;
   setBackendConnected: (connected: boolean) => void;
@@ -151,6 +152,7 @@ export const useJarvisStore = create<JarvisStore>((set, get) => ({
 
   whatsappStatus: 'disconnected',
   whatsappQr: null,
+  telegramStatus: 'disconnected',
 
   backendConnected: false as boolean,
   setBackendConnected: (connected: boolean) => set({ backendConnected: connected }),
@@ -161,7 +163,10 @@ export const useJarvisStore = create<JarvisStore>((set, get) => ({
     get().addLog({ message: 'Establishing WebSocket connection to Core...' });
     
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    wsInstance = new WebSocket(`${wsProtocol}//${window.location.host}/api/hud/ws?token=JARVIS_DEV_KEY`);
+    const host = import.meta.env.VITE_API_BASE_URL 
+      ? import.meta.env.VITE_API_BASE_URL.replace(/^http/, 'ws')
+      : `${wsProtocol}//${window.location.host}`;
+    wsInstance = new WebSocket(`${host}/api/hud/ws?token=JARVIS_DEV_KEY`);
     
     wsInstance.onopen = () => {
       set({ backendConnected: true });

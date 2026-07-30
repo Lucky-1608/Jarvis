@@ -19,6 +19,9 @@ dependencies = [
 
     # --- Memory / Vector DB ---
     "chromadb>=0.5",
+    "graphifyy>=0.9",
+    "networkx>=3.0",
+    "rapidfuzz>=3.0",
     "sentence-transformers>=3.0",
 
     # --- Backend ---

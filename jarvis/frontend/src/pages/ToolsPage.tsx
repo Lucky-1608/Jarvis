@@ -4,7 +4,7 @@ import { PageShell } from '../components/ui/PageShell';
 import { PageHeader } from '../components/ui/PageHeader';
 import { toast } from '../hooks/use-toast';
 import { Search, Wrench, ShieldAlert, Zap, Box, TerminalSquare, AlertTriangle, ArrowRight } from 'lucide-react';
-
+import { BASE } from '../lib/api';
 interface ToolParameter {
   name: string;
   type: string;
@@ -37,7 +37,7 @@ export function ToolsPage() {
   const [filter, setFilter] = useState('All');
   
   useEffect(() => {
-    fetch('/api/tools', {
+    fetch(`${BASE}/api/tools`, {
       headers: {
         'X-API-Key': 'JARVIS_DEV_KEY'
       }
@@ -199,7 +199,7 @@ export function ToolsPage() {
                 
                 <button 
                   onClick={() => {
-                    fetch('/api/tools/execute', {
+                    fetch(`${BASE}/api/tools/execute`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json', 'X-API-Key': 'JARVIS_DEV_KEY' },
                       body: JSON.stringify({ tool_name: activeTool.name, params: {} })

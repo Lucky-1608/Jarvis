@@ -76,6 +76,10 @@ def create_app() -> FastAPI:
         if request.url.path in ["/", "/docs", "/openapi.json"]:
             return await call_next(request)
 
+        # Allow CORS preflight requests
+        if request.method == "OPTIONS":
+            return await call_next(request)
+
         # Allow frontend static files without API key
         if request.url.path.startswith("/assets/") or request.url.path in ["/favicon.svg", "/robots.txt"]:
             return await call_next(request)

@@ -15,7 +15,7 @@ import { useJarvisStore } from '../store/jarvisStore';
 // ---------------------------------------------------------------------------
 
 const API_KEY = 'JARVIS_DEV_KEY';
-const BASE = ''; // same-origin (Vite proxy in dev; same server in prod)
+export const BASE = import.meta.env.VITE_API_BASE_URL || ''; // same-origin (Vite proxy in dev; same server in prod) or absolute for mobile/desktop
 
 /** Check if the backend is reachable by hitting the root endpoint. */
 export async function checkBackendHealth(): Promise<boolean> {

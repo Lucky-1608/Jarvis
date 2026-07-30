@@ -5,11 +5,12 @@ import { LeftPanel } from '../components/ui/LeftPanel';
 import { RightPanel } from '../components/ui/RightPanel';
 import { Background } from '../components/core/Background';
 import { ArcReactor } from '../components/core/ArcReactor';
-import { ParticleSystem } from '../components/core/ParticleSystem';
 import { ConversationInput } from '../components/ui/ConversationInput';
+import { ChatHistory } from '../components/ui/ChatHistory';
 import { StateIndicator } from '../components/ui/StateIndicator';
 import { WebGLErrorBoundary, webGLAvailable } from '../components/core/WebGLErrorBoundary';
 import { WebGLFallbackBlob } from '../components/core/WebGLFallbackBlob';
+import { MobileHeader } from '../components/ui/MobileHeader';
 import { Suspense, useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useJarvisStore } from '../store/jarvisStore';
@@ -71,7 +72,7 @@ export function Home() {
   }, [connectWebSocket, updateVisionStatus, setBackendConnected, addLog]);
 
   return (
-    <div className="w-full h-screen flex overflow-hidden bg-[var(--bg-primary)] text-[var(--text-primary)] selection:bg-[var(--accent-cyan)] selection:text-black">
+    <div className="w-full h-[100dvh] flex overflow-hidden bg-[var(--bg-primary)] text-[var(--text-primary)] selection:bg-[var(--accent-cyan)] selection:text-black">
       {/* 2D Background canvas */}
       <Background />
       
@@ -79,9 +80,11 @@ export function Home() {
       <LeftPanel />
       
       {/* Main Stage */}
-      <div className="flex-1 relative h-full">
+      <div className="flex-1 relative h-full flex flex-col">
+        <MobileHeader />
+        
         {/* Subtle Wordmark */}
-        <div className="absolute top-6 left-1/2 -translate-x-1/2 z-10 opacity-30 pointer-events-none">
+        <div className="hidden md:block absolute top-6 left-1/2 -translate-x-1/2 z-10 opacity-30 pointer-events-none">
           <h2 className="text-[10px] font-bold tracking-[0.5em] text-center">J.A.R.V.I.S.</h2>
           <p className="text-[8px] tracking-widest text-[var(--accent-cyan)] text-center mt-1">OPERATING SYSTEM</p>
         </div>
@@ -98,7 +101,6 @@ export function Home() {
                 <Canvas camera={{ position: [0, 0, 8], fov: 45 }}>
                   <ambientLight intensity={0.2} />
                   <ArcReactor />
-                  <ParticleSystem />
                   <EffectComposer>
                     <Bloom luminanceThreshold={0.2} luminanceSmoothing={0.9} intensity={1.5} />
                     <ChromaticAberration blendFunction={BlendFunction.NORMAL} offset={new THREE.Vector2(0.002, 0.002)} radialModulation={false} modulationOffset={0} />
@@ -111,7 +113,7 @@ export function Home() {
             <WebGLFallbackBlob />
           )}
         </div>
-
+        <ChatHistory />
         <ConversationInput />
       </div>
       

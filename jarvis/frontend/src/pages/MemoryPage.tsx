@@ -4,7 +4,7 @@ import { PageShell } from '../components/ui/PageShell';
 import { PageHeader } from '../components/ui/PageHeader';
 import { toast } from '../hooks/use-toast';
 import { Search, Brain, Book, Code, Settings, Pin, Trash2, Tag, Calendar, ChevronRight, Activity, Plus, Edit3 } from 'lucide-react';
-
+import { BASE } from '../lib/api';
 
 
 const containerVariants = {
@@ -32,7 +32,7 @@ export function MemoryPage() {
   const [memoryStats, setMemoryStats] = useState<any>(null);
 
   useEffect(() => {
-    fetch('/api/memory/stats', { headers: { 'X-API-Key': 'JARVIS_DEV_KEY' } })
+    fetch(`${BASE}/api/memory/stats`, { headers: { 'X-API-Key': 'JARVIS_DEV_KEY' } })
       .then(r => r.json())
       .then(setMemoryStats)
       .catch(console.error);
@@ -40,7 +40,7 @@ export function MemoryPage() {
 
   const searchMemories = (query: string) => {
     if (!query.trim()) { setMemories([]); return; }
-    fetch(`/api/memory/search?query=${encodeURIComponent(query)}&limit=20`, {
+    fetch(`${BASE}/api/memory/search?query=${encodeURIComponent(query)}&limit=20`, {
       headers: { 'X-API-Key': 'JARVIS_DEV_KEY' }
     })
       .then(r => r.json())
@@ -74,7 +74,7 @@ export function MemoryPage() {
         actions={
           <button 
             onClick={() => {
-              fetch('/api/memory', {
+              fetch(`${BASE}/api/memory`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-API-Key': 'JARVIS_DEV_KEY' },
                 body: JSON.stringify({ content: 'New memory created via UI', memory_type: 'knowledge' })

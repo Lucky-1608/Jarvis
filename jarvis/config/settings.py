@@ -106,6 +106,10 @@ class MemorySettings(BaseSettings):
     embedding_model: str = "BAAI/bge-small-en-v1.5"
     max_context_memories: int = 10
     max_context_tokens: int = 4000
+    graphify_enabled: bool = True
+    graphify_data_dir: str = str(PROJECT_ROOT / "data" / "graphify")
+    graphify_auto_rebuild: bool = False
+    graphify_max_context_entities: int = 5
 
 
 # ---------------------------------------------------------------------------

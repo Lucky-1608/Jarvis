@@ -14,8 +14,8 @@ export function useVoiceRecorder(onTranscription: (text: string) => void) {
       mediaRecorder.current = new MediaRecorder(stream, { mimeType: 'audio/webm' });
       
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const host = import.meta.env.VITE_API_URL 
-        ? import.meta.env.VITE_API_URL.replace(/^http/, 'ws')
+      const host = import.meta.env.VITE_API_BASE_URL 
+        ? import.meta.env.VITE_API_BASE_URL.replace(/^http/, 'ws')
         : `${protocol}//${window.location.host}`;
         
       ws.current = new WebSocket(`${host}/api/voice/stream`);

@@ -106,7 +106,21 @@ class JarvisBrain:
 
         # 2. Memory
         self._memory = MemoryManager()
-        self._context = ContextManager(self._memory)
+
+        # 2b. Knowledge Graph (Graphify)
+        self._graph_registry = None
+        if self._settings.memory.graphify_enabled:
+            try:
+                from jarvis.memory.graphify_registry import GraphifyRegistry
+                self._graph_registry = GraphifyRegistry(
+                    self._settings.memory.graphify_data_dir
+                )
+                await self._graph_registry._load_registry()
+                logger.info("brain.graphify_ready")
+            except Exception as exc:
+                logger.warning("brain.graphify_init_failed", error=str(exc))
+
+        self._context = ContextManager(self._memory, graph_registry=self._graph_registry)
 
         # 3. Tools
         self._tools = ToolRegistry()
@@ -119,6 +133,11 @@ class JarvisBrain:
         self._tools.register_many(get_team_tools(self._router))
         from jarvis.tools.builtin.n8n_tools import get_n8n_tools
         self._tools.register_many(get_n8n_tools())
+
+        # 3b. Knowledge Graph tools
+        if self._graph_registry:
+            from jarvis.tools.builtin.graph_tools import get_graph_tools
+            self._tools.register_many(get_graph_tools(self._graph_registry))
 
         # 3.5 Plugins
         from jarvis.plugins.manager import PluginManager

@@ -2,15 +2,10 @@
 Jarvis OS — Text-to-Speech Engine.
 
 Converts Jarvis's text responses into spoken audio.
-
-Spec Volume 7:
-  Primary: Edge-TTS
-  Fallback: pyttsx3
 """
 
 from __future__ import annotations
 
-import asyncio
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -21,25 +16,16 @@ from jarvis.events.bus import Event, EventTypes, get_event_bus
 
 logger = structlog.get_logger(__name__)
 
-# Default voice — Microsoft's high-quality neural voices
-DEFAULT_VOICE = "en-US-GuyNeural"  # Male, professional
-ALTERNATIVE_VOICES = {
-    "male": "en-US-GuyNeural",
-    "female": "en-US-JennyNeural",
-    "british_male": "en-GB-RyanNeural",
-    "british_female": "en-GB-SoniaNeural",
-    "indian_male": "en-IN-PrabhatNeural",
-    "indian_female": "en-IN-NeerjaNeural",
-}
+# Default voice
+DEFAULT_VOICE = "en-US-GuyNeural"
+ALTERNATIVE_VOICES = {}
 
 
 class TextToSpeech:
     """
-    Text-to-speech engine with Edge-TTS (primary) and pyttsx3 (fallback).
-
-    Edge-TTS provides high-quality neural voices for free via
-    Microsoft's Edge browser TTS service. Falls back to pyttsx3
-    for offline operation.
+    Text-to-speech engine.
+    Primary TTS is currently disabled/stubbed.
+    Edge-TTS is used as the fallback.
     """
 
     def __init__(
@@ -55,17 +41,11 @@ class TextToSpeech:
         self._is_speaking = False
         self._stop_requested = False
 
-    # -- Edge-TTS (primary) -------------------------------------------------
-
     async def speak(self, text: str) -> None:
-        """
-        Speak the given text aloud using Edge-TTS.
-
-        Falls back to pyttsx3 if Edge-TTS is unavailable.
-        """
+        """Speak the text, falling back to Edge-TTS."""
         if not text or not text.strip():
             return
-
+        
         self._is_speaking = True
         self._stop_requested = False
 
@@ -76,11 +56,11 @@ class TextToSpeech:
         ))
 
         try:
-            await self._speak_edge_tts(text)
+            await self._speak_primary(text)
         except Exception as exc:
-            logger.warning("tts.edge_tts_failed", error=str(exc))
+            logger.warning("tts.primary_failed", error=str(exc))
             try:
-                await self._speak_pyttsx3(text)
+                await self._speak_edge_tts(text)
             except Exception as fallback_exc:
                 logger.error("tts.all_failed", error=str(fallback_exc))
         finally:
@@ -91,14 +71,18 @@ class TextToSpeech:
                 source="tts",
             ))
 
+    async def _speak_primary(self, text: str) -> None:
+        """Primary TTS implementation (currently stubbed)."""
+        raise NotImplementedError("Primary TTS is not configured. Falling back.")
+
     async def _speak_edge_tts(self, text: str) -> None:
-        """Synthesize and play speech using Edge-TTS."""
+        """Fallback: Synthesize and play speech using Edge-TTS."""
         try:
             import edge_tts
         except ImportError:
             raise RuntimeError(
-                "edge-tts is required for speech synthesis. "
-                "Install with: pip install 'jarvis-os[voice]'"
+                "edge-tts is required for fallback speech synthesis. "
+                "Install with: pip install edge-tts"
             )
 
         # Create a temp file for the audio
@@ -126,43 +110,12 @@ class TextToSpeech:
 
         logger.debug("tts.edge_tts_done", text_preview=text[:50])
 
-    async def _speak_pyttsx3(self, text: str) -> None:
-        """Fallback: speak using pyttsx3 (offline, lower quality)."""
-        try:
-            import pyttsx3
-        except ImportError:
-            raise RuntimeError("pyttsx3 is not installed for offline TTS fallback.")
-
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, self._pyttsx3_sync, text)
-
-    @staticmethod
-    def _pyttsx3_sync(text: str) -> None:
-        """Synchronous pyttsx3 speech (runs in thread pool)."""
-        import pyttsx3
-
-        engine = pyttsx3.init()
-        engine.setProperty("rate", 175)
-        engine.setProperty("volume", 0.9)
-
-        # Try to set a good voice
-        voices = engine.getProperty("voices")
-        for voice in voices:
-            if "david" in voice.name.lower() or "mark" in voice.name.lower():
-                engine.setProperty("voice", voice.id)
-                break
-
-        engine.say(text)
-        engine.runAndWait()
-
-    # -- Synthesis to file --------------------------------------------------
-
     async def synthesize_to_file(
         self,
         text: str,
         output_path: str | Path,
     ) -> Path:
-        """Synthesize speech to an audio file (MP3) without playing."""
+        """Synthesize speech to an audio file (MP3) without playing, using Edge-TTS."""
         try:
             import edge_tts
         except ImportError:
@@ -182,10 +135,8 @@ class TextToSpeech:
         logger.info("tts.synthesized_to_file", path=str(output_path))
         return output_path
 
-    # -- Controls -----------------------------------------------------------
-
     def stop(self) -> None:
-        """Interrupt speech playback (barge-in support)."""
+        """Interrupt speech playback."""
         self._stop_requested = True
         self._is_speaking = False
         logger.debug("tts.interrupted")
@@ -200,12 +151,12 @@ class TextToSpeech:
         logger.info("tts.voice_changed", voice=voice)
 
     def set_rate(self, rate: str) -> None:
-        """Change speech rate (e.g., '+10%', '-20%')."""
+        """Change speech rate."""
         self._rate = rate
 
     @staticmethod
     async def list_voices(language: str = "en") -> list[dict[str, str]]:
-        """List available Edge-TTS voices for a language."""
+        """List available Edge-TTS voices."""
         try:
             import edge_tts
             voices = await edge_tts.list_voices()
