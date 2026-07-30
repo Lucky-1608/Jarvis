@@ -4,7 +4,7 @@ import { PageShell } from '../components/ui/PageShell';
 import { PageHeader } from '../components/ui/PageHeader';
 import { toast } from '../hooks/use-toast';
 import { Mic, Volume2, Download, Trash2, Settings2, Activity, MessageSquare, Square, Play, WifiOff, Loader2 } from 'lucide-react';
-import { api, BASE } from '../lib/api';
+import { api, getBaseUrl } from '../lib/api';
 
 interface TranscriptEntry {
   id: string;
@@ -87,7 +87,8 @@ export function VoicePage() {
     formData.append('file', blob, 'recording.webm');
 
     try {
-      const res = await fetch(`${BASE}/api/voice/transcribe`, {
+      const base = await getBaseUrl();
+      const res = await fetch(`${base}/api/voice/transcribe`, {
         method: 'POST',
         headers: { 'X-API-Key': 'JARVIS_DEV_KEY' },
         body: formData,

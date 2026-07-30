@@ -15,16 +15,65 @@ import { useJarvisStore } from '../store/jarvisStore';
 // ---------------------------------------------------------------------------
 
 const API_KEY = 'JARVIS_DEV_KEY';
-export const BASE = import.meta.env.VITE_API_BASE_URL || ''; // same-origin (Vite proxy in dev; same server in prod) or absolute for mobile/desktop
+
+let activeBaseUrl: string | null = null;
+let isResolving = false;
+let resolveQueue: ((url: string) => void)[] = [];
+
+/**
+ * Dynamically resolves the active backend URL by pinging the list of URLs
+ * provided in VITE_API_BASE_URL (comma-separated).
+ */
+export async function getBaseUrl(forceRefresh = false): Promise<string> {
+  if (activeBaseUrl !== null && !forceRefresh) {
+    return activeBaseUrl;
+  }
+
+  if (isResolving) {
+    return new Promise(resolve => resolveQueue.push(resolve));
+  }
+
+  isResolving = true;
+  const envStr = import.meta.env.VITE_API_BASE_URL || '';
+  const urls = envStr.split(',').map((u: string) => u.trim()).filter(Boolean);
+
+  if (urls.length === 0) {
+    urls.push(''); // fallback to relative
+  }
+
+  let found = urls[0];
+  for (const url of urls) {
+    if (!url) {
+      found = '';
+      break; // relative path is assumed to work
+    }
+    try {
+      const res = await fetch(`${url}/`, { signal: AbortSignal.timeout(2000) });
+      if (res.ok || res.status === 404) {
+        found = url;
+        break;
+      }
+    } catch {
+      continue; // ping failed, try next
+    }
+  }
+
+  activeBaseUrl = found;
+  isResolving = false;
+  resolveQueue.forEach(resolve => resolve(found));
+  resolveQueue = [];
+
+  return activeBaseUrl || '';
+}
 
 /** Check if the backend is reachable by hitting the root endpoint. */
 export async function checkBackendHealth(): Promise<boolean> {
   try {
-    const res = await fetch(`${BASE}/`, {
-      // short timeout so this doesn't hang
+    const base = await getBaseUrl(true);
+    const res = await fetch(`${base}/`, {
       signal: AbortSignal.timeout(3000),
     });
-    return res.ok;
+    return res.ok || res.status === 404;
   } catch {
     return false;
   }
@@ -56,15 +105,16 @@ export type ApiResult<T> = ApiOk<T> | ApiError;
 export async function apiFetch<T = any>(
   path: string,
   options: RequestInit = {},
+  isRetry = false,
 ): Promise<ApiResult<T>> {
-  const url = `${BASE}${path}`;
+  const base = await getBaseUrl(isRetry);
+  const url = `${base}${path}`;
 
   const headers: Record<string, string> = {
     'X-API-Key': API_KEY,
     ...(options.headers as Record<string, string> | undefined),
   };
 
-  // Don't set Content-Type for GET / HEAD / DELETE with no body
   if (options.body && !headers['Content-Type']) {
     headers['Content-Type'] = 'application/json';
   }
@@ -82,7 +132,6 @@ export async function apiFetch<T = any>(
         detail = res.statusText;
       }
 
-      // Track the backend connection failure
       if (res.status >= 500) {
         useJarvisStore.getState().addLog({
           message: `API ${res.status} on ${path}: ${detail}`,
@@ -93,7 +142,6 @@ export async function apiFetch<T = any>(
       return { ok: false, status: res.status, detail };
     }
 
-    // 204 No Content
     if (res.status === 204) {
       return { ok: true, data: undefined as unknown as T };
     }
@@ -101,7 +149,11 @@ export async function apiFetch<T = any>(
     const data: T = await res.json();
     return { ok: true, data };
   } catch (err: any) {
-    // Network error — backend is down or unreachable
+    if (!isRetry) {
+      // Network error, try one more time by forcing a refresh of the base URL
+      return apiFetch(path, options, true);
+    }
+
     const detail = err?.message || 'Backend unreachable';
     useJarvisStore.getState().setAIState('error');
     useJarvisStore.getState().addLog({

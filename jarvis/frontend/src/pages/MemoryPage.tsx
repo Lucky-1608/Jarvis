@@ -4,7 +4,7 @@ import { PageShell } from '../components/ui/PageShell';
 import { PageHeader } from '../components/ui/PageHeader';
 import { toast } from '../hooks/use-toast';
 import { Search, Brain, Book, Code, Settings, Pin, Trash2, Tag, Calendar, ChevronRight, Activity, Plus, Edit3 } from 'lucide-react';
-import { BASE } from '../lib/api';
+import { api } from '../lib/api';
 
 
 const containerVariants = {
@@ -32,12 +32,10 @@ export function MemoryPage() {
   const [memoryStats, setMemoryStats] = useState<any>(null);
 
   const loadRecentMemories = () => {
-    fetch(`${BASE}/api/memory/recent?limit=20`, {
-      headers: { 'X-API-Key': 'JARVIS_DEV_KEY' }
-    })
-      .then(r => r.json())
-      .then(data => {
-        if (data.results) {
+    api.get('/api/memory/recent?limit=20')
+      .then(res => {
+        if (res.ok && res.data.results) {
+          const data = res.data;
           setMemories(data.results.map((r: any) => ({
             id: r.id,
             title: r.content.substring(0, 60) + (r.content.length > 60 ? '...' : ''),
@@ -55,9 +53,8 @@ export function MemoryPage() {
   };
 
   useEffect(() => {
-    fetch(`${BASE}/api/memory/stats`, { headers: { 'X-API-Key': 'JARVIS_DEV_KEY' } })
-      .then(r => r.json())
-      .then(setMemoryStats)
+    api.get('/api/memory/stats')
+      .then(res => res.ok && setMemoryStats(res.data))
       .catch(console.error);
       
     loadRecentMemories();
@@ -68,12 +65,10 @@ export function MemoryPage() {
       loadRecentMemories();
       return; 
     }
-    fetch(`${BASE}/api/memory/search?query=${encodeURIComponent(query)}&limit=20`, {
-      headers: { 'X-API-Key': 'JARVIS_DEV_KEY' }
-    })
-      .then(r => r.json())
-      .then(data => {
-        if (data.results) {
+    api.get(`/api/memory/search?query=${encodeURIComponent(query)}&limit=20`)
+      .then(res => {
+        if (res.ok && res.data.results) {
+          const data = res.data;
           setMemories(data.results.map((r: any) => ({
             id: r.id,
             title: r.content.substring(0, 60) + (r.content.length > 60 ? '...' : ''),
@@ -102,12 +97,10 @@ export function MemoryPage() {
         actions={
           <button 
             onClick={() => {
-              fetch(`${BASE}/api/memory`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-API-Key': 'JARVIS_DEV_KEY' },
-                body: JSON.stringify({ content: 'New memory created via UI', memory_type: 'knowledge' })
-              })
-                .then(() => toast({ title: 'Memory Added', description: 'Memory successfully saved.' }))
+              api.post('/api/memory', { content: 'New memory created via UI', memory_type: 'knowledge' })
+                .then(res => {
+                  if (res.ok) toast({ title: 'Memory Added', description: 'Memory successfully saved.' });
+                })
                 .catch(console.error);
             }}
             className="px-4 py-2 bg-[rgba(0,212,255,0.1)] border border-[rgba(0,212,255,0.3)] text-[var(--accent-cyan)] rounded-md text-sm font-medium hover:bg-[rgba(0,212,255,0.2)] transition-colors shadow-[0_0_15px_rgba(0,212,255,0.1)] flex items-center gap-2">

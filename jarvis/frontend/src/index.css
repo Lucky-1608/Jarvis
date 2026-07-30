@@ -62,8 +62,8 @@
 
 
 @layer base {
-  * {
-    @apply border-border;
+  *, ::before, ::after {
+    border-color: var(--color-border);
   }
   
   /* Hide scrollbars globally but keep scrollability */

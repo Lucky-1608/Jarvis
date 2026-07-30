@@ -4,7 +4,7 @@ import { PageShell } from '../components/ui/PageShell';
 import { PageHeader } from '../components/ui/PageHeader';
 import { toast } from '../hooks/use-toast';
 import { Network, CheckCircle2, Circle, Clock, Play, AlertTriangle, ArrowRight, Waypoints, Brain } from 'lucide-react';
-import { BASE } from '../lib/api';
+import { api } from '../lib/api';
 
 
 const containerVariants = {
@@ -24,10 +24,8 @@ export function WorkflowsPage() {
   const [activeTab, setActiveTab] = useState<'execution' | 'n8n'>('execution');
 
   useEffect(() => {
-    fetch(`${BASE}/api/workflows`, { headers: { 'X-API-Key': 'JARVIS_DEV_KEY' } })
-      .then(r => r.json())
-      .then(data => { if (data.workflows) setWorkflows(data.workflows); })
-      .catch(console.error)
+    api.get('/api/workflows')
+      .then(res => { if (res.ok && res.data.workflows) setWorkflows(res.data.workflows); })
       .finally(() => setLoading(false));
   }, []);
   

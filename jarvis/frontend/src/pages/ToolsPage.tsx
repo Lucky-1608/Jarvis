@@ -4,7 +4,7 @@ import { PageShell } from '../components/ui/PageShell';
 import { PageHeader } from '../components/ui/PageHeader';
 import { toast } from '../hooks/use-toast';
 import { Search, Wrench, ShieldAlert, Zap, Box, TerminalSquare, AlertTriangle, ArrowRight } from 'lucide-react';
-import { BASE } from '../lib/api';
+import { api } from '../lib/api';
 interface ToolParameter {
   name: string;
   type: string;
@@ -37,18 +37,12 @@ export function ToolsPage() {
   const [filter, setFilter] = useState('All');
   
   useEffect(() => {
-    fetch(`${BASE}/api/tools`, {
-      headers: {
-        'X-API-Key': 'JARVIS_DEV_KEY'
-      }
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (data && data.tools) {
-          setTools(data.tools);
+    api.get('/api/tools')
+      .then(res => {
+        if (res.ok && res.data && res.data.tools) {
+          setTools(res.data.tools);
         }
       })
-      .catch(err => console.error('Failed to fetch tools:', err))
       .finally(() => setLoading(false));
   }, []);
 
@@ -199,16 +193,14 @@ export function ToolsPage() {
                 
                 <button 
                   onClick={() => {
-                    fetch(`${BASE}/api/tools/execute`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json', 'X-API-Key': 'JARVIS_DEV_KEY' },
-                      body: JSON.stringify({ tool_name: activeTool.name, params: {} })
-                    })
-                      .then(r => r.json())
-                      .then(data => {
-                        toast({ title: data.success !== false ? 'Tool Executed' : 'Execution Failed', description: JSON.stringify(data).substring(0, 200) });
-                      })
-                      .catch(err => toast({ title: 'Error', description: err.message }));
+                    api.post('/api/tools/execute', { tool_name: activeTool.name, params: {} })
+                      .then(res => {
+                        if (res.ok) {
+                          toast({ title: 'Tool Executed', description: JSON.stringify(res.data).substring(0, 200) });
+                        } else {
+                          toast({ title: 'Execution Failed', description: res.detail || 'Failed' });
+                        }
+                      });
                   }}
                   className={`w-full py-3 rounded-lg font-medium text-sm transition-all flex items-center justify-center gap-2 ${activeTool.dangerous ? 'bg-red-500 hover:bg-red-600 text-white shadow-[0_0_15px_rgba(239,68,68,0.3)]' : 'bg-[var(--accent-cyan)] hover:bg-[rgba(0,212,255,0.8)] text-black shadow-[0_0_15px_rgba(0,212,255,0.3)]'}`}>
                   <Zap size={16} /> Execute Test Payload <ArrowRight size={14} />

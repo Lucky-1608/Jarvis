@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { getBaseUrl } from '../lib/api';
 
 export type AIState = 'idle' | 'listening' | 'thinking' | 'executing' | 'speaking' | 'error' | 'success';
 
@@ -157,15 +158,15 @@ export const useJarvisStore = create<JarvisStore>((set, get) => ({
   backendConnected: false as boolean,
   setBackendConnected: (connected: boolean) => set({ backendConnected: connected }),
 
-  connectWebSocket: () => {
+  connectWebSocket: async () => {
     if (wsInstance) return;
 
     get().addLog({ message: 'Establishing WebSocket connection to Core...' });
     
+    const base = await getBaseUrl();
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = import.meta.env.VITE_API_BASE_URL 
-      ? import.meta.env.VITE_API_BASE_URL.replace(/^http/, 'ws')
-      : `${wsProtocol}//${window.location.host}`;
+    const host = base ? base.replace(/^http/, 'ws') : `${wsProtocol}//${window.location.host}`;
+    
     wsInstance = new WebSocket(`${host}/api/hud/ws?token=JARVIS_DEV_KEY`);
     
     wsInstance.onopen = () => {
