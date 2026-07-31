@@ -130,6 +130,7 @@ class JarvisBrain:
         self._tools.register_many(get_vision_tools())
         self._tools.register_many(get_browser_tools())
         self._tools.register_many(get_desktop_tools())
+        import jarvis.team # Ensure agents are registered
         from jarvis.tools.builtin.team_tools import get_team_tools
         self._tools.register_many(get_team_tools(self._router))
         from jarvis.tools.builtin.n8n_tools import get_n8n_tools
@@ -211,7 +212,24 @@ class JarvisBrain:
         messages = await self._context.build_messages(user_input)
 
         # 3. Get AI response with tools (multi-step loop)
-        openai_tools = self._tools.to_openai_tools() if self._tools and self._tools.count > 0 else None
+        openai_tools = None
+        if self._tools and self._tools.count > 0:
+            if self._settings.ai_tool_selector_enabled:
+                from jarvis.router.tool_selector import ToolSelector
+                if not hasattr(self, "_tool_selector"):
+                    self._tool_selector = ToolSelector(self._router, self._tools)
+                
+                selected_names = await self._tool_selector.select_tools(user_input)
+                # Keep only tools that exist in the registry
+                selected_tools = [self._tools.get(name) for name in selected_names if self._tools.get(name)]
+                
+                # If for some reason the selector failed to pick any tools, fallback to all tools
+                if selected_tools:
+                    openai_tools = [t.metadata.to_openai_schema() for t in selected_tools]
+                else:
+                    openai_tools = self._tools.to_openai_tools()
+            else:
+                openai_tools = self._tools.to_openai_tools()
         
         MAX_STEPS = 5
         tool_results: list[dict[str, Any]] = []

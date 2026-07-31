@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Folder, Brain, Wrench, Users, Network,
-  Eye, Mic, Settings 
+  Eye, Mic, Settings, Activity 
 } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
 
@@ -14,6 +14,7 @@ const navItems = [
   { id: 'tools', icon: Wrench, label: 'Tools', path: '/tools' },
   { id: 'agents', icon: Users, label: 'Agents', path: '/agents' },
   { id: 'workflows', icon: Network, label: 'Workflows', path: '/workflows' },
+  { id: 'settings', icon: Settings, label: 'Settings', path: '/settings' },
 ];
 
 export function LeftPanelContent({ className = '', onNavigate }: { className?: string; onNavigate?: () => void }) {

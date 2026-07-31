@@ -98,6 +98,26 @@ def _get_system_agents() -> list[dict]:
             "task": "Routing AI requests to optimal provider",
         },
     ]
+    
+    # Inject registered Team/Specialist agents
+    try:
+        from jarvis.team.registry import team_registry
+        for agent_name in team_registry.list_agents():
+            agent_class = team_registry.get_agent(agent_name)
+            if agent_class:
+                persona_preview = agent_class.persona[:197] + "..." if len(agent_class.persona) > 200 else agent_class.persona
+                system_agents.append({
+                    "id": f"spec_{agent_name.replace(' ', '_').lower()}",
+                    "name": agent_class.name,
+                    "type": "SystemAgent",
+                    "persona": persona_preview,
+                    "status": "idle",
+                    "created_at": None,
+                    "task": "Available in registry",
+                })
+    except ImportError:
+        pass
+        
     return system_agents
 
 

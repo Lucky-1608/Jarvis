@@ -150,6 +150,7 @@ class JarvisSettings(BaseSettings):
     # --- AI routing ---------------------------------------------------------
     ai_primary_provider: Literal["opencode", "openrouter", "ollama", "nvidia", "grok", "gemini"] = "opencode"
     ai_fallback_provider: Literal["opencode", "openrouter", "ollama", "nvidia", "grok", "gemini"] = "ollama"
+    ai_tool_selector_enabled: bool = True
 
     # --- Logging ------------------------------------------------------------
     log_level: str = "INFO"

@@ -21,14 +21,19 @@ class DelegateTaskTool(Tool):
     def metadata(self) -> ToolMetadata:
         return ToolMetadata(
             name="delegate_task",
-            description="Delegate a complex sub-task to a specialized sub-agent persona.",
+            description="Delegate a complex sub-task to a specialized sub-agent. You can specify a registered agent name, or a custom persona.",
             category=ToolCategory.SYSTEM,
             dangerous=False,
             parameters=[
                 ToolParameter(
+                    name="agent_name",
+                    type="string",
+                    description="The name of the explicitly registered agent (e.g. 'Database Agent', 'Frontend Agent')."
+                ),
+                ToolParameter(
                     name="persona",
                     type="string",
-                    description="The description/system prompt for the specialized sub-agent."
+                    description="Optional. A custom system prompt/persona if not using a registered agent."
                 ),
                 ToolParameter(
                     name="task",
@@ -39,20 +44,32 @@ class DelegateTaskTool(Tool):
         )
 
     async def execute(self, **kwargs) -> Any:
+        agent_name = kwargs.get("agent_name")
         persona = kwargs.get("persona", "You are a helpful AI assistant.")
         task = kwargs.get("task", "")
         
         if not task:
             return "Error: No task provided."
             
-        agent = SubAgent(name="DelegatedExpert", persona=persona, router=self._router)
+        from jarvis.team.registry import team_registry
+        
+        agent = None
+        if agent_name:
+            agent_class = team_registry.get_agent(agent_name)
+            if agent_class:
+                agent = agent_class(router=self._router)
+        
+        if not agent:
+            # Fallback to dynamic agent
+            actual_name = agent_name or "DelegatedExpert"
+            agent = SubAgent(name=actual_name, persona=persona, router=self._router)
         
         # Track agent in history
         agent_entry = {
             "id": f"agent_{int(time.time())}_{len(_agent_history)}",
-            "name": "DelegatedExpert",
+            "name": agent.name,
             "type": "SubAgent",
-            "persona": persona[:200],
+            "persona": agent.persona[:200],
             "status": "running",
             "created_at": time.time(),
             "task": task[:200],

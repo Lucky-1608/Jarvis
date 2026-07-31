@@ -37,8 +37,9 @@ export async function getBaseUrl(forceRefresh = false): Promise<string> {
   const envStr = import.meta.env.VITE_API_BASE_URL || '';
   const urls = envStr.split(',').map((u: string) => u.trim()).filter(Boolean);
 
-  if (urls.length === 0) {
-    urls.push(''); // fallback to relative
+  // Always append relative path as the final fallback
+  if (!urls.includes('')) {
+    urls.push(''); 
   }
 
   let found = urls[0];

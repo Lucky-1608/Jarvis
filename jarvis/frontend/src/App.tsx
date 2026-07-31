@@ -11,6 +11,7 @@ import { VoicePage } from './pages/VoicePage';
 import { ToolsPage } from './pages/ToolsPage';
 import { AgentsPage } from './pages/AgentsPage';
 import { WorkflowsPage } from './pages/WorkflowsPage';
+import { SettingsPage } from './pages/SettingsPage';
 
 const queryClient = new QueryClient();
 
@@ -24,6 +25,7 @@ function Router() {
       <Route path="/tools" component={ToolsPage} />
       <Route path="/agents" component={AgentsPage} />
       <Route path="/workflows" component={WorkflowsPage} />
+      <Route path="/settings" component={SettingsPage} />
       <Route component={NotFound} />
     </Switch>
   );

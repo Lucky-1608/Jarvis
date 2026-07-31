@@ -165,6 +165,7 @@ class MemoryManager:
         metadata: dict[str, Any] | None = None,
         importance: float = 0.5,
         chunk: bool = True,
+        project_id: int | None = None,
     ) -> list[str]:
         """
         Store content in long-term memory.
@@ -198,6 +199,8 @@ class MemoryManager:
                 "chunk_index": i,
                 "total_chunks": len(texts),
             }
+            if project_id is not None:
+                chroma_meta["project_id"] = project_id
             # Add user metadata (filter non-serializable values)
             for k, v in meta.items():
                 if isinstance(v, (str, int, float, bool)):
@@ -234,6 +237,7 @@ class MemoryManager:
         memory_type: MemoryType | None = None,
         limit: int = 10,
         min_relevance: float = 0.0,
+        project_id: int | None = None,
     ) -> list[SearchResult]:
         """
         Search memories by semantic similarity.
@@ -254,9 +258,11 @@ class MemoryManager:
                 continue
 
             try:
+                where_clause = {"project_id": project_id} if project_id is not None else None
                 search_results = collection.query(
                     query_texts=[query],
                     n_results=min(limit, collection.count()),
+                    where=where_clause,
                 )
             except Exception as exc:
                 logger.warning("memory.search_error", error=str(exc))

@@ -50,6 +50,7 @@ htmlcov/
 # Frontend
 node_modules/
 dist/
+dist-electron/
 
 # Agent and AI config
 .agents/

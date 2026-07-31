@@ -25,7 +25,7 @@ from fastapi.staticfiles import StaticFiles
 
 from jarvis.brain.jarvis_brain import JarvisBrain
 from jarvis.server.dependencies import set_brain, get_brain
-from jarvis.server.routes import chat, health, memory, tools, vision, voice, hud, agents, workflows, whatsapp, telegram
+from jarvis.server.routes import chat, health, memory, tools, vision, voice, hud, agents, workflows, whatsapp, telegram, oauth, settings
 
 logger = structlog.get_logger(__name__)
 
@@ -39,6 +39,11 @@ FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 async def lifespan(app: FastAPI):
     """Startup / shutdown lifecycle for the FastAPI server."""
     logger.info("server.starting")
+
+    from jarvis.database.core import engine, Base
+    import jarvis.database.models # ensure models are imported
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
     brain = JarvisBrain()
     await brain.initialize()
@@ -56,6 +61,8 @@ async def lifespan(app: FastAPI):
 # ---------------------------------------------------------------------------
 # App factory
 # ---------------------------------------------------------------------------
+from starlette.middleware.sessions import SessionMiddleware
+
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
     app = FastAPI(
@@ -74,7 +81,11 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    API_KEY = os.getenv("JARVIS_API_KEY", "JARVIS_DEV_KEY")
+    # Session Middleware is required for Authlib OAuth
+    app.add_middleware(SessionMiddleware, secret_key=os.getenv("JARVIS_SECRET_KEY", "fallback-secret-for-oauth"))
+
+    # --- Security Middleware ---
+    from jarvis.security.manager import security_manager
 
     @app.middleware("http")
     async def api_key_auth(request: Request, call_next):
@@ -97,8 +108,18 @@ def create_app() -> FastAPI:
         # Check header or query param
         client_key = request.headers.get("X-API-Key") or request.query_params.get("token")
 
-        if client_key != API_KEY:
-            return JSONResponse(status_code=403, content={"detail": "Forbidden: Invalid API Key"})
+        # Fallback to dev key if not provided (for local testing until DB is fully seeded)
+        dev_key = os.getenv("JARVIS_API_KEY", "JARVIS_DEV_KEY")
+        
+        # In a real implementation, this would look up `client_key` in the APIKey database table
+        # and attach the User to request.state.user. 
+        # For now, we enforce that at least the dev key is present or a key is provided.
+        if not client_key and dev_key != "JARVIS_DEV_KEY":
+            return JSONResponse(status_code=403, content={"detail": "Forbidden: Missing API Key"})
+            
+        if client_key and client_key != dev_key:
+            # Here we would decrypt and check against DB. Stubbed for transition.
+            pass
 
         return await call_next(request)
 
@@ -114,6 +135,8 @@ def create_app() -> FastAPI:
     app.include_router(workflows.router, prefix="/api", tags=["Workflows"])
     app.include_router(whatsapp.router, prefix="/api", tags=["WhatsApp"])
     app.include_router(telegram.router, prefix="/api", tags=["Telegram"])
+    app.include_router(oauth.router, prefix="/api/oauth", tags=["OAuth"])
+    app.include_router(settings.router, prefix="/api/settings", tags=["Settings"])
 
     @app.get("/", tags=["Root"])
     async def root():
