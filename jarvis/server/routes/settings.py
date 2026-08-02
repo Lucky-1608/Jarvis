@@ -61,10 +61,7 @@ async def get_integrations_status(db: AsyncSession = Depends(get_db)):
 
 @router.get("/plugins")
 async def get_plugin_keys():
-    """Returns the masked API keys for various plugins."""
     return {
-        "aws_access_key": mask_key(os.getenv("AWS_ACCESS_KEY_ID", ""), "AKIA"),
-        "slack_token": mask_key(os.getenv("SLACK_BOT_TOKEN", ""), "xoxb-"),
         "github_token": mask_key(os.getenv("GITHUB_TOKEN", ""), "ghp_"),
         "homeassistant_url": os.getenv("HOMEASSISTANT_URL", ""),
         "eth_rpc_url": mask_key(os.getenv("ETH_RPC_URL", ""), "https://"),
@@ -109,12 +106,10 @@ async def update_plugin_keys(keys: Dict[str, str]):
     
     # Map frontend key names to .env variables
     key_mapping = {
-        "aws_access_key": "AWS_ACCESS_KEY_ID",
-        "slack_token": "SLACK_BOT_TOKEN",
         "github_token": "GITHUB_TOKEN",
         "homeassistant_url": "HOMEASSISTANT_URL",
         "eth_rpc_url": "ETH_RPC_URL",
-        "database_url": "DATABASE_URL",
+        "database_url": "DATABASE_URL"
     }
     
     updates = {}

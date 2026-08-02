@@ -35,8 +35,6 @@ export function SettingsPage() {
   });
 
   const [plugins, setPlugins] = useState({
-    aws_access_key: '',
-    slack_token: '',
     github_token: '',
     homeassistant_url: '',
     eth_rpc_url: '',
@@ -355,6 +353,7 @@ export function SettingsPage() {
                 </Button>
               </div>
 
+
               {/* WhatsApp */}
               <div className="bg-[rgba(255,255,255,0.02)] border border-[var(--border-subtle)] rounded-lg p-6 flex flex-col justify-between">
                 <div>
@@ -414,20 +413,6 @@ export function SettingsPage() {
               
               <div className="bg-[rgba(255,255,255,0.02)] border border-[var(--border-subtle)] rounded-lg p-6 flex flex-col gap-4">
                 <div className="flex items-center gap-2 border-b border-[var(--border-subtle)] pb-3 mb-2">
-                  <Server className="text-blue-400" size={18} />
-                  <h3 className="text-lg font-medium">Cloud & DevOps</h3>
-                </div>
-                <div className="flex flex-col gap-2">
-                  <label className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">AWS Access Key</label>
-                  <div className="flex gap-2">
-                    <Input type="text" value={plugins.aws_access_key} onChange={(e) => setPlugins({...plugins, aws_access_key: e.target.value})} className="bg-[#0B0F19] font-mono" placeholder="AKIA..." />
-                    <Button variant="outline" onClick={() => handleUpdatePlugin("aws_access_key", plugins.aws_access_key)}>Save</Button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-[rgba(255,255,255,0.02)] border border-[var(--border-subtle)] rounded-lg p-6 flex flex-col gap-4">
-                <div className="flex items-center gap-2 border-b border-[var(--border-subtle)] pb-3 mb-2">
                   <Database className="text-green-400" size={18} />
                   <h3 className="text-lg font-medium">Database (SQL)</h3>
                 </div>
@@ -454,7 +439,7 @@ export function SettingsPage() {
                   </div>
                 </div>
               </div>
-              
+
               <div className="bg-[rgba(255,255,255,0.02)] border border-[var(--border-subtle)] rounded-lg p-6 flex flex-col gap-4">
                 <div className="flex items-center gap-2 border-b border-[var(--border-subtle)] pb-3 mb-2">
                   <Box className="text-yellow-400" size={18} />
@@ -476,19 +461,7 @@ export function SettingsPage() {
                 </div>
               </div>
 
-              <div className="bg-[rgba(255,255,255,0.02)] border border-[var(--border-subtle)] rounded-lg p-6 flex flex-col gap-4">
-                <div className="flex items-center gap-2 border-b border-[var(--border-subtle)] pb-3 mb-2">
-                  <Settings className="text-zinc-400" size={18} />
-                  <h3 className="text-lg font-medium">Communication</h3>
-                </div>
-                <div className="flex flex-col gap-2">
-                  <label className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Slack Bot Token</label>
-                  <div className="flex gap-2">
-                    <Input type="text" value={plugins.slack_token} onChange={(e) => setPlugins({...plugins, slack_token: e.target.value})} className="bg-[#0B0F19] font-mono" placeholder="xoxb-..." />
-                    <Button variant="outline" onClick={() => handleUpdatePlugin("slack_token", plugins.slack_token)}>Save</Button>
-                  </div>
-                </div>
-              </div>
+
               
             </div>
           </div>

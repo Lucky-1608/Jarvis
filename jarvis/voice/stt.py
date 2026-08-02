@@ -75,35 +75,6 @@ class SpeechToText:
             logger.error("stt.azure_error", error=str(e))
             raise
 
-    async def _transcribe_fish_audio(self, audio_bytes: bytes, language: str | None = None) -> str:
-        """Transcribe audio bytes using Fish Audio STT."""
-        api_key = self._settings.fish_audio.api_key
-        if not api_key:
-            raise ValueError("Fish Audio API key not configured.")
-        
-        url = f"{self._settings.fish_audio.base_url.rstrip('/')}/v1/asr"
-        headers = {
-            "Authorization": f"Bearer {api_key}"
-        }
-            
-        # Determine language code format if Fish Audio needs a specific one (e.g., 'en', 'zh').
-        # Usually it takes 'en' instead of 'en-US' or it auto-detects.
-        lang_code = language.split('-')[0] if language else None
-        
-        data = {}
-        if lang_code:
-            data["language"] = lang_code
-
-        # For httpx files, we provide a tuple (filename, file_content, content_type)
-        files = {
-            "audio": ("audio.wav", audio_bytes, "audio/wav")
-        }
-
-        async with httpx.AsyncClient(timeout=self._settings.fish_audio.timeout) as client:
-            response = await client.post(url, headers=headers, files=files, data=data)
-            response.raise_for_status()
-            result = response.json()
-            return result.get("text", "")
 
     async def _transcribe_elevenlabs(self, audio_bytes: bytes, language: str | None = None) -> str:
         """Transcribe audio bytes using ElevenLabs STT."""
@@ -144,8 +115,6 @@ class SpeechToText:
         try:
             if provider == "elevenlabs":
                 return await self._transcribe_elevenlabs(audio_bytes, language)
-            elif provider == "fish_audio":
-                return await self._transcribe_fish_audio(audio_bytes, language)
             elif provider == "azure":
                 return await self._transcribe_azure_bytes(audio_bytes, language)
             else:

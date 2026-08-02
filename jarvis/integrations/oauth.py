@@ -41,6 +41,7 @@ oauth.register(
     client_kwargs={'scope': 'user:email repo'}
 )
 
+
 async def get_google_auth_url(request: Request, redirect_uri: str):
     """Generates the Google OAuth authorization URL."""
     return await oauth.google.authorize_redirect(request, redirect_uri)
@@ -52,3 +53,4 @@ async def get_notion_auth_url(request: Request, redirect_uri: str):
 async def get_github_auth_url(request: Request, redirect_uri: str):
     """Generates the GitHub OAuth authorization URL."""
     return await oauth.github.authorize_redirect(request, redirect_uri)
+

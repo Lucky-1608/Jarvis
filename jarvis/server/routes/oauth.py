@@ -150,3 +150,5 @@ async def auth_github_callback(request: Request, db: AsyncSession = Depends(get_
     except Exception as e:
         logger.error("oauth.github.error", error=str(e))
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="GitHub authentication failed")
+
+

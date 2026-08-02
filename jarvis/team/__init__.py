@@ -26,7 +26,6 @@ from .specialists import (
     ProductivityAgent,
     FinanceAgent,
     BrowserAgent,
-    CommunicationAgent,
     InventoryAgent,
     LearningAgent,
     KnowledgeAgent,
@@ -56,7 +55,6 @@ team_registry.register(MultimediaAgent)
 team_registry.register(ProductivityAgent)
 team_registry.register(FinanceAgent)
 team_registry.register(BrowserAgent)
-team_registry.register(CommunicationAgent)
 team_registry.register(InventoryAgent)
 team_registry.register(LearningAgent)
 team_registry.register(KnowledgeAgent)
