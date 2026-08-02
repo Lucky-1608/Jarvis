@@ -7,7 +7,7 @@ tracks latency, and provides a unified interface to the brain.
 Routing strategy (from spec Volume 5):
   - Simple deterministic → Python (no LLM needed)
   - Local reasoning     → Ollama
-  - Complex reasoning   → OpenCode (primary) / OpenRouter (cloud fallback)
+  - Complex reasoning   → OpenCode (primary) / Cloud fallback
   - Vision              → NVIDIA NIM (Phase 2)
 """
 
@@ -27,8 +27,9 @@ from jarvis.providers.base import (
     StreamChunk,
 )
 from jarvis.providers.ollama import OllamaProvider
+from jarvis.providers.ollama_cloud import OllamaCloudProvider
 from jarvis.providers.opencode import OpenCodeProvider
-from jarvis.providers.openrouter import OpenRouterProvider
+
 from jarvis.providers.nvidia import NvidiaNimProvider
 from jarvis.providers.grok import GrokProvider
 from jarvis.providers.gemini import GeminiProvider
@@ -39,7 +40,7 @@ logger = structlog.get_logger(__name__)
 PROVIDER_REGISTRY: dict[str, type[AIProvider]] = {
     "opencode": OpenCodeProvider,
     "ollama": OllamaProvider,
-    "openrouter": OpenRouterProvider,
+    "ollama_cloud": OllamaCloudProvider,
     "nvidia": NvidiaNimProvider,
     "grok": GrokProvider,
     "gemini": GeminiProvider,
@@ -60,13 +61,18 @@ class AIRouter:
     def __init__(self) -> None:
         settings = get_settings()
         self._primary_name = settings.ai_primary_provider
-        self._fallback_name = settings.ai_fallback_provider
+        
+        # Handle multiple fallback providers separated by comma
+        fallback_str = getattr(settings, 'ai_fallback_providers', getattr(settings, 'ai_fallback_provider', ''))
+        self._fallback_names = [n.strip() for n in fallback_str.split(',') if n.strip()]
+        
         self._providers: dict[str, AIProvider] = {}
         self._metrics: dict[str, list[float]] = {}  # provider → latency samples
         self._bus = get_event_bus()
 
         # Eagerly instantiate configured providers
-        for name in {self._primary_name, self._fallback_name}:
+        names_to_load = set([self._primary_name] + self._fallback_names)
+        for name in names_to_load:
             if name in PROVIDER_REGISTRY:
                 self._providers[name] = PROVIDER_REGISTRY[name]()
                 self._metrics[name] = []
@@ -74,7 +80,7 @@ class AIRouter:
         logger.info(
             "ai_router.init",
             primary=self._primary_name,
-            fallback=self._fallback_name,
+            fallbacks=self._fallback_names,
             providers=list(self._providers.keys()),
         )
 
@@ -96,9 +102,15 @@ class AIRouter:
         return provider
 
     @property
+    def fallbacks(self) -> list[AIProvider]:
+        """Return the list of fallback providers."""
+        return [self.get_provider(name) for name in self._fallback_names if self.get_provider(name) is not None]
+
+    @property
     def fallback(self) -> AIProvider | None:
-        """Return the fallback provider (may be None)."""
-        return self.get_provider(self._fallback_name)
+        """Return the first fallback provider (for backwards compatibility)."""
+        fallbacks = self.fallbacks
+        return fallbacks[0] if fallbacks else None
 
     # -- Unified chat interface --------------------------------------------
 
@@ -123,7 +135,7 @@ class AIRouter:
         providers_to_try = (
             [target_provider]
             if target_provider
-            else [self.primary, self.fallback]
+            else [self.primary] + self.fallbacks
         )
 
         last_error: Exception | None = None
@@ -190,7 +202,7 @@ class AIRouter:
         providers_to_try = (
             [target_provider]
             if target_provider
-            else [self.primary, self.fallback]
+            else [self.primary] + self.fallbacks
         )
 
         last_error: Exception | None = None

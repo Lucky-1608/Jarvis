@@ -36,18 +36,6 @@ class OpenCodeSettings(BaseSettings):
     max_retries: int = 3
 
 
-class OpenRouterSettings(BaseSettings):
-    """OpenRouter AI provider configuration (fallback cloud)."""
-
-    model_config = SettingsConfigDict(env_prefix="OPENROUTER_", env_file=".env", extra="ignore")
-
-    api_key: str = ""
-    base_url: str = "https://openrouter.ai/api/v1"
-    model: str = "nvidia/llama-3.1-nemotron-70b-instruct:free"
-    timeout: int = 120
-    max_retries: int = 3
-
-
 class OllamaSettings(BaseSettings):
     """Ollama local AI provider configuration."""
 
@@ -57,6 +45,17 @@ class OllamaSettings(BaseSettings):
     model: str = "llama3.1"
     timeout: int = 300  # local models can be slower
     max_retries: int = 2
+
+class OllamaCloudSettings(BaseSettings):
+    """Ollama Cloud AI provider configuration."""
+
+    model_config = SettingsConfigDict(env_prefix="OLLAMA_CLOUD_", env_file=".env", extra="ignore")
+
+    api_key: str = ""
+    base_url: str = "https://ollama.com"
+    model: str = "minimax-m3:cloud"
+    timeout: int = 300
+    max_retries: int = 3
 
 class NvidiaNimSettings(BaseSettings):
     """Nvidia NIM provider configuration (high-performance fallback)."""
@@ -148,8 +147,8 @@ class JarvisSettings(BaseSettings):
     )
 
     # --- AI routing ---------------------------------------------------------
-    ai_primary_provider: Literal["opencode", "openrouter", "ollama", "nvidia", "grok", "gemini"] = "opencode"
-    ai_fallback_provider: Literal["opencode", "openrouter", "ollama", "nvidia", "grok", "gemini"] = "ollama"
+    ai_primary_provider: str = "ollama_cloud"
+    ai_fallback_providers: str = "opencode,nvidia,grok,gemini,ollama"
     ai_tool_selector_enabled: bool = True
 
     # --- Logging ------------------------------------------------------------
@@ -158,8 +157,8 @@ class JarvisSettings(BaseSettings):
 
     # --- Sub-settings (composed manually) -----------------------------------
     opencode: OpenCodeSettings = Field(default_factory=OpenCodeSettings)
-    openrouter: OpenRouterSettings = Field(default_factory=OpenRouterSettings)
     ollama: OllamaSettings = Field(default_factory=OllamaSettings)
+    ollama_cloud: OllamaCloudSettings = Field(default_factory=OllamaCloudSettings)
     nvidia: NvidiaNimSettings = Field(default_factory=NvidiaNimSettings)
     grok: GrokSettings = Field(default_factory=GrokSettings)
     gemini: GeminiSettings = Field(default_factory=GeminiSettings)

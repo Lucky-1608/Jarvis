@@ -1,13 +1,11 @@
 """
-Jarvis OS — OpenRouter AI Provider.
+Jarvis OS — Ollama Cloud AI Provider.
 
-Cloud fallback with access to 200+ models through a single API key.
-Used for complex reasoning tasks when OpenCode is unavailable.
+Connects to a remote Ollama Cloud instance.
 """
 
 from __future__ import annotations
 
-import json
 from typing import Any, AsyncIterator
 
 import httpx
@@ -25,26 +23,24 @@ from jarvis.providers.base import (
 logger = structlog.get_logger(__name__)
 
 
-class OpenRouterProvider(AIProvider):
-    """OpenRouter cloud AI provider — 200+ models via one API."""
+class OllamaCloudProvider(AIProvider):
+    """Ollama Cloud AI provider."""
 
-    name = "openrouter"
+    name = "ollama_cloud"
 
     def __init__(self) -> None:
-        cfg = get_settings().openrouter
-        self._api_key = cfg.api_key
+        cfg = get_settings().ollama_cloud
         self._base_url = cfg.base_url.rstrip("/")
         self._default_model = cfg.model
+        self._api_key = getattr(cfg, "api_key", "")
         self._timeout = cfg.timeout
         self._max_retries = cfg.max_retries
 
-    def _headers(self) -> dict[str, str]:
-        return {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self._api_key}",
-            "HTTP-Referer": "https://jarvis-os.local",
-            "X-Title": "Jarvis OS",
-        }
+    def _get_headers(self) -> dict[str, str]:
+        headers = {}
+        if self._api_key:
+            headers["Authorization"] = f"Bearer {self._api_key}"
+        return headers
 
     # -- Chat (non-streaming) -----------------------------------------------
 
@@ -64,44 +60,47 @@ class OpenRouterProvider(AIProvider):
         payload: dict[str, Any] = {
             "model": model,
             "messages": self._messages_to_dicts(messages),
-            "temperature": temperature,
-            "max_tokens": max_tokens,
+            "stream": False,
+            "options": {
+                "temperature": temperature,
+                "num_predict": max_tokens,
+            },
         }
-        if tools:
-            payload["tools"] = tools
         if response_format:
-            payload["response_format"] = response_format
+            payload["format"] = "json"
 
         last_error: Exception | None = None
         for attempt in range(1, self._max_retries + 1):
             try:
-                async with httpx.AsyncClient(timeout=self._timeout) as client:
+                async with httpx.AsyncClient(timeout=self._timeout, headers=self._get_headers()) as client:
                     resp = await client.post(
-                        f"{self._base_url}/chat/completions",
+                        f"{self._base_url}/api/chat",
                         json=payload,
-                        headers=self._headers(),
                     )
                     resp.raise_for_status()
                     data = resp.json()
 
-                choice = data["choices"][0]
                 elapsed = self._timer() - start
+                message = data.get("message", {})
 
                 return ChatResponse(
-                    content=choice["message"].get("content") or "",
+                    content=message.get("content") or "",
                     model=data.get("model", model),
                     provider=self.name,
-                    usage=data.get("usage", {}),
-                    finish_reason=choice.get("finish_reason", "stop"),
+                    usage={
+                        "prompt_tokens": data.get("prompt_eval_count", 0),
+                        "completion_tokens": data.get("eval_count", 0),
+                    },
+                    finish_reason="stop" if data.get("done") else "length",
                     latency_ms=elapsed,
-                    tool_calls=choice["message"].get("tool_calls"),
+                    tool_calls=message.get("tool_calls"),
                     raw=data,
                 )
 
             except (httpx.HTTPStatusError, httpx.ConnectError, httpx.TimeoutException) as exc:
                 last_error = exc
                 logger.warning(
-                    "openrouter.chat.retry",
+                    "ollama_cloud.chat.retry",
                     attempt=attempt,
                     max_retries=self._max_retries,
                     error=str(exc),
@@ -110,7 +109,7 @@ class OpenRouterProvider(AIProvider):
                     break
 
         raise ConnectionError(
-            f"OpenRouter chat failed after {self._max_retries} attempts: {last_error}"
+            f"Ollama Cloud chat failed after {self._max_retries} attempts: {last_error}"
         )
 
     # -- Chat (streaming) ---------------------------------------------------
@@ -128,34 +127,34 @@ class OpenRouterProvider(AIProvider):
         payload = {
             "model": model,
             "messages": self._messages_to_dicts(messages),
-            "temperature": temperature,
-            "max_tokens": max_tokens,
             "stream": True,
+            "options": {
+                "temperature": temperature,
+                "num_predict": max_tokens,
+            },
         }
 
-        async with httpx.AsyncClient(timeout=self._timeout) as client:
+        async with httpx.AsyncClient(timeout=self._timeout, headers=self._get_headers()) as client:
             async with client.stream(
                 "POST",
-                f"{self._base_url}/chat/completions",
+                f"{self._base_url}/api/chat",
                 json=payload,
-                headers=self._headers(),
             ) as resp:
                 resp.raise_for_status()
-                async for line in resp.aiter_lines():
-                    if not line or not line.startswith("data: "):
-                        continue
-                    data_str = line[6:]
-                    if data_str.strip() == "[DONE]":
-                        yield StreamChunk(done=True, model=model, provider=self.name)
-                        return
+                import json
 
+                async for line in resp.aiter_lines():
+                    if not line.strip():
+                        continue
                     try:
-                        data = json.loads(data_str)
+                        data = json.loads(line)
                     except json.JSONDecodeError:
                         continue
 
-                    delta = data.get("choices", [{}])[0].get("delta", {})
-                    content = delta.get("content", "")
+                    message = data.get("message", {})
+                    content = message.get("content", "")
+                    done = data.get("done", False)
+
                     if content:
                         yield StreamChunk(
                             content=content,
@@ -163,23 +162,26 @@ class OpenRouterProvider(AIProvider):
                             provider=self.name,
                         )
 
+                    if done:
+                        yield StreamChunk(done=True, model=model, provider=self.name)
+                        return
+
     # -- Health check -------------------------------------------------------
 
     async def health_check(self) -> ProviderHealth:
         start = self._timer()
         try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                resp = await client.get(
-                    f"{self._base_url}/models",
-                    headers=self._headers(),
-                )
+            async with httpx.AsyncClient(timeout=5, headers=self._get_headers()) as client:
+                resp = await client.get(f"{self._base_url}/api/tags")
                 resp.raise_for_status()
+                data = resp.json()
+                models = [m["name"] for m in data.get("models", [])]
                 elapsed = self._timer() - start
                 return ProviderHealth(
                     name=self.name,
                     available=True,
                     latency_ms=elapsed,
-                    model=self._default_model,
+                    model=", ".join(models[:5]) if models else self._default_model,
                 )
         except Exception as exc:
             elapsed = self._timer() - start

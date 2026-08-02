@@ -27,18 +27,17 @@ async def get_api_keys():
     """Returns the masked API keys for the current user/system."""
     
     opencode_key = os.getenv("OPENCODE_API_KEY", "")
-    openrouter_key = os.getenv("OPENROUTER_API_KEY", "")
     nvidia_key = os.getenv("NVIDIA_API_KEY", "")
     grok_key = os.getenv("GROK_API_KEY", "")
     gemini_key = os.getenv("GEMINI_API_KEY", "")
     
     return {
         "opencode": mask_key(opencode_key, "sk-"),
-        "openrouter": mask_key(openrouter_key, "sk-or-"),
         "nvidia": mask_key(nvidia_key, "nvapi-"),
         "grok": mask_key(grok_key, "gsk-"),
         "gemini": mask_key(gemini_key, "AI-"),
-        "ollama_url": os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+        "ollama_url": os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
+        "ollama_cloud_url": os.getenv("OLLAMA_CLOUD_BASE_URL", "https://ollama.com")
     }
 
 @router.get("/integrations")

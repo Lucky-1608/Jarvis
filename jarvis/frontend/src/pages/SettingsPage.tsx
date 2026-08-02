@@ -14,7 +14,6 @@ export function SettingsPage() {
   
   const [keys, setKeys] = useState({
     opencode: '',
-    openrouter: '',
     nvidia: '',
     grok: '',
     gemini: '',
@@ -88,7 +87,6 @@ export function SettingsPage() {
         if (keysRes.ok && keysRes.data) {
           setKeys({
             opencode: keysRes.data.opencode || '',
-            openrouter: keysRes.data.openrouter || '',
             nvidia: keysRes.data.nvidia || '',
             grok: keysRes.data.grok || '',
             gemini: keysRes.data.gemini || '',
@@ -206,19 +204,6 @@ export function SettingsPage() {
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-2">
-                  <label className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">OpenRouter</label>
-                  <div className="flex gap-2">
-                    <Input 
-                      type="password" 
-                      value={keys.openrouter} 
-                      placeholder={loading ? "Loading..." : "sk-or-..."}
-                      readOnly 
-                      className="bg-[#0B0F19] font-mono" 
-                    />
-                    <Button variant="outline">Update</Button>
-                  </div>
-                </div>
 
                 <div className="flex flex-col gap-2">
                   <label className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Nvidia NIM</label>
