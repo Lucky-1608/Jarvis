@@ -66,8 +66,6 @@ async def get_plugin_keys():
         "aws_access_key": mask_key(os.getenv("AWS_ACCESS_KEY_ID", ""), "AKIA"),
         "slack_token": mask_key(os.getenv("SLACK_BOT_TOKEN", ""), "xoxb-"),
         "github_token": mask_key(os.getenv("GITHUB_TOKEN", ""), "ghp_"),
-        "stripe_key": mask_key(os.getenv("STRIPE_API_KEY", ""), "sk_"),
-        "jira_url": os.getenv("JIRA_URL", ""),
         "homeassistant_url": os.getenv("HOMEASSISTANT_URL", ""),
         "eth_rpc_url": mask_key(os.getenv("ETH_RPC_URL", ""), "https://"),
         "database_url": mask_key(os.getenv("DATABASE_URL", ""), "postgres://")
@@ -114,8 +112,6 @@ async def update_plugin_keys(keys: Dict[str, str]):
         "aws_access_key": "AWS_ACCESS_KEY_ID",
         "slack_token": "SLACK_BOT_TOKEN",
         "github_token": "GITHUB_TOKEN",
-        "stripe_key": "STRIPE_API_KEY",
-        "jira_url": "JIRA_URL",
         "homeassistant_url": "HOMEASSISTANT_URL",
         "eth_rpc_url": "ETH_RPC_URL",
         "database_url": "DATABASE_URL",

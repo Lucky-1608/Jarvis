@@ -12,7 +12,9 @@ import structlog
 from pathlib import Path
 from typing import Any, AsyncIterator
 
+import httpx
 from jarvis.events.bus import Event, EventTypes, get_event_bus
+from jarvis.config.settings import get_settings
 
 logger = structlog.get_logger(__name__)
 
@@ -25,6 +27,7 @@ class SpeechToText:
     def __init__(self, model_size: str = "base") -> None:
         self._model_size = model_size
         self._bus = get_event_bus()
+        self._settings = get_settings()
 
     def _get_speech_config(self, language: str | None = None) -> Any:
         import azure.cognitiveservices.speech as speechsdk
@@ -39,7 +42,7 @@ class SpeechToText:
             speech_config.speech_recognition_language = language
         return speech_config
 
-    async def transcribe_bytes(
+    async def _transcribe_azure_bytes(
         self,
         audio_bytes: bytes,
         language: str | None = None,
@@ -69,35 +72,106 @@ class SpeechToText:
                 logger.error("stt.canceled", reason=cancellation_details.reason, error_details=cancellation_details.error_details)
             return ""
         except Exception as e:
-            logger.error("stt.error", error=str(e))
-            return ""
+            logger.error("stt.azure_error", error=str(e))
+            raise
+
+    async def _transcribe_fish_audio(self, audio_bytes: bytes, language: str | None = None) -> str:
+        """Transcribe audio bytes using Fish Audio STT."""
+        api_key = self._settings.fish_audio.api_key
+        if not api_key:
+            raise ValueError("Fish Audio API key not configured.")
+        
+        url = f"{self._settings.fish_audio.base_url.rstrip('/')}/v1/asr"
+        headers = {
+            "Authorization": f"Bearer {api_key}"
+        }
+            
+        # Determine language code format if Fish Audio needs a specific one (e.g., 'en', 'zh').
+        # Usually it takes 'en' instead of 'en-US' or it auto-detects.
+        lang_code = language.split('-')[0] if language else None
+        
+        data = {}
+        if lang_code:
+            data["language"] = lang_code
+
+        # For httpx files, we provide a tuple (filename, file_content, content_type)
+        files = {
+            "audio": ("audio.wav", audio_bytes, "audio/wav")
+        }
+
+        async with httpx.AsyncClient(timeout=self._settings.fish_audio.timeout) as client:
+            response = await client.post(url, headers=headers, files=files, data=data)
+            response.raise_for_status()
+            result = response.json()
+            return result.get("text", "")
+
+    async def _transcribe_elevenlabs(self, audio_bytes: bytes, language: str | None = None) -> str:
+        """Transcribe audio bytes using ElevenLabs STT."""
+        api_key = self._settings.elevenlabs.api_key
+        if not api_key:
+            raise ValueError("ElevenLabs API key not configured.")
+        
+        url = f"{self._settings.elevenlabs.base_url.rstrip('/')}/v1/speech-to-text"
+        headers = {
+            "xi-api-key": api_key
+        }
+        
+        files = {
+            "file": ("audio.wav", audio_bytes, "audio/wav")
+        }
+        
+        data = {
+            "model_id": "scribe_v1"
+        }
+        
+        if language:
+            data["language_code"] = language.split('-')[0]
+            
+        async with httpx.AsyncClient(timeout=self._settings.elevenlabs.timeout) as client:
+            response = await client.post(url, headers=headers, files=files, data=data)
+            response.raise_for_status()
+            result = response.json()
+            return result.get("text", "")
+
+    async def transcribe_bytes(
+        self,
+        audio_bytes: bytes,
+        language: str | None = None,
+    ) -> str:
+        """Transcribe audio bytes using configured STT provider, falling back to Azure."""
+        provider = self._settings.stt_provider
+        
+        try:
+            if provider == "elevenlabs":
+                return await self._transcribe_elevenlabs(audio_bytes, language)
+            elif provider == "fish_audio":
+                return await self._transcribe_fish_audio(audio_bytes, language)
+            elif provider == "azure":
+                return await self._transcribe_azure_bytes(audio_bytes, language)
+            else:
+                raise ValueError(f"Unknown STT provider: {provider}")
+        except Exception as e:
+            if provider == "azure":
+                logger.error("stt.azure_failed", error=str(e))
+                return ""
+                
+            logger.warning("stt.primary_failed", provider=provider, error=str(e), msg="Falling back to Azure STT.")
+            try:
+                return await self._transcribe_azure_bytes(audio_bytes, language)
+            except Exception as e2:
+                logger.error("stt.fallback_failed", error=str(e2))
+                return ""
 
     async def transcribe_file(
         self,
         filepath: str | Path,
         language: str | None = None,
     ) -> str:
-        """Transcribe an audio file using Azure STT."""
-        try:
-            import azure.cognitiveservices.speech as speechsdk
-            speech_config = self._get_speech_config(language)
-            audio_config = speechsdk.audio.AudioConfig(filename=str(filepath))
-            speech_recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config, audio_config=audio_config)
+        """Transcribe an audio file."""
+        with open(filepath, "rb") as f:
+            audio_bytes = f.read()
+        return await self.transcribe_bytes(audio_bytes, language)
 
-            loop = asyncio.get_running_loop()
-            result = await loop.run_in_executor(None, speech_recognizer.recognize_once)
-
-            if result.reason == speechsdk.ResultReason.RecognizedSpeech:
-                return result.text
-            elif result.reason == speechsdk.ResultReason.NoMatch:
-                logger.warning("stt.nomatch", msg="No speech could be recognized in file.")
-            elif result.reason == speechsdk.ResultReason.Canceled:
-                cancellation_details = result.cancellation_details
-                logger.error("stt.canceled", reason=cancellation_details.reason, error_details=cancellation_details.error_details)
-            return ""
-        except Exception as e:
-            logger.error("stt.file_error", error=str(e))
-            return ""
 
     async def transcribe_stream(
         self,

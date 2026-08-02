@@ -11,8 +11,9 @@ from pathlib import Path
 from typing import Any
 
 import structlog
-
+import httpx
 from jarvis.events.bus import Event, EventTypes, get_event_bus
+from jarvis.config.settings import get_settings
 
 logger = structlog.get_logger(__name__)
 
@@ -40,6 +41,7 @@ class TextToSpeech:
         self._bus = get_event_bus()
         self._is_speaking = False
         self._stop_requested = False
+        self._settings = get_settings()
 
     async def speak(self, text: str) -> None:
         """Speak the text, falling back to Edge-TTS."""
@@ -72,8 +74,98 @@ class TextToSpeech:
             ))
 
     async def _speak_primary(self, text: str) -> None:
-        """Primary TTS implementation (currently stubbed)."""
-        raise NotImplementedError("Primary TTS is not configured. Falling back.")
+        """Primary TTS implementation based on configured provider."""
+        provider = self._settings.tts_provider
+        
+        if provider == "elevenlabs":
+            await self._speak_elevenlabs(text)
+        elif provider == "fish_audio":
+            await self._speak_fish_audio(text)
+        elif provider == "edge_tts":
+            await self._speak_edge_tts(text)
+        else:
+            raise ValueError(f"Unknown TTS provider: {provider}")
+
+    async def _speak_elevenlabs(self, text: str) -> None:
+        """ElevenLabs TTS implementation."""
+        api_key = self._settings.elevenlabs.api_key
+        if not api_key:
+            raise ValueError("ElevenLabs API key not configured.")
+        
+        voice_id = getattr(self, "_voice_id", None) or self._settings.elevenlabs.voice_id
+        url = f"{self._settings.elevenlabs.base_url.rstrip('/')}/v1/text-to-speech/{voice_id}"
+        
+        headers = {
+            "xi-api-key": api_key,
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "text": text,
+            "model_id": self._settings.elevenlabs.model,
+            "voice_settings": {
+                "stability": 0.5,
+                "similarity_boost": 0.75
+            }
+        }
+        
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
+            tmp_path = tmp.name
+
+        try:
+            async with httpx.AsyncClient(timeout=self._settings.elevenlabs.timeout) as client:
+                response = await client.post(url, headers=headers, json=payload)
+                response.raise_for_status()
+                with open(tmp_path, "wb") as f:
+                    f.write(response.content)
+
+            if self._stop_requested:
+                return
+
+            from jarvis.voice.audio import AudioPlayer
+            await AudioPlayer.play_file(tmp_path)
+            logger.debug("tts.elevenlabs_done", text_preview=text[:50])
+
+        finally:
+            Path(tmp_path).unlink(missing_ok=True)
+
+    async def _speak_fish_audio(self, text: str) -> None:
+        """Fish Audio TTS implementation."""
+        api_key = self._settings.fish_audio.api_key
+        if not api_key:
+            raise ValueError("Fish Audio API key not configured.")
+        
+        url = f"{self._settings.fish_audio.base_url.rstrip('/')}/v1/tts"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "model": self._settings.fish_audio.tts_model
+        }
+        
+        payload = {
+            "text": text,
+            "reference_id": getattr(self, "_voice_id", None)
+        }
+        
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
+            tmp_path = tmp.name
+
+        try:
+            async with httpx.AsyncClient(timeout=self._settings.fish_audio.timeout) as client:
+                response = await client.post(url, headers=headers, json=payload)
+                response.raise_for_status()
+                with open(tmp_path, "wb") as f:
+                    f.write(response.content)
+
+            if self._stop_requested:
+                return
+
+            from jarvis.voice.audio import AudioPlayer
+            await AudioPlayer.play_file(tmp_path)
+            logger.debug("tts.fish_audio_done", text_preview=text[:50])
+
+        finally:
+            Path(tmp_path).unlink(missing_ok=True)
 
     async def _speak_edge_tts(self, text: str) -> None:
         """Fallback: Synthesize and play speech using Edge-TTS."""
@@ -115,14 +207,95 @@ class TextToSpeech:
         text: str,
         output_path: str | Path,
     ) -> Path:
-        """Synthesize speech to an audio file (MP3) without playing, using Edge-TTS."""
+        """Synthesize speech to an audio file (MP3) without playing."""
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        try:
+            provider = self._settings.tts_provider
+            if provider == "elevenlabs":
+                return await self._synthesize_elevenlabs_to_file(text, output_path)
+            elif provider == "fish_audio":
+                return await self._synthesize_fish_audio_to_file(text, output_path)
+            elif provider == "edge_tts":
+                return await self._synthesize_edge_tts_to_file(text, output_path)
+            else:
+                raise ValueError(f"Unknown TTS provider: {provider}")
+        except httpx.HTTPStatusError as exc:
+            logger.warning("tts.synthesize_primary_failed", error=str(exc), response=exc.response.text)
+            return await self._synthesize_edge_tts_to_file(text, output_path)
+        except Exception as exc:
+            logger.warning("tts.synthesize_primary_failed", error=str(exc))
+            return await self._synthesize_edge_tts_to_file(text, output_path)
+
+    async def _synthesize_elevenlabs_to_file(self, text: str, output_path: Path) -> Path:
+        """Synthesize using ElevenLabs."""
+        api_key = self._settings.elevenlabs.api_key
+        if not api_key:
+            raise ValueError("ElevenLabs API key not configured.")
+        
+        voice_id = getattr(self, "_voice_id", None) or self._settings.elevenlabs.voice_id
+        url = f"{self._settings.elevenlabs.base_url.rstrip('/')}/v1/text-to-speech/{voice_id}"
+        
+        headers = {
+            "xi-api-key": api_key,
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "text": text,
+            "model_id": self._settings.elevenlabs.model,
+            "voice_settings": {
+                "stability": 0.5,
+                "similarity_boost": 0.75
+            }
+        }
+        
+        async with httpx.AsyncClient(timeout=self._settings.elevenlabs.timeout) as client:
+            response = await client.post(url, headers=headers, json=payload)
+            response.raise_for_status()
+            with open(output_path, "wb") as f:
+                f.write(response.content)
+                
+        logger.info("tts.synthesized_elevenlabs_to_file", path=str(output_path))
+        return output_path
+
+    async def _synthesize_fish_audio_to_file(self, text: str, output_path: Path) -> Path:
+        """Synthesize using Fish Audio."""
+        api_key = self._settings.fish_audio.api_key
+        if not api_key:
+            raise ValueError("Fish Audio API key not configured.")
+        
+        url = f"{self._settings.fish_audio.base_url.rstrip('/')}/v1/tts"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "model": self._settings.fish_audio.tts_model
+        }
+        payload = {
+            "text": text,
+            "reference_id": getattr(self, "_voice_id", None)
+        }
+        
+        async with httpx.AsyncClient(timeout=self._settings.fish_audio.timeout) as client:
+            response = await client.post(url, headers=headers, json=payload)
+            response.raise_for_status()
+            with open(output_path, "wb") as f:
+                f.write(response.content)
+                
+        logger.info("tts.synthesized_fish_audio_to_file", path=str(output_path))
+        return output_path
+
+    async def _synthesize_edge_tts_to_file(
+        self,
+        text: str,
+        output_path: Path,
+    ) -> Path:
+        """Fallback: Synthesize speech to an audio file using Edge-TTS."""
         try:
             import edge_tts
         except ImportError:
             raise RuntimeError("edge-tts is required for speech synthesis.")
-
-        output_path = Path(output_path)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
 
         communicate = edge_tts.Communicate(
             text,
@@ -132,7 +305,7 @@ class TextToSpeech:
         )
         await communicate.save(str(output_path))
 
-        logger.info("tts.synthesized_to_file", path=str(output_path))
+        logger.info("tts.synthesized_edge_tts_to_file", path=str(output_path))
         return output_path
 
     def stop(self) -> None:

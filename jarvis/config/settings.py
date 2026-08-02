@@ -93,6 +93,32 @@ class GeminiSettings(BaseSettings):
     max_retries: int = 3
 
 
+class FishAudioSettings(BaseSettings):
+    """Fish Audio configuration for TTS and STT."""
+
+    model_config = SettingsConfigDict(env_prefix="FISH_AUDIO_", env_file=".env", extra="ignore")
+
+    api_key: str = ""
+    base_url: str = "https://api.fish.audio"
+    tts_model: str = "s2.1-pro-free"
+    asr_model: str = "asr-1-pro" # not sure of exact asr model, standard endpoint might not need it or we can leave empty
+    timeout: int = 120
+    max_retries: int = 3
+
+
+class ElevenLabsSettings(BaseSettings):
+    """ElevenLabs configuration for TTS."""
+
+    model_config = SettingsConfigDict(env_prefix="ELEVENLABS_", env_file=".env", extra="ignore")
+
+    api_key: str = ""
+    base_url: str = "https://api.elevenlabs.io"
+    voice_id: str = "21m00Tcm4TlvDq8ikWAM"  # Rachel (default)
+    model: str = "eleven_multilingual_v2"
+    timeout: int = 120
+    max_retries: int = 3
+
+
 # ---------------------------------------------------------------------------
 # Memory settings
 # ---------------------------------------------------------------------------
@@ -151,6 +177,10 @@ class JarvisSettings(BaseSettings):
     ai_fallback_providers: str = "opencode,nvidia,grok,gemini,ollama"
     ai_tool_selector_enabled: bool = True
 
+    # --- Voice routing ------------------------------------------------------
+    tts_provider: str = "elevenlabs"  # elevenlabs | fish_audio | edge_tts
+    stt_provider: str = "elevenlabs"  # elevenlabs | fish_audio | azure
+
     # --- Logging ------------------------------------------------------------
     log_level: str = "INFO"
     log_format: Literal["json", "console"] = Field(default="console")
@@ -162,6 +192,8 @@ class JarvisSettings(BaseSettings):
     nvidia: NvidiaNimSettings = Field(default_factory=NvidiaNimSettings)
     grok: GrokSettings = Field(default_factory=GrokSettings)
     gemini: GeminiSettings = Field(default_factory=GeminiSettings)
+    fish_audio: FishAudioSettings = Field(default_factory=FishAudioSettings)
+    elevenlabs: ElevenLabsSettings = Field(default_factory=ElevenLabsSettings)
     memory: MemorySettings = Field(default_factory=MemorySettings)
     server: ServerSettings = Field(default_factory=ServerSettings)
 

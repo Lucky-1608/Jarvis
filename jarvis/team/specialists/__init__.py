@@ -13,7 +13,6 @@ from .finance_agent import FinanceAgent
 from .browser_agent import BrowserAgent
 from .communication_agent import CommunicationAgent
 from .inventory_agent import InventoryAgent
-from .health_agent import HealthAgent
 from .learning_agent import LearningAgent
 from .knowledge_agent import KnowledgeAgent
 from .plugin_agent import PluginAgent
@@ -32,7 +31,6 @@ __all__ = [
     "BrowserAgent",
     "CommunicationAgent",
     "InventoryAgent",
-    "HealthAgent",
     "LearningAgent",
     "KnowledgeAgent",
     "PluginAgent",

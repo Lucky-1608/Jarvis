@@ -38,8 +38,6 @@ export function SettingsPage() {
     aws_access_key: '',
     slack_token: '',
     github_token: '',
-    stripe_key: '',
-    jira_url: '',
     homeassistant_url: '',
     eth_rpc_url: '',
     database_url: ''
@@ -442,31 +440,11 @@ export function SettingsPage() {
                 </div>
               </div>
 
-              <div className="bg-[rgba(255,255,255,0.02)] border border-[var(--border-subtle)] rounded-lg p-6 flex flex-col gap-4">
-                <div className="flex items-center gap-2 border-b border-[var(--border-subtle)] pb-3 mb-2">
-                  <Fingerprint className="text-purple-400" size={18} />
-                  <h3 className="text-lg font-medium">Finance (Stripe)</h3>
-                </div>
-                <div className="flex flex-col gap-2">
-                  <label className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Stripe API Key</label>
-                  <div className="flex gap-2">
-                    <Input type="text" value={plugins.stripe_key} onChange={(e) => setPlugins({...plugins, stripe_key: e.target.value})} className="bg-[#0B0F19] font-mono" placeholder="sk_..." />
-                    <Button variant="outline" onClick={() => handleUpdatePlugin("stripe_key", plugins.stripe_key)}>Save</Button>
-                  </div>
-                </div>
-              </div>
 
               <div className="bg-[rgba(255,255,255,0.02)] border border-[var(--border-subtle)] rounded-lg p-6 flex flex-col gap-4">
                 <div className="flex items-center gap-2 border-b border-[var(--border-subtle)] pb-3 mb-2">
                   <Webhook className="text-orange-400" size={18} />
                   <h3 className="text-lg font-medium">Engineering</h3>
-                </div>
-                <div className="flex flex-col gap-2">
-                  <label className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Jira URL</label>
-                  <div className="flex gap-2">
-                    <Input type="text" value={plugins.jira_url} onChange={(e) => setPlugins({...plugins, jira_url: e.target.value})} className="bg-[#0B0F19] font-mono" placeholder="https://..." />
-                    <Button variant="outline" onClick={() => handleUpdatePlugin("jira_url", plugins.jira_url)}>Save</Button>
-                  </div>
                 </div>
                 <div className="flex flex-col gap-2">
                   <label className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">GitHub Token</label>

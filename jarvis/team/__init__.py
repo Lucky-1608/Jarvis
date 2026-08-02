@@ -28,7 +28,6 @@ from .specialists import (
     BrowserAgent,
     CommunicationAgent,
     InventoryAgent,
-    HealthAgent,
     LearningAgent,
     KnowledgeAgent,
     PluginAgent,
@@ -59,7 +58,6 @@ team_registry.register(FinanceAgent)
 team_registry.register(BrowserAgent)
 team_registry.register(CommunicationAgent)
 team_registry.register(InventoryAgent)
-team_registry.register(HealthAgent)
 team_registry.register(LearningAgent)
 team_registry.register(KnowledgeAgent)
 team_registry.register(PluginAgent)
