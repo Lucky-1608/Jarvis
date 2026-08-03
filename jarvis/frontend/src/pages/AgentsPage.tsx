@@ -151,7 +151,7 @@ export function AgentsPage() {
       <div className="flex-1 p-6 max-w-7xl mx-auto w-full flex flex-col gap-6">
         
         {/* Stats Row */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-4 gap-4">
           <div className="bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.05)] rounded-xl p-4 flex items-center gap-4">
             <div className="w-12 h-12 rounded-lg bg-[rgba(0,212,255,0.1)] border border-[rgba(0,212,255,0.2)] flex items-center justify-center text-[var(--accent-cyan)]">
               <Users size={20} />
@@ -220,7 +220,7 @@ export function AgentsPage() {
           variants={containerVariants}
           initial="hidden"
           animate="show"
-          className="grid grid-cols-1 lg:grid-cols-3 gap-6"
+          className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-6"
         >
           {filteredAgents.map(agent => (
             <motion.div 

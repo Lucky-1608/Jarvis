@@ -9,7 +9,7 @@ export function MobileHeader() {
   const [rightOpen, setRightOpen] = useState(false);
 
   return (
-    <div className="md:hidden flex items-center justify-between px-4 h-14 shrink-0 bg-[rgba(2,4,8,0.8)] backdrop-blur-md border-b border-[var(--border-subtle)] z-50 relative">
+    <div className="lg:hidden flex items-center justify-between px-4 h-14 shrink-0 bg-[rgba(2,4,8,0.8)] backdrop-blur-md border-b border-[var(--border-subtle)] z-50 relative">
       
       {/* Left Menu (Navigation) */}
       <Sheet open={leftOpen} onOpenChange={setLeftOpen}>

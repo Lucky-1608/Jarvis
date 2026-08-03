@@ -84,7 +84,7 @@ export function Home() {
         <MobileHeader />
         
         {/* Subtle Wordmark */}
-        <div className="hidden md:block absolute top-6 left-1/2 -translate-x-1/2 z-10 opacity-30 pointer-events-none">
+        <div className="hidden lg:block absolute top-6 left-1/2 -translate-x-1/2 z-10 opacity-30 pointer-events-none">
           <h2 className="text-[10px] font-bold tracking-[0.5em] text-center">J.A.R.V.I.S.</h2>
           <p className="text-[8px] tracking-widest text-[var(--accent-cyan)] text-center mt-1">OPERATING SYSTEM</p>
         </div>

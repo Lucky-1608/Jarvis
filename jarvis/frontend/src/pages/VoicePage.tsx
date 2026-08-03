@@ -209,7 +209,7 @@ export function VoicePage() {
         </div>
       )}
 
-      <div className="flex-1 flex flex-col md:flex-row p-6 gap-6 max-w-6xl mx-auto w-full h-full">
+      <div className="flex-1 flex flex-col xl:flex-row p-6 gap-6 max-w-6xl mx-auto w-full h-full">
 
         {/* Left Column - Audio Controls */}
         <div className="w-full md:w-[40%] flex flex-col gap-6">

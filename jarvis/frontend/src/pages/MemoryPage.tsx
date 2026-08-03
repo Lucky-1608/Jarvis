@@ -109,7 +109,7 @@ export function MemoryPage() {
         }
       />
       
-      <div className="flex-1 flex flex-col md:flex-row p-6 gap-6 max-w-7xl mx-auto w-full">
+      <div className="flex-1 flex flex-col xl:flex-row p-6 gap-6 max-w-7xl mx-auto w-full">
         {/* Left Column */}
         <div className="w-full md:w-[60%] flex flex-col gap-6">
           

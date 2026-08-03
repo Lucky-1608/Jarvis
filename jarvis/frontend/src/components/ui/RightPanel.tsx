@@ -182,7 +182,7 @@ export function RightPanel() {
       initial={{ x: 100, opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
       transition={{ type: 'spring', stiffness: 100, damping: 20, delay: 0.2 }}
-      className="hidden md:flex w-80 h-full border-l border-[var(--border-subtle)] bg-[var(--bg-panel)] backdrop-blur-xl flex-col z-10 shrink-0 overflow-y-auto"
+      className="hidden lg:flex w-80 h-full border-l border-[var(--border-subtle)] bg-[var(--bg-panel)] backdrop-blur-xl flex-col z-10 shrink-0 overflow-y-auto"
     >
       <div className="p-5">
         <RightPanelContent />

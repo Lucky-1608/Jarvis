@@ -49,7 +49,7 @@ export function VisionPage() {
       <div className="flex-1 flex flex-col p-6 gap-6 max-w-7xl mx-auto w-full">
         
         {/* Top Half - Camera Feeds */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-[400px]">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 h-[400px]">
           {/* Feed 1 (Active) */}
           <div className="relative bg-black rounded-xl border border-[rgba(255,255,255,0.1)] overflow-hidden flex items-center justify-center">
             {loading ? (
@@ -89,7 +89,7 @@ export function VisionPage() {
         </div>
         
         {/* Bottom Half - Analysis Panel */}
-        <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="flex-1 grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-4">
           
           {/* Detected Objects */}
           <div className="bg-[rgba(6,12,24,0.6)] border border-[rgba(255,255,255,0.05)] rounded-xl p-4 flex flex-col">

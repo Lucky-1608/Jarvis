@@ -65,7 +65,7 @@ export function ToolsPage() {
         }
       />
       
-      <div className="flex-1 flex flex-col md:flex-row p-6 gap-6 max-w-7xl mx-auto w-full">
+      <div className="flex-1 flex flex-col xl:flex-row p-6 gap-6 max-w-7xl mx-auto w-full">
         {/* Left Column */}
         <div className="w-full md:w-[60%] flex flex-col gap-6">
           <div className="flex items-center gap-3">
@@ -95,7 +95,7 @@ export function ToolsPage() {
             variants={containerVariants}
             initial="hidden"
             animate="show"
-            className="grid grid-cols-1 md:grid-cols-2 gap-4 overflow-y-auto max-h-[600px] pr-2 pb-4"
+            className="grid grid-cols-1 xl:grid-cols-2 gap-4 overflow-y-auto max-h-[600px] pr-2 pb-4"
           >
             {filteredTools.map(tool => (
               <motion.div 

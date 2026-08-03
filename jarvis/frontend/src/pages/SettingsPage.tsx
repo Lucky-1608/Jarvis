@@ -267,7 +267,7 @@ export function SettingsPage() {
         {activeTab === 'integrations' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
               
               {/* Google Workspace */}
               <div className="bg-[rgba(255,255,255,0.02)] border border-[var(--border-subtle)] rounded-lg p-6 flex flex-col justify-between">
@@ -409,7 +409,7 @@ export function SettingsPage() {
         {activeTab === 'plugins' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
               
               <div className="bg-[rgba(255,255,255,0.02)] border border-[var(--border-subtle)] rounded-lg p-6 flex flex-col gap-4">
                 <div className="flex items-center gap-2 border-b border-[var(--border-subtle)] pb-3 mb-2">

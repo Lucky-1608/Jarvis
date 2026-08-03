@@ -79,7 +79,7 @@ export function LeftPanel() {
       initial={{ x: -100, opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
       transition={{ type: 'spring', stiffness: 100, damping: 20, delay: 0.1 }}
-      className="hidden md:flex w-64 h-full border-r border-[var(--border-subtle)] backdrop-blur-xl flex-col z-10 shrink-0"
+      className="hidden lg:flex w-64 h-full border-r border-[var(--border-subtle)] backdrop-blur-xl flex-col z-10 shrink-0"
     >
       <LeftPanelContent />
     </motion.div>
