@@ -101,6 +101,7 @@
   "build": {
     "appId": "com.jarvis.app",
     "productName": "Jarvis",
+    "icon": "public/arc_reactor.png",
     "directories": {
       "output": "release"
     },
