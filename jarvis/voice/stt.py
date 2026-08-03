@@ -15,6 +15,7 @@ from typing import Any, AsyncIterator
 import httpx
 from jarvis.events.bus import Event, EventTypes, get_event_bus
 from jarvis.config.settings import get_settings
+from jarvis.providers.base import APIKeyRotator
 
 logger = structlog.get_logger(__name__)
 
@@ -28,6 +29,10 @@ class SpeechToText:
         self._model_size = model_size
         self._bus = get_event_bus()
         self._settings = get_settings()
+        self._elevenlabs_rotator = APIKeyRotator(
+            self._settings.elevenlabs.api_keys, 
+            self._settings.elevenlabs.api_key
+        )
 
     def _get_speech_config(self, language: str | None = None) -> Any:
         import azure.cognitiveservices.speech as speechsdk
@@ -78,7 +83,7 @@ class SpeechToText:
 
     async def _transcribe_elevenlabs(self, audio_bytes: bytes, language: str | None = None) -> str:
         """Transcribe audio bytes using ElevenLabs STT."""
-        api_key = self._settings.elevenlabs.api_key
+        api_key = self._elevenlabs_rotator.get_key()
         if not api_key:
             raise ValueError("ElevenLabs API key not configured.")
         

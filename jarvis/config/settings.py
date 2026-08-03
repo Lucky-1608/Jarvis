@@ -30,6 +30,7 @@ class OpenCodeSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="OPENCODE_", env_file=".env", extra="ignore")
 
     api_key: str = ""
+    api_keys: str = ""
     base_url: str = "https://opencode.ai/v1"
     model: str = "gpt-4o-mini"
     timeout: int = 120
@@ -52,6 +53,7 @@ class OllamaCloudSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="OLLAMA_CLOUD_", env_file=".env", extra="ignore")
 
     api_key: str = ""
+    api_keys: str = ""
     base_url: str = "https://ollama.com"
     model: str = "minimax-m3:cloud"
     timeout: int = 300
@@ -63,6 +65,7 @@ class NvidiaNimSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="NVIDIA_", env_file=".env", extra="ignore")
 
     api_key: str = ""
+    api_keys: str = ""
     base_url: str = "https://integrate.api.nvidia.com/v1"
     model: str = "nvidia/nemotron-4-340b-instruct"
     timeout: int = 120
@@ -75,6 +78,7 @@ class GrokSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="GROK_", env_file=".env", extra="ignore")
 
     api_key: str = ""
+    api_keys: str = ""
     base_url: str = "https://api.x.ai/v1"
     model: str = "grok-3-mini"
     timeout: int = 120
@@ -87,6 +91,7 @@ class GeminiSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="GEMINI_", env_file=".env", extra="ignore")
 
     api_key: str = ""
+    api_keys: str = ""
     base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai"
     model: str = "gemini-2.5-flash"
     timeout: int = 120
@@ -100,6 +105,7 @@ class ElevenLabsSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="ELEVENLABS_", env_file=".env", extra="ignore")
 
     api_key: str = ""
+    api_keys: str = ""
     base_url: str = "https://api.elevenlabs.io"
     voice_id: str = "21m00Tcm4TlvDq8ikWAM"  # Rachel (default)
     model: str = "eleven_multilingual_v2"

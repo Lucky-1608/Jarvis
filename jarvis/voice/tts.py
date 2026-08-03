@@ -14,6 +14,7 @@ import structlog
 import httpx
 from jarvis.events.bus import Event, EventTypes, get_event_bus
 from jarvis.config.settings import get_settings
+from jarvis.providers.base import APIKeyRotator
 
 logger = structlog.get_logger(__name__)
 
@@ -42,6 +43,10 @@ class TextToSpeech:
         self._is_speaking = False
         self._stop_requested = False
         self._settings = get_settings()
+        self._elevenlabs_rotator = APIKeyRotator(
+            self._settings.elevenlabs.api_keys, 
+            self._settings.elevenlabs.api_key
+        )
 
     async def speak(self, text: str) -> None:
         """Speak the text, falling back to Edge-TTS."""
@@ -85,7 +90,7 @@ class TextToSpeech:
 
     async def _speak_elevenlabs(self, text: str) -> None:
         """ElevenLabs TTS implementation."""
-        api_key = self._settings.elevenlabs.api_key
+        api_key = self._elevenlabs_rotator.get_key()
         if not api_key:
             raise ValueError("ElevenLabs API key not configured.")
         
@@ -188,7 +193,7 @@ class TextToSpeech:
 
     async def _synthesize_elevenlabs_to_file(self, text: str, output_path: Path) -> Path:
         """Synthesize using ElevenLabs."""
-        api_key = self._settings.elevenlabs.api_key
+        api_key = self._elevenlabs_rotator.get_key()
         if not api_key:
             raise ValueError("ElevenLabs API key not configured.")
         

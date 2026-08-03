@@ -59,6 +59,26 @@ class ProviderHealth:
     model: str = ""
 
 
+class APIKeyRotator:
+    """Rotates through a list of API keys in a round-robin fashion."""
+    
+    def __init__(self, api_keys_str: str, api_key: str = ""):
+        self.keys = []
+        if api_keys_str:
+            self.keys = [k.strip() for k in api_keys_str.split(",") if k.strip()]
+        if not self.keys and api_key:
+            self.keys = [api_key.strip()]
+        self._index = 0
+
+    def get_key(self) -> str:
+        """Returns the next key in the rotation."""
+        if not self.keys:
+            return ""
+        key = self.keys[self._index % len(self.keys)]
+        self._index += 1
+        return key
+
+
 class AIProvider(ABC):
     """
     Abstract base class for all AI providers.

@@ -20,6 +20,7 @@ from jarvis.providers.base import (
     Message,
     ProviderHealth,
     StreamChunk,
+    APIKeyRotator,
 )
 
 logger = structlog.get_logger(__name__)
@@ -32,7 +33,7 @@ class GrokProvider(AIProvider):
 
     def __init__(self) -> None:
         cfg = get_settings().grok
-        self._api_key = cfg.api_key
+        self._key_rotator = APIKeyRotator(cfg.api_keys, cfg.api_key)
         self._base_url = cfg.base_url.rstrip("/")
         self._default_model = cfg.model
         self._timeout = cfg.timeout
@@ -41,7 +42,7 @@ class GrokProvider(AIProvider):
     def _headers(self) -> dict[str, str]:
         return {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {self._api_key}",
+            "Authorization": f"Bearer {self._key_rotator.get_key()}",
         }
 
     # -- Chat (non-streaming) -----------------------------------------------

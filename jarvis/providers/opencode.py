@@ -19,6 +19,7 @@ from jarvis.providers.base import (
     Message,
     ProviderHealth,
     StreamChunk,
+    APIKeyRotator,
 )
 
 logger = structlog.get_logger(__name__)
@@ -31,7 +32,7 @@ class OpenCodeProvider(AIProvider):
 
     def __init__(self) -> None:
         cfg = get_settings().opencode
-        self._api_key = cfg.api_key
+        self._key_rotator = APIKeyRotator(cfg.api_keys, cfg.api_key)
         self._base_url = cfg.base_url.rstrip("/")
         self._default_model = cfg.model
         self._timeout = cfg.timeout
@@ -41,8 +42,9 @@ class OpenCodeProvider(AIProvider):
         headers = {
             "Content-Type": "application/json",
         }
-        if self._api_key:
-            headers["Authorization"] = f"Bearer {self._api_key}"
+        key = self._key_rotator.get_key()
+        if key:
+            headers["Authorization"] = f"Bearer {key}"
         return headers
 
     # -- Chat (non-streaming) -----------------------------------------------
