@@ -12,14 +12,15 @@ class SQLQueryTool(Tool):
             dangerous=True,
             parameters=[
                 ToolParameter(name="query", type="string", description="The SQL query to execute."),
-                ToolParameter(name="fetch", type="boolean", description="Whether to fetch results (true for SELECT).")
+                ToolParameter(name="fetch", type="boolean", description="Whether to fetch results (true for SELECT)."),
+                ToolParameter(name="connection_string", type="string", description="The database connection URL. Required.")
             ]
         )
         
     async def execute(self, **kwargs) -> ToolResult:
-        db_url = os.getenv("DATABASE_URL")
+        db_url = kwargs.get("connection_string")
         if not db_url:
-            return ToolResult(success=False, error="DATABASE_URL environment variable is not set.")
+            return ToolResult(success=False, error="No database connection string provided. You must pass 'connection_string'.")
             
         query = kwargs.get("query")
         fetch = kwargs.get("fetch", True)
