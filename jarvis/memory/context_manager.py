@@ -13,7 +13,10 @@ Never injects unnecessary history — every token counts (spec Vol 4).
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from jarvis.memory.graphify_registry import GraphifyRegistry
 
 import structlog
 
@@ -62,6 +65,7 @@ JARVIS_SYSTEM_PROMPT = """You are Jarvis, an advanced AI Operating System assist
 
 ## Response Format
 - Communicate naturally and conversationally.
+- Prefix your conversational responses with `[Jarvis]: ` so the user can easily identify messages sent by you.
 - DO NOT output any JSON format or raw tool call strings in your responses.
 - Use markdown for structured responses, but do not wrap your entire response in code blocks.
 - If you don't know something, or if the user's speech is garbled, just say so gracefully.
