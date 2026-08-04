@@ -270,8 +270,9 @@ class JarvisBrain:
                     requires_confirmation = True
 
                 try:
-                    params = json.loads(func.get("arguments", "{}"))
-                except json.JSONDecodeError:
+                    raw_args = func.get("arguments", "{}")
+                    params = raw_args if isinstance(raw_args, dict) else json.loads(raw_args)
+                except (json.JSONDecodeError, TypeError):
                     params = {}
 
                 steps.append(PlanStep(
