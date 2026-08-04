@@ -118,29 +118,31 @@ class OpenAppTool(Tool):
 
     # Common app name → command mappings (Windows)
     _APP_MAP_WINDOWS = {
-        "chrome": "start chrome",
-        "google chrome": "start chrome",
-        "firefox": "start firefox",
-        "edge": "start msedge",
-        "microsoft edge": "start msedge",
-        "brave": "start brave",
-        "notepad": "notepad",
-        "calculator": "calc",
-        "calc": "calc",
-        "explorer": "explorer",
-        "file explorer": "explorer",
-        "cmd": "cmd",
-        "terminal": "wt",
-        "windows terminal": "wt",
-        "vscode": "code",
-        "vs code": "code",
-        "visual studio code": "code",
-        "task manager": "taskmgr",
-        "paint": "mspaint",
-        "word": "start winword",
-        "excel": "start excel",
-        "powerpoint": "start powerpnt",
-        "spotify": "start spotify",
+        "chrome": "chrome.exe",
+        "google chrome": "chrome.exe",
+        "firefox": "firefox.exe",
+        "edge": "msedge.exe",
+        "microsoft edge": "msedge.exe",
+        "edge browser": "msedge.exe",
+        "ms edge": "msedge.exe",
+        "brave": "brave.exe",
+        "notepad": "notepad.exe",
+        "calculator": "calc.exe",
+        "calc": "calc.exe",
+        "explorer": "explorer.exe",
+        "file explorer": "explorer.exe",
+        "cmd": "cmd.exe",
+        "terminal": "wt.exe",
+        "windows terminal": "wt.exe",
+        "vscode": "code.cmd",
+        "vs code": "code.cmd",
+        "visual studio code": "code.cmd",
+        "task manager": "taskmgr.exe",
+        "paint": "mspaint.exe",
+        "word": "winword.exe",
+        "excel": "excel.exe",
+        "powerpoint": "powerpnt.exe",
+        "spotify": "spotify.exe",
     }
 
     @staticmethod
@@ -359,12 +361,16 @@ class OpenAppTool(Tool):
                 if "." in app_name and " " not in app_name and not app_name.startswith("http"):
                     app_name = f"https://{app_name}"
                     
-                cmd = self._APP_MAP_WINDOWS.get(app_name)
+                cmd_exe = self._APP_MAP_WINDOWS.get(app_name)
                 
-                if cmd:
-                    if target_url:
-                        cmd = f"{cmd} {target_url}"
-                    subprocess.Popen(cmd, shell=True)
+                if cmd_exe:
+                    try:
+                        if target_url:
+                            os.startfile(cmd_exe, arguments=target_url)
+                        else:
+                            os.startfile(cmd_exe)
+                    except Exception as e:
+                        return ToolResult(success=False, error=f"Failed to open '{cmd_exe}': {e}")
                 else:
                     if app_name.startswith("http"):
                         os.startfile(app_name)
@@ -531,7 +537,7 @@ class CloseAppTool(Tool):
                     if result.success:
                         return result
 
-                psutil_result = self._terminate_matching_processes(app_name)
+                psutil_result = self._terminate_matching_processes(app_name, process_names)
                 if psutil_result:
                     if "Failed to terminate: Access Denied" in psutil_result:
                         return ToolResult(success=False, error=psutil_result)
@@ -707,7 +713,7 @@ class CloseAppTool(Tool):
         return "Sent Alt+F4 to the active window."
 
     @staticmethod
-    def _terminate_matching_processes(app_name: str) -> str | None:
+    def _terminate_matching_processes(app_name: str, process_names: list[str]) -> str | None:
         matches: list[psutil.Process] = []
         for proc in psutil.process_iter(["pid", "name", "exe"]):
             try:
@@ -716,7 +722,14 @@ class CloseAppTool(Tool):
             except (psutil.Error, OSError):
                 continue
 
-            if app_name in name or app_name in exe:
+            is_match = (app_name in name) or (app_name in exe)
+            for p in process_names:
+                p_stem = Path(p).stem.lower()
+                if p_stem == name or p_stem == exe or p.lower() == name:
+                    is_match = True
+                    break
+
+            if is_match:
                 matches.append(proc)
 
         if not matches:

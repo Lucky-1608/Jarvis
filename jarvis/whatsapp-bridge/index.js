@@ -158,6 +158,10 @@ async function connectToWhatsApp() {
                     reply = String(data);
                 }
                 
+                if (!reply.startsWith('[Jarvis]: ')) {
+                    reply = `[Jarvis]: ${reply}`;
+                }
+
                 // Send reply back via WhatsApp
                 await sock.sendMessage(rawSender, { text: reply }, { quoted: msg });
                 console.log(`[Jarvis] ${reply}`);

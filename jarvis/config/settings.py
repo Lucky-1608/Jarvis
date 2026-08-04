@@ -169,7 +169,7 @@ class JarvisSettings(BaseSettings):
     # --- AI routing ---------------------------------------------------------
     ai_primary_provider: str = "ollama_cloud"
     ai_fallback_providers: str = "opencode,nvidia,grok,gemini,ollama"
-    ai_tool_selector_enabled: bool = True
+    ai_tool_selector_enabled: bool = False
 
     # --- Voice routing ------------------------------------------------------
     tts_provider: str = "elevenlabs"  # elevenlabs | edge_tts

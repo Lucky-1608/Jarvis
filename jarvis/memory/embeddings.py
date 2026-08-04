@@ -133,3 +133,10 @@ class JarvisEmbeddingFunction:
 
     def __call__(self, input: list[str]) -> list[list[float]]:
         return embed_texts(input)
+        
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return embed_texts(texts)
+        
+    def embed_query(self, text: str) -> list[float]:
+        from jarvis.memory.embeddings import embed_text
+        return embed_text(text)

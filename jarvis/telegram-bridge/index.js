@@ -117,6 +117,10 @@ async function connectToTelegram() {
                 reply = String(data);
             }
 
+            if (!reply.startsWith('[Jarvis]: ')) {
+                reply = `[Jarvis]: ${reply}`;
+            }
+
             // Send reply back via Telegram as plain text
             await bot.sendMessage(chatId, reply, {
                 reply_to_message_id: msg.message_id,

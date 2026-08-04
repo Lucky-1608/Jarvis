@@ -270,7 +270,11 @@ class JarvisBrain:
                     requires_confirmation = True
 
                 try:
-                    params = json.loads(func.get("arguments", "{}"))
+                    args = func.get("arguments", "{}")
+                    if isinstance(args, dict):
+                        params = args
+                    else:
+                        params = json.loads(args)
                 except json.JSONDecodeError:
                     params = {}
 

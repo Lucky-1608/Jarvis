@@ -60,6 +60,9 @@ class OllamaProvider(AIProvider):
                 "num_predict": max_tokens,
             },
         }
+        if tools:
+            payload["tools"] = tools
+            
         if response_format:
             payload["format"] = "json"
 
