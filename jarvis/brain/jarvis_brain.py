@@ -397,7 +397,17 @@ class JarvisBrain:
             await self.initialize()
 
         direct_plan = self._create_direct_control_plan(user_input)
-        if direct_plan is not None:
+        
+        # Determine if the query likely needs tools
+        lower = user_input.lower()
+        needs_tools = direct_plan is not None
+        
+        # If the command contains conjunctions or action verbs, it likely needs tools
+        if not needs_tools:
+            if re.search(r"\b(and|then|search|find|open|close|play|run|execute|start|stop)\b", lower) or "," in lower:
+                needs_tools = True
+
+        if needs_tools:
             response = await self.process(user_input)
             yield StreamChunk(
                 content=response.content,
@@ -437,6 +447,10 @@ class JarvisBrain:
         text = " ".join(user_input.strip().split())
         lower = text.lower()
         lower = re.sub(r"^\s*(jarvis|hey jarvis|ok jarvis|okay jarvis)[,\s]+", "", lower)
+        
+        # If the command contains conjunctions, it's a compound command. Let the LLM handle it.
+        if re.search(r"\b(and|then)\b", lower) or "," in lower:
+            return None
 
         def plan(tool_name: str, params: dict[str, Any], description: str) -> ExecutionPlan:
             return ExecutionPlan(

@@ -366,9 +366,9 @@ class OpenAppTool(Tool):
                 if cmd_exe:
                     try:
                         if target_url:
-                            os.startfile(cmd_exe, arguments=target_url)
+                            subprocess.Popen(f'cmd /c start "" "{cmd_exe}" "{target_url}"', shell=True)
                         else:
-                            os.startfile(cmd_exe)
+                            subprocess.Popen(f'cmd /c start "" "{cmd_exe}"', shell=True)
                     except Exception as e:
                         return ToolResult(success=False, error=f"Failed to open '{cmd_exe}': {e}")
                 else:
@@ -378,9 +378,9 @@ class OpenAppTool(Tool):
                         shortcut = self._find_app_shortcut(app_name)
                         if shortcut:
                             if target_url:
-                                os.startfile(shortcut, "open", target_url)
+                                subprocess.Popen(f'cmd /c start "" "{shortcut}" "{target_url}"', shell=True)
                             else:
-                                os.startfile(shortcut)
+                                subprocess.Popen(f'cmd /c start "" "{shortcut}"', shell=True)
                         else:
                             app_name_clean = "".join(c for c in app_name.lower() if c.isalnum())
                             ps_cmd = f"Get-StartApps | Where-Object {{ ($_.Name -replace '[^a-zA-Z0-9]', '') -match '{app_name_clean}' }} | Select-Object -ExpandProperty AppID"
@@ -392,9 +392,9 @@ class OpenAppTool(Tool):
                             else:
                                 try:
                                     if target_url:
-                                        os.startfile(app_name, arguments=target_url)
+                                        subprocess.Popen(f'cmd /c start "" "{app_name}" "{target_url}"', shell=True)
                                     else:
-                                        os.startfile(app_name)
+                                        subprocess.Popen(f'cmd /c start "" "{app_name}"', shell=True)
                                 except OSError:
                                     return ToolResult(success=False, error=f"Could not find or open application '{app_name}'.")
             elif platform.system() == "Darwin":
@@ -520,9 +520,13 @@ class CloseAppTool(Tool):
                         error="Could not close the active window. Install pygetwindow or pyautogui for active-window control.",
                     )
 
-                window_result = self._close_matching_window(app_name)
-                if window_result:
-                    return ToolResult(success=True, output=window_result)
+                force_kill_apps = ["edge", "chrome", "firefox", "brave", "spotify", "discord", "vscode"]
+                should_force_kill = any(fk in app_name for fk in force_kill_apps)
+
+                if not should_force_kill:
+                    window_result = self._close_matching_window(app_name)
+                    if window_result:
+                        return ToolResult(success=True, output=window_result)
 
                 if app_name in self._WINDOW_ONLY_APPS:
                     return ToolResult(
@@ -585,6 +589,9 @@ class CloseAppTool(Tool):
 
         if not names:
             names.append(app_name if app_name.endswith(".exe") else f"{app_name}.exe")
+            first_word = app_name.split()[0]
+            if first_word != app_name:
+                names.append(f"{first_word}.exe")
 
         return list(dict.fromkeys(names))
 
@@ -751,6 +758,58 @@ class CloseAppTool(Tool):
                 pass
 
         return f"Closed matching process(es): {', '.join(terminated[:8])}."
+
+
+# ---------------------------------------------------------------------------
+# Keyboard Action
+# ---------------------------------------------------------------------------
+class KeyboardActionTool(Tool):
+    """Send keyboard shortcuts to the active window."""
+
+    @property
+    def metadata(self) -> ToolMetadata:
+        return ToolMetadata(
+            name="press_key",
+            description="Send a keyboard shortcut or keypress to the active window. Useful for closing tabs (ctrl+w), switching tabs (ctrl+tab), or saving (ctrl+s).",
+            category=ToolCategory.SYSTEM,
+            parameters=[
+                ToolParameter(
+                    name="keys",
+                    type="string",
+                    description="The keys to press, joined by '+' (e.g., 'ctrl+w', 'alt+f4', 'enter').",
+                ),
+            ],
+        )
+
+    async def execute(self, **params: Any) -> ToolResult:
+        keys = params.get("keys", "").strip().lower()
+        if not keys:
+            return ToolResult(success=False, error="No keys provided.")
+
+        if sys.platform != "win32":
+            return ToolResult(success=False, error="Keyboard automation is only supported on Windows currently.")
+
+        try:
+            import pyautogui
+            import pygetwindow as gw
+            
+            # Briefly sleep to ensure any previous window activations are processed
+            time.sleep(0.5)
+            
+            key_list = keys.split('+')
+            pyautogui.hotkey(*key_list)
+            
+            return ToolResult(
+                success=True,
+                output=f"Successfully sent keyboard shortcut: {keys}",
+            )
+        except ImportError:
+            return ToolResult(
+                success=False,
+                error="The 'pyautogui' package is required for keyboard actions. Please run: pip install pyautogui",
+            )
+        except Exception as exc:
+            return ToolResult(success=False, error=f"Failed to send keys: {exc}")
 
 
 # ---------------------------------------------------------------------------
@@ -1088,6 +1147,7 @@ def get_system_tools() -> list[Tool]:
         SystemInfoTool(),
         OpenAppTool(),
         CloseAppTool(),
+        KeyboardActionTool(),
         RunCommandTool(),
         ListFilesTool(),
         ReadFileTool(),
