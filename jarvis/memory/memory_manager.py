@@ -244,6 +244,8 @@ class MemoryManager:
 
         If *memory_type* is None, searches across **all** collections.
         """
+        import os
+        import httpx
         self._ensure_client()
         results: list[SearchResult] = []
 
@@ -253,6 +255,9 @@ class MemoryManager:
             else list(self._collections.values())
         )
 
+        jina_api_key = os.getenv("JINA_API_KEY")
+        fetch_limit = max(limit, 50) if jina_api_key else limit
+
         for collection in collections_to_search:
             if collection.count() == 0:
                 continue
@@ -261,7 +266,7 @@ class MemoryManager:
                 where_clause = {"project_id": project_id} if project_id is not None else None
                 search_results = collection.query(
                     query_texts=[query],
-                    n_results=min(limit, collection.count()),
+                    n_results=min(fetch_limit, collection.count()),
                     where=where_clause,
                 )
             except Exception as exc:
@@ -292,12 +297,43 @@ class MemoryManager:
                 )
                 results.append(SearchResult(entry=entry, score=relevance, distance=dist))
 
-        # Sort by relevance (highest first)
-        results.sort(key=lambda r: r.score, reverse=True)
+        # 2. Rerank (Stage 2)
+        if jina_api_key and len(results) > 1:
+            try:
+                docs = [r.entry.content for r in results]
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    resp = await client.post(
+                        "https://api.jina.ai/v1/rerank",
+                        headers={"Authorization": f"Bearer {jina_api_key}"},
+                        json={
+                            "model": "jina-reranker-v3.5",
+                            "query": query,
+                            "documents": docs,
+                            "top_n": limit
+                        }
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+                    
+                    reranked_results = []
+                    for item in data["results"]:
+                        idx = item["index"]
+                        new_score = item["relevance_score"]
+                        original_result = results[idx]
+                        original_result.score = new_score
+                        reranked_results.append(original_result)
+                    
+                    results = reranked_results
+                    logger.info("memory.jina_reranked", items=len(results))
+            except Exception as exc:
+                logger.warning("memory.jina_reranker_failed", error=str(exc))
+                results.sort(key=lambda r: r.score, reverse=True)
+        else:
+            results.sort(key=lambda r: r.score, reverse=True)
 
         await self._bus.publish(Event(
             type=EventTypes.MEMORY_RETRIEVED,
-            data={"query": query[:100], "results_count": len(results)},
+            data={"query": query[:100], "results_count": len(results[:limit])},
             source="memory_manager",
         ))
 

@@ -17,6 +17,25 @@ class WebScraperTool(Tool):
     async def execute(self, **kwargs) -> ToolResult:
         url = kwargs.get("url")
         try:
+            import os
+            import httpx
+            
+            jina_api_key = os.getenv("JINA_API_KEY")
+            
+            # If Jina API is enabled, use the Reader API for clean markdown
+            if jina_api_key:
+                with httpx.Client(timeout=30.0) as client:
+                    response = client.get(
+                        f"https://r.jina.ai/{url}",
+                        headers={
+                            "Authorization": f"Bearer {jina_api_key}",
+                            "X-Return-Format": "markdown"
+                        }
+                    )
+                    response.raise_for_status()
+                    return ToolResult(success=True, output={"text": response.text[:10000]})
+            
+            # Fallback to simple HTML parsing
             import urllib.request
             from html.parser import HTMLParser
             

@@ -11,9 +11,11 @@ Pipeline: Document → Chunk → Embed → Store
 from __future__ import annotations
 
 import hashlib
+import os
 from functools import lru_cache
 from typing import Any
 
+import httpx
 import structlog
 
 from jarvis.config.settings import get_settings
@@ -53,15 +55,35 @@ def _get_model():
 
 def embed_text(text: str) -> list[float]:
     """Embed a single text string into a dense vector."""
-    model = _get_model()
-    embedding = model.encode(text, normalize_embeddings=True)
-    return embedding.tolist()
+    return embed_texts([text])[0]
 
 
 def embed_texts(texts: list[str]) -> list[list[float]]:
     """Embed a batch of texts into dense vectors (more efficient)."""
     if not texts:
         return []
+
+    # Attempt Jina API first if key exists
+    jina_api_key = os.getenv("JINA_API_KEY")
+    if jina_api_key:
+        try:
+            logger.info("embeddings.using_jina_api", count=len(texts))
+            with httpx.Client(timeout=30.0) as client:
+                response = client.post(
+                    "https://api.jina.ai/v1/embeddings",
+                    headers={"Authorization": f"Bearer {jina_api_key}"},
+                    json={
+                        "model": "jina-embeddings-v5-omni-small",
+                        "input": texts
+                    }
+                )
+                response.raise_for_status()
+                data = response.json()
+                return [item["embedding"] for item in data["data"]]
+        except Exception as exc:
+            logger.warning("embeddings.jina_api_failed", error=str(exc), fallback="local")
+
+    # Fallback to local sentence-transformers model
     model = _get_model()
     embeddings = model.encode(texts, normalize_embeddings=True, batch_size=32)
     return [e.tolist() for e in embeddings]
