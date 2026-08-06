@@ -17,6 +17,7 @@ export function SettingsPage() {
     nvidia: '',
     grok: '',
     gemini: '',
+    jina: '',
     ollama_url: 'http://localhost:11434'
   });
   
@@ -86,6 +87,7 @@ export function SettingsPage() {
             nvidia: keysRes.data.nvidia || '',
             grok: keysRes.data.grok || '',
             gemini: keysRes.data.gemini || '',
+            jina: keysRes.data.jina || '',
             ollama_url: keysRes.data.ollama_url || 'http://localhost:11434'
           });
         }
@@ -236,6 +238,20 @@ export function SettingsPage() {
                       type="password" 
                       value={keys.gemini} 
                       placeholder={loading ? "Loading..." : "AI-..."}
+                      readOnly 
+                      className="bg-[#0B0F19] font-mono" 
+                    />
+                    <Button variant="outline">Update</Button>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Jina AI</label>
+                  <div className="flex gap-2">
+                    <Input 
+                      type="password" 
+                      value={keys.jina} 
+                      placeholder={loading ? "Loading..." : "jina_..."}
                       readOnly 
                       className="bg-[#0B0F19] font-mono" 
                     />
