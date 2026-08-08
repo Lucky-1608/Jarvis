@@ -2,9 +2,12 @@
 Jarvis OS - OAuth Routes
 
 API endpoints for initiating and handling OAuth2 callbacks.
+Includes account management (disconnect, label, refresh).
 """
+from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Request, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 from jarvis.database.core import get_db
@@ -42,6 +45,7 @@ async def login_google(request: Request):
 @router.get("/auth/google/callback")
 async def auth_google_callback(request: Request, db: AsyncSession = Depends(get_db)):
     """Handles the Google OAuth callback."""
+    import os
     try:
         token = await oauth.google.authorize_access_token(request)
         userinfo = token.get('userinfo')
@@ -49,6 +53,13 @@ async def auth_google_callback(request: Request, db: AsyncSession = Depends(get_
             email = userinfo.get("email")
             logger.info("oauth.google.success", email=email)
             user_id = await get_or_create_default_user(db)
+            
+            # Calculate token expiry
+            expires_in = token.get("expires_in", 3600)
+            token_expires_at = datetime.now(timezone.utc) + timedelta(seconds=int(expires_in))
+            
+            # Get granted scopes
+            granted_scopes = token.get("scope", "")
             
             # Save or update token
             result = await db.execute(select(OAuthAccount).where(
@@ -62,14 +73,102 @@ async def auth_google_callback(request: Request, db: AsyncSession = Depends(get_
                 db.add(account)
                 
             account.access_token = token.get("access_token")
+            account.token_expires_at = token_expires_at
+            account.scopes = granted_scopes
             if token.get("refresh_token"):
                 account.refresh_token = token.get("refresh_token")
             await db.commit()
 
-            return {"message": "Google Authentication Successful", "user": email}
+            frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
+            return RedirectResponse(url=f"{frontend_url}/settings")
     except Exception as e:
         logger.error("oauth.google.error", error=str(e))
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Google authentication failed")
+        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
+        return RedirectResponse(url=f"{frontend_url}/settings?error=Google_Auth_Failed")
+
+# ---------------------------------------------------------------------------
+# Google Account Management Endpoints
+# ---------------------------------------------------------------------------
+
+@router.delete("/google/{account_id}")
+async def disconnect_google_account(account_id: str, db: AsyncSession = Depends(get_db)):
+    """Disconnect (delete) a Google account by email."""
+    result = await db.execute(select(OAuthAccount).where(
+        OAuthAccount.provider == "google",
+        OAuthAccount.account_id == account_id
+    ))
+    account = result.scalar_one_or_none()
+    if not account:
+        raise HTTPException(status_code=404, detail=f"Google account '{account_id}' not found")
+    
+    await db.delete(account)
+    await db.commit()
+    logger.info("oauth.google.disconnected", account=account_id)
+    return {"message": f"Disconnected Google account: {account_id}"}
+
+
+class LabelUpdate(BaseModel):
+    label: str
+
+
+@router.patch("/google/{account_id}")
+async def update_google_account_label(
+    account_id: str,
+    data: LabelUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    """Update the label (e.g., 'Work', 'Personal') for a Google account."""
+    result = await db.execute(select(OAuthAccount).where(
+        OAuthAccount.provider == "google",
+        OAuthAccount.account_id == account_id
+    ))
+    account = result.scalar_one_or_none()
+    if not account:
+        raise HTTPException(status_code=404, detail=f"Google account '{account_id}' not found")
+    
+    account.label = data.label
+    await db.commit()
+    logger.info("oauth.google.label_updated", account=account_id, label=data.label)
+    return {"message": f"Label updated to '{data.label}'", "account_id": account_id}
+
+
+@router.post("/google/{account_id}/refresh")
+async def force_refresh_google_token(
+    account_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Force-refresh the access token for a Google account."""
+    from jarvis.integrations.google_client import GoogleClient
+
+    result = await db.execute(select(OAuthAccount).where(
+        OAuthAccount.provider == "google",
+        OAuthAccount.account_id == account_id
+    ))
+    account = result.scalar_one_or_none()
+    if not account:
+        raise HTTPException(status_code=404, detail=f"Google account '{account_id}' not found")
+    
+    if not account.refresh_token:
+        raise HTTPException(
+            status_code=400,
+            detail="No refresh token available. Please disconnect and reconnect this account."
+        )
+
+    client = GoogleClient(db, account)
+    success = await client._refresh_access_token()
+    if not success:
+        raise HTTPException(status_code=500, detail="Token refresh failed")
+    
+    return {
+        "message": "Token refreshed successfully",
+        "account_id": account_id,
+        "expires_at": account.token_expires_at.isoformat() if account.token_expires_at else None,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Notion OAuth
+# ---------------------------------------------------------------------------
 
 @router.get("/login/notion")
 async def login_notion(request: Request):
@@ -84,6 +183,7 @@ async def login_notion(request: Request):
 @router.get("/auth/notion/callback")
 async def auth_notion_callback(request: Request, db: AsyncSession = Depends(get_db)):
     """Handles the Notion OAuth callback."""
+    import os
     try:
         token = await oauth.notion.authorize_access_token(request)
         logger.info("oauth.notion.success")
@@ -105,10 +205,16 @@ async def auth_notion_callback(request: Request, db: AsyncSession = Depends(get_
         account.access_token = token.get("access_token")
         await db.commit()
 
-        return {"message": "Notion Authentication Successful", "bot_id": bot_id}
+        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
+        return RedirectResponse(url=f"{frontend_url}/settings")
     except Exception as e:
         logger.error("oauth.notion.error", error=str(e))
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Notion authentication failed")
+        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
+        return RedirectResponse(url=f"{frontend_url}/settings?error=Notion_Auth_Failed")
+
+# ---------------------------------------------------------------------------
+# GitHub OAuth
+# ---------------------------------------------------------------------------
 
 @router.get("/login/github")
 async def login_github(request: Request):
@@ -123,6 +229,7 @@ async def login_github(request: Request):
 @router.get("/auth/github/callback")
 async def auth_github_callback(request: Request, db: AsyncSession = Depends(get_db)):
     """Handles the GitHub OAuth callback."""
+    import os
     try:
         token = await oauth.github.authorize_access_token(request)
         resp = await oauth.github.get('user', token=token)
@@ -146,9 +253,9 @@ async def auth_github_callback(request: Request, db: AsyncSession = Depends(get_
         account.access_token = token.get("access_token")
         await db.commit()
 
-        return {"message": "GitHub Authentication Successful", "username": username}
+        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
+        return RedirectResponse(url=f"{frontend_url}/settings")
     except Exception as e:
         logger.error("oauth.github.error", error=str(e))
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="GitHub authentication failed")
-
-
+        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
+        return RedirectResponse(url=f"{frontend_url}/settings?error=GitHub_Auth_Failed")

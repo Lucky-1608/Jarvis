@@ -10,15 +10,33 @@ import os
 oauth = OAuth()
 
 # Google OAuth Setup
+# All scopes requested upfront — Google only prompts for new scopes on re-consent
+GOOGLE_SCOPES = " ".join([
+    "openid",
+    "email",
+    "profile",
+    "https://www.googleapis.com/auth/gmail.modify",
+    "https://www.googleapis.com/auth/calendar",
+    "https://www.googleapis.com/auth/drive",
+    "https://www.googleapis.com/auth/contacts.readonly",
+    "https://www.googleapis.com/auth/tasks",
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/documents",
+    "https://www.googleapis.com/auth/youtube.readonly",
+])
+
 oauth.register(
     name='google',
     client_id=os.getenv("GOOGLE_CLIENT_ID", "stub_client_id"),
     client_secret=os.getenv("GOOGLE_CLIENT_SECRET", "stub_client_secret"),
     server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
     client_kwargs={
-        'scope': 'openid email profile https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/drive.readonly'
+        'scope': GOOGLE_SCOPES,
+        'access_type': 'offline',
+        'prompt': 'consent',
     }
 )
+
 
 # Notion OAuth Setup
 oauth.register(

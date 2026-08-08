@@ -22,7 +22,7 @@ export function SettingsPage() {
   });
   
   const [integrations, setIntegrations] = useState<{
-    google: {id: number, account_id: string}[],
+    google: {id: number, account_id: string, label?: string, scopes?: string, token_expires_at?: string, token_active?: boolean}[],
     notion: {id: number, account_id: string}[],
     github: {id: number, account_id: string}[],
     whatsapp: boolean,
@@ -299,11 +299,94 @@ export function SettingsPage() {
                   <p className="text-sm text-[var(--text-muted)] mb-4">Access Gmail, Calendar, and Drive documents autonomously.</p>
                   
                   {integrations.google && integrations.google.length > 0 && (
-                    <div className="flex flex-col gap-2 mb-4">
+                    <div className="flex flex-col gap-3 mb-4">
                       {integrations.google.map(acc => (
-                        <div key={acc.id} className="flex justify-between items-center bg-[rgba(0,0,0,0.2)] p-2 rounded border border-[var(--border-subtle)]">
-                          <span className="text-sm text-gray-300">{acc.account_id}</span>
-                          <Button variant="ghost" size="sm" className="h-6 text-xs text-red-400 hover:text-red-300 hover:bg-red-900/20">Disconnect</Button>
+                        <div key={acc.id} className="flex flex-col gap-2 bg-[rgba(0,0,0,0.2)] p-3 rounded border border-[var(--border-subtle)]">
+                          <div className="flex justify-between items-center">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-white">{acc.account_id}</span>
+                              {acc.label && (
+                                <span className="px-2 py-0.5 text-xs bg-blue-500/20 text-blue-300 border border-blue-500/30 rounded">
+                                  {acc.label}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="h-6 text-xs text-gray-400 hover:text-white"
+                                onClick={async () => {
+                                  const newLabel = window.prompt("Enter label for this account (e.g., 'Work', 'Personal'):", acc.label || "");
+                                  if (newLabel !== null) {
+                                    try {
+                                      await api.patch(`/api/oauth/google/${acc.account_id}`, { label: newLabel });
+                                      const res = await api.get('/api/settings/integrations');
+                                      if (res.ok && res.data) setIntegrations(res.data);
+                                      toast({ title: 'Label Updated', description: 'Account label saved.' });
+                                    } catch (e) {
+                                      toast({ title: 'Error', description: 'Failed to update label.', variant: 'destructive' });
+                                    }
+                                  }
+                                }}
+                              >
+                                Label
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="h-6 text-xs text-gray-400 hover:text-white"
+                                onClick={async () => {
+                                  try {
+                                    await api.post(`/api/oauth/google/${acc.account_id}/refresh`, {});
+                                    const res = await api.get('/api/settings/integrations');
+                                    if (res.ok && res.data) setIntegrations(res.data);
+                                    toast({ title: 'Token Refreshed', description: 'Successfully refreshed access token.' });
+                                  } catch (e) {
+                                    toast({ title: 'Refresh Failed', description: 'Could not refresh token. You may need to reconnect.', variant: 'destructive' });
+                                  }
+                                }}
+                              >
+                                Refresh
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="h-6 text-xs text-red-400 hover:text-red-300 hover:bg-red-900/20"
+                                onClick={async () => {
+                                  if (window.confirm(`Disconnect Google account ${acc.account_id}?`)) {
+                                    try {
+                                      await api.delete(`/api/oauth/google/${acc.account_id}`);
+                                      const res = await api.get('/api/settings/integrations');
+                                      if (res.ok && res.data) setIntegrations(res.data);
+                                      toast({ title: 'Account Disconnected', description: 'Successfully removed Google account.' });
+                                    } catch (e) {
+                                      toast({ title: 'Error', description: 'Failed to disconnect account.', variant: 'destructive' });
+                                    }
+                                  }
+                                }}
+                              >
+                                Disconnect
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="flex flex-col gap-1 mt-1">
+                            {acc.token_expires_at !== undefined && (
+                              <div className="text-xs flex items-center gap-1">
+                                <span className="text-gray-500">Token Status:</span>
+                                {acc.token_active ? (
+                                  <span className="text-green-400 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-400"></span> Active</span>
+                                ) : (
+                                  <span className="text-red-400 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-red-400"></span> Expired</span>
+                                )}
+                              </div>
+                            )}
+                            {acc.scopes && (
+                              <div className="text-xs text-gray-500 truncate" title={acc.scopes}>
+                                <span className="text-gray-500">Scopes:</span> {acc.scopes.split(' ').map(s => s.split('/').pop()).join(', ')}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>

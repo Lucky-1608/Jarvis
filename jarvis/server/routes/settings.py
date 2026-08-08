@@ -49,9 +49,28 @@ async def get_integrations_status(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(OAuthAccount).where(OAuthAccount.user_id == 1))
     accounts = result.scalars().all()
     
-    google_accounts = [{"id": acc.id, "account_id": acc.account_id} for acc in accounts if acc.provider == "google"]
-    notion_accounts = [{"id": acc.id, "account_id": acc.account_id} for acc in accounts if acc.provider == "notion"]
-    github_accounts = [{"id": acc.id, "account_id": acc.account_id} for acc in accounts if acc.provider == "github"]
+    def _account_info(acc: OAuthAccount) -> dict:
+        info = {
+            "id": acc.id,
+            "account_id": acc.account_id,
+            "label": getattr(acc, "label", None),
+            "scopes": getattr(acc, "scopes", None),
+        }
+        expires = getattr(acc, "token_expires_at", None)
+        if expires:
+            info["token_expires_at"] = expires.isoformat()
+            from datetime import datetime, timezone
+            info["token_active"] = datetime.now(timezone.utc) < expires.replace(
+                tzinfo=timezone.utc
+            ) if expires.tzinfo is None else datetime.now(timezone.utc) < expires
+        else:
+            info["token_expires_at"] = None
+            info["token_active"] = None
+        return info
+
+    google_accounts = [_account_info(acc) for acc in accounts if acc.provider == "google"]
+    notion_accounts = [_account_info(acc) for acc in accounts if acc.provider == "notion"]
+    github_accounts = [_account_info(acc) for acc in accounts if acc.provider == "github"]
 
     return {
         "google": google_accounts,
@@ -60,6 +79,7 @@ async def get_integrations_status(db: AsyncSession = Depends(get_db)):
         "whatsapp": bool(os.getenv("WHATSAPP_OWNER_NUMBER")),
         "telegram": bool(os.getenv("TELEGRAM_BOT_TOKEN"))
     }
+
 
 @router.get("/plugins")
 async def get_plugin_keys():

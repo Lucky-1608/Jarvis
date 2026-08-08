@@ -61,6 +61,9 @@ class OAuthAccount(Base):
     account_id = Column(String(100), nullable=False)
     access_token = Column(String, nullable=False)
     refresh_token = Column(String, nullable=True)
+    token_expires_at = Column(DateTime(timezone=True), nullable=True)
+    label = Column(String(50), nullable=True)  # e.g., "Work", "Personal"
+    scopes = Column(String, nullable=True)  # Space-separated granted scopes
     metadata_ = Column("metadata", JSON, default={})
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
