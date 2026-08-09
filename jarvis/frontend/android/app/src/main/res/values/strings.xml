@@ -4,4 +4,5 @@
     <string name="title_activity_main">Jarvis</string>
     <string name="package_name">com.jarvis.app</string>
     <string name="custom_url_scheme">com.jarvis.app</string>
+    <string name="accessibility_service_description">Jarvis OS Device Hands: Allows Jarvis to interact with the screen.</string>
 </resources>
