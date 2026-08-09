@@ -1,107 +1,79 @@
-# 🤖 Jarvis OS
+<div align="center">
 
-[![Jarvis CI](https://github.com/vuppala/Jarvis/actions/workflows/ci.yml/badge.svg)](https://github.com/vuppala/Jarvis/actions/workflows/ci.yml)
+# 🌊 Jarvis OS
 
-> AI Operating System — Think. Remember. Plan. Execute. Automate.
+**A self-hosted autonomous AI assistant that runs 24/7 — and proves what it did.**
 
-Jarvis OS is a production-grade AI Operating System with a stunning, cross-platform interface. It can understand, plan, execute, learn, remember, and automate tasks. 
+[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-WebSocket-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![Kotlin](https://img.shields.io/badge/Android-Kotlin-3DDC84?style=flat-square&logo=android&logoColor=white)](https://kotlinlang.org)
+[![Postgres](https://img.shields.io/badge/Database-PostgreSQL-336791?style=flat-square&logo=postgresql&logoColor=white)](https://postgresql.org)
+[![pgvector](https://img.shields.io/badge/Vector_DB-pgvector-FF6F00?style=flat-square)](https://github.com/pgvector/pgvector)
+[![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
 
-Built with **Python & FastAPI** on the backend, and **React, Vite, Three.js & Tailwind CSS** on the frontend. It natively supports the **Web**, **Desktop (Electron)**, and **Mobile (Android via Capacitor)**.
+<samp>
 
----
+**$0 inference spend** · **~2s typical reply** · **5-provider failover** · **solo build**
 
-## ⚡ Quick Start: Backend
+</samp>
 
-1. **Create and activate a virtual environment:**
-   ```bash
-   python -m venv .venv
-   
-   # Windows
-   .venv\Scripts\activate
-   # Linux/Mac
-   source .venv/bin/activate
-   ```
+*Not a chatbot. A 24/7 assistant that schedules real actions, executes on remote devices,*
+*protects you from fraud — and verifies its own claims against ground truth.*
 
-2. **Install Jarvis OS:**
-   ```bash
-   pip install uv
-   uv pip install -e ".[dev]"
-   ```
-
-3. **Configure Environment:**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your desired API keys (e.g. JARVIS_API_KEY)
-   ```
-
-4. **Run the API Server:**
-   ```bash
-   python -m jarvis serve --reload
-   ```
-   *The backend will be available at `http://localhost:8000`*
+</div>
 
 ---
 
-## 💻 Quick Start: Frontend (Web & Desktop)
+## Why this exists
 
-Open a new terminal window and navigate to the frontend directory:
+Every AI assistant you can rent is **request–response**: it helps for three minutes when prompted,
+then stops existing. Its memory of you belongs to the vendor. It has no hands. And you cannot audit
+whether it actually did what it said.
 
-1. **Install Node dependencies:**
-   ```bash
-   cd jarvis/frontend
-   npm install
-   ```
+Jarvis OS is the opposite of all four. It owns its data, runs on hardware you control, holds intentions
+across days, acts through real devices — and every consequential action leaves a ground-truth record
+that can be diffed against what it claimed.
 
-2. **Run in Web Browser:**
-   ```bash
-   npm run dev
-   ```
-
-3. **Run as Desktop App (Electron):**
-   ```bash
-   npm run dev:electron
-   ```
+Language models lie about their own actions — not maliciously, but because pattern-matching a plausible confirmation is easier than doing the work. Mine once reported *"Task scheduled successfully"* with no row in the database. Everything below is downstream of taking that seriously.
 
 ---
 
-## 📱 Quick Start: Mobile (Android)
-
-Jarvis OS uses Ionic Capacitor to run natively on Android.
-
-1. **Configure Network:**
-   Create a `.env.production` file in `jarvis/frontend` and point it to your computer's local Wi-Fi IP address so the phone can reach the backend:
-   ```env
-   VITE_API_BASE_URL=http://192.168.1.X:8000
-   ```
-2. **Build and Sync:**
-   ```bash
-   npm run build
-   npm run cap:sync
-   ```
-3. **Run in Android Studio:**
-   ```bash
-   npx cap open android
-   ```
-   *From Android Studio, you can launch the app on an Emulator or a connected physical device.*
-
----
-
-## 📁 Project Structure
+## Architecture
 
 ```
-jarvis/
-├── brain/              # Core orchestrator and reasoning engine
-├── frontend/           # React, Vite, Three.js User Interface
-│   ├── android/        # Capacitor Android project
-│   ├── electron/       # Electron desktop wrapper
-│   └── src/            # UI components and 3D canvas
-├── memory/             # Multi-tier memory with ChromaDB
-├── server/             # FastAPI backend routes and logic
-├── tools/              # Extensible capability system
-├── providers/          # AI provider implementations (Local & Cloud)
-└── ...
+                            ┌──────────────────────────────────┐
+                            │           CLOUD BRAIN            │
+                            │    FastAPI · WebSocket :8000     │
+                            │                                  │
+   WhatsApp  ◄──Baileys───► │  router ───► 5-provider cascade  │ ◄──WS──► React UI /
+   (loop-proof              │      │         opencode →        │          Dashboard
+    secretary)              │      │         gemini →          │        
+                            │      │         ollama →          │
+   Gmail  ◄────poll───────► │      │         grok → nvidia     │
+   (+ Guardian scan)        │      │                           │ ◄──WS──► Device nodes
+                            │      │                           │      laptop ✓  phone ✓
+   Calendar ◄──OAuth──────► │  memory tree      scheduler      │      (AccessibilityService)
+                            │  (episodic →                     │
+                            │   summary)                       │
+                            │                                  │
+                            │  pgvector      [TOOL RESULTS]    │
+                            │  semantic       truth seals      │
+                            │  recall         (the lie detector│
+                            └──────────────────────────────────┘
 ```
 
-## 📄 License
+**One brain, multiple entry points**. A single `/ws` WebSocket carries chat, status, streamed UI state, and device-node registration.
 
-MIT
+---
+
+## Capabilities
+
+| Capability | How it works |
+|---|---|
+| **Messaging secretary** | Native WhatsApp (Baileys): rate limiting, 5s debounce. Echo-loop-proof by design — she runs on my own number, so every reply echoes back as `is_self` and is ignored. |
+| **Verified missions** | A goal is decomposed into steps, each with an *objectively checkable* verification. A step is not done because she says so — it's done because evidence proved it. |
+| **Device hands** | Lightweight agents connect *outbound* from laptop and phone and register capabilities. The Android client drives arbitrary apps via a native Kotlin `AccessibilityService` (tap-by-text, scroll) — the only way to act autonomously. |
+| **Guardian fraud shield** | Rule-first scam detection on inbound mail and messages: OTP/KYC urgency, shortened links. Warn-only — never auto-deletes, auto-replies, or clicks. |
+| **Truth seals** | Every side-effecting tool call generates a cryptographic `seal_id`. Claims are auditable against seals; when words and seals disagree, **seals win**. |
+| **Vector memory** | Deep semantic recall on every message via `pgvector` hosted on Supabase, allowing meaning-based retrieval across thousands of past interactions. |
+| **GraphRAG** | Uses Graphify to understand codebase architecture and concept relationships contextually, not just textually. |

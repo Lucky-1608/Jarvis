@@ -11,6 +11,7 @@ from email.mime.text import MIMEText
 
 from jarvis.database.core import AsyncSessionLocal
 from jarvis.integrations.google_client import GoogleClient, get_google_account
+from jarvis.security.guardian import FraudScanner
 from jarvis.tools.base import Tool, ToolCategory, ToolMetadata, ToolParameter, ToolResult
 
 GMAIL_BASE = "https://gmail.googleapis.com/gmail/v1/users/me"
@@ -224,6 +225,8 @@ class GmailReadMessageTool(Tool):
                     output += "\n\n**Attachments:**\n"
                     for att in parsed["attachments"]:
                         output += f"  - {att['filename']} ({att['mimeType']}, {att['size']} bytes)\n"
+                        
+                is_suspicious, output = FraudScanner.scan(output, source="Gmail")
 
                 return ToolResult(success=True, output=output, metadata=parsed)
         finally:

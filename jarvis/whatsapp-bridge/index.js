@@ -17,6 +17,9 @@ const ownerJid = formatNumber(OWNER_NUMBER.replace(/[^0-9]/g, ''));
 
 const JARVIS_EVENT_URL = 'http://127.0.0.1:8000/api/whatsapp/event';
 
+// Debounce map: senderJid -> timestamp
+const userLastMessage = new Map();
+
 async function sendStatus(status, data = null) {
     try {
         await axios.post(JARVIS_EVENT_URL, {
@@ -121,6 +124,20 @@ async function connectToWhatsApp() {
             if (!text.toLowerCase().includes('jarvis')) {
                 continue;
             }
+
+            // Loop-proofing: Prevent Jarvis from responding to its own replies
+            if (text.startsWith('[Jarvis]:')) {
+                continue;
+            }
+
+            // Debounce: Ignore messages if sent within 5 seconds of the last one
+            const now = Date.now();
+            const lastMsgTime = userLastMessage.get(rawSender) || 0;
+            if (now - lastMsgTime < 5000) {
+                console.log(`[Debounce] Dropped rapid-fire message from ${rawSender}`);
+                continue;
+            }
+            userLastMessage.set(rawSender, now);
 
             console.log(`\n[Owner] ${text}`);
             

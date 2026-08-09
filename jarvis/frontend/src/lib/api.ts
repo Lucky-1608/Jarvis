@@ -188,6 +188,13 @@ export const api = {
       ...opts,
     }),
 
+  patch: <T = any>(path: string, body?: any, opts?: RequestInit) =>
+    apiFetch<T>(path, {
+      method: 'PATCH',
+      body: body ? JSON.stringify(body) : undefined,
+      ...opts,
+    }),
+
   delete: <T = any>(path: string, opts?: RequestInit) =>
     apiFetch<T>(path, { method: 'DELETE', ...opts }),
 };

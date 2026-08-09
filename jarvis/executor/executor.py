@@ -17,6 +17,7 @@ from jarvis.events.bus import Event, EventTypes, get_event_bus
 from jarvis.planner.planner import ExecutionPlan, PlanStep, StepStatus
 from jarvis.tools.base import ToolResult
 from jarvis.tools.registry import ToolRegistry
+from jarvis.verification.truth_seals import TruthSealManager
 from jarvis.verification.verifier import Verifier
 
 logger = structlog.get_logger(__name__)
@@ -125,6 +126,12 @@ class Executor:
         verified = await self._verifier.verify_tool_result(tool, result)
 
         if result.success and verified:
+            if tool.metadata.dangerous:
+                seal_id = TruthSealManager.issue_seal(tool.name, step.tool_params, result.output)
+                if not result.metadata:
+                    result.metadata = {}
+                result.metadata["truth_seal"] = seal_id
+            
             step.status = StepStatus.COMPLETED
             step.result = result.output
         else:
@@ -167,7 +174,16 @@ class Executor:
             result = await tool.execute(**(params or {}))
             verified = await self._verifier.verify_tool_result(tool, result)
             if not verified:
+                if not result.metadata:
+                    result.metadata = {}
                 result.metadata["verification_warning"] = "Output did not pass verification"
+                
+            if result.success and verified and tool.metadata.dangerous:
+                seal_id = TruthSealManager.issue_seal(tool.name, params or {}, result.output)
+                if not result.metadata:
+                    result.metadata = {}
+                result.metadata["truth_seal"] = seal_id
+                
             return result
         except Exception as exc:
             return ToolResult(success=False, error=f"Execution failed: {exc}")
