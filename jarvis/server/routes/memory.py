@@ -124,4 +124,4 @@ async def store_memory(request: StoreMemoryRequest):
 async def memory_stats():
     """Return memory system statistics."""
     brain = get_brain()
-    return brain.memory.get_stats()
+    return await brain.memory.get_stats()
