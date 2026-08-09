@@ -1,21 +1,20 @@
-from .frontend_agent import FrontendAgent
-from .database_agent import DatabaseAgent
-
-from .ui_ux_agent import UiUxAgent
-from .backend_agent import BackendAgent
-from .api_agent import ApiAgent
 from .analytics_agent import AnalyticsAgent
-from .documentation_agent import DocumentationAgent
-from .writing_agent import WritingAgent
-from .multimedia_agent import MultimediaAgent
-from .productivity_agent import ProductivityAgent
-from .finance_agent import FinanceAgent
+from .api_agent import ApiAgent
+from .backend_agent import BackendAgent
 from .browser_agent import BrowserAgent
+from .database_agent import DatabaseAgent
+from .documentation_agent import DocumentationAgent
+from .finance_agent import FinanceAgent
+from .frontend_agent import FrontendAgent
 from .inventory_agent import InventoryAgent
-from .learning_agent import LearningAgent
 from .knowledge_agent import KnowledgeAgent
-from .plugin_agent import PluginAgent
+from .learning_agent import LearningAgent
 from .maintenance_agent import MaintenanceAgent
+from .multimedia_agent import MultimediaAgent
+from .plugin_agent import PluginAgent
+from .productivity_agent import ProductivityAgent
+from .ui_ux_agent import UiUxAgent
+from .writing_agent import WritingAgent
 
 __all__ = [
     "UiUxAgent",

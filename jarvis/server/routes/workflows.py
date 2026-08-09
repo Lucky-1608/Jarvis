@@ -6,7 +6,9 @@ GET /api/workflows/stats — Workflow statistics
 """
 
 from __future__ import annotations
+
 from fastapi import APIRouter
+
 from jarvis.server.dependencies import get_brain
 
 router = APIRouter()

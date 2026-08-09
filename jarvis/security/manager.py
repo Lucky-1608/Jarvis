@@ -3,9 +3,9 @@ Jarvis OS - Security Manager
 
 Handles Role-Based Access Control (RBAC) and Encryption of API Keys.
 """
-from cryptography.fernet import Fernet
 import os
-from typing import Optional
+
+from cryptography.fernet import Fernet
 from fastapi import HTTPException, status
 
 # In a real app, this should be generated and stored securely (e.g., in .env)

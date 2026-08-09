@@ -3,9 +3,10 @@ Jarvis OS - Native OAuth Integrations
 
 Handles OAuth2 flows for third-party services like Google and Notion.
 """
+import os
+
 from authlib.integrations.starlette_client import OAuth
 from fastapi import Request
-import os
 
 oauth = OAuth()
 

@@ -11,9 +11,8 @@ Handles:
 
 from __future__ import annotations
 
-import time
 import asyncio
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -59,7 +58,7 @@ class GoogleClient:
         self._max_retries = max_retries
         self._client: httpx.AsyncClient | None = None
 
-    async def __aenter__(self) -> "GoogleClient":
+    async def __aenter__(self) -> GoogleClient:
         self._client = httpx.AsyncClient(timeout=self._timeout)
         return self
 
@@ -140,10 +139,10 @@ class GoogleClient:
         if self._account.token_expires_at is None:
             return False  # Unknown expiry — try the request
         # Add 60-second buffer to avoid race conditions
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         expires = self._account.token_expires_at
         if expires.tzinfo is None:
-            expires = expires.replace(tzinfo=timezone.utc)
+            expires = expires.replace(tzinfo=UTC)
         return now >= (expires - timedelta(seconds=60))
 
     async def _refresh_access_token(self) -> bool:
@@ -193,7 +192,7 @@ class GoogleClient:
 
             # Update in-memory
             self._account.access_token = new_token
-            self._account.token_expires_at = datetime.now(timezone.utc) + timedelta(
+            self._account.token_expires_at = datetime.now(UTC) + timedelta(
                 seconds=expires_in
             )
 

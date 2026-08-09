@@ -1,7 +1,9 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import asyncio
-from jarvis.events.bus import get_event_bus, EventTypes
+
 import structlog
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+
+from jarvis.events.bus import EventTypes, get_event_bus
 
 router = APIRouter(prefix="/hud", tags=["HUD"])
 logger = structlog.get_logger(__name__)
@@ -10,11 +12,11 @@ logger = structlog.get_logger(__name__)
 async def hud_websocket(websocket: WebSocket):
     await websocket.accept()
     bus = get_event_bus()
-    
+
     # Create a unique subscriber ID for this websocket
     subscriber_id = f"hud_ws_{id(websocket)}"
     queue = asyncio.Queue()
-    
+
     # Subscribe to relevant HUD events
     # Including notifications and system readiness
     async def _queue_event(event):
@@ -27,14 +29,14 @@ async def hud_websocket(websocket: WebSocket):
     bus.subscribe("whatsapp.qr", _queue_event)
     bus.subscribe("whatsapp.status", _queue_event)
     bus.subscribe("telegram.status", _queue_event)
-    
+
     logger.info("hud.websocket_connected", id=subscriber_id)
-    
+
     try:
         while True:
             # Wait for an event to be pushed to the queue
             event = await queue.get()
-            
+
             # Send the event data as JSON to the HUD frontend
             await websocket.send_json({
                 "type": event.type,

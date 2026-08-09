@@ -5,11 +5,10 @@ Provides a unified search tool across Gmail and Drive.
 """
 
 import asyncio
-from typing import Any
 
-from jarvis.tools.base import Tool, ToolCategory, ToolMetadata, ToolParameter, ToolResult
-from jarvis.integrations.google_client import GoogleClient, get_google_account
 from jarvis.database.core import AsyncSessionLocal
+from jarvis.integrations.google_client import GoogleClient, get_google_account
+from jarvis.tools.base import Tool, ToolCategory, ToolMetadata, ToolParameter, ToolResult
 
 GMAIL_BASE = "https://gmail.googleapis.com/gmail/v1/users/me"
 DRIVE_BASE = "https://www.googleapis.com/drive/v3"

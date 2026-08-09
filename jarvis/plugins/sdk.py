@@ -24,7 +24,7 @@ from typing import Any
 
 import structlog
 
-from jarvis.events.bus import EventHandler, EventBus, get_event_bus
+from jarvis.events.bus import EventBus, EventHandler, get_event_bus
 from jarvis.tools.base import Tool
 
 logger = structlog.get_logger(__name__)

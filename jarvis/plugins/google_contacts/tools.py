@@ -4,9 +4,9 @@ Jarvis OS — Google Contacts Tools.
 Provides 3 tools for Google People API (Contacts) interaction.
 """
 
-from jarvis.tools.base import Tool, ToolCategory, ToolMetadata, ToolParameter, ToolResult
-from jarvis.integrations.google_client import GoogleClient, get_google_account
 from jarvis.database.core import AsyncSessionLocal
+from jarvis.integrations.google_client import GoogleClient, get_google_account
+from jarvis.tools.base import Tool, ToolCategory, ToolMetadata, ToolParameter, ToolResult
 
 PEOPLE_BASE = "https://people.googleapis.com/v1"
 PERSON_FIELDS = "names,emailAddresses,phoneNumbers,organizations,biographies,photos"

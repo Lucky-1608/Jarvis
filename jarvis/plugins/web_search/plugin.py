@@ -1,8 +1,9 @@
-from typing import Any
-from jarvis.plugins.sdk import Plugin, PluginMetadata
 from jarvis.events.bus import EventBus
+from jarvis.plugins.sdk import Plugin, PluginMetadata
 from jarvis.tools.base import Tool
+
 from .tools import WebSearchTool
+
 
 class WebSearchPlugin(Plugin):
     def metadata(self) -> PluginMetadata:

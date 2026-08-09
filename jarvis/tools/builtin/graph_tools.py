@@ -63,7 +63,7 @@ class GraphQueryTool(Tool):
         project_name = params.get("project_name")
         if not project_name:
             return ToolResult(success=False, error="Must provide project_name.")
-        
+
         graph = self._registry.get_graph(project_name)
         if not graph:
             return ToolResult(success=False, error=f"Project '{project_name}' not found.")
@@ -117,7 +117,7 @@ class GraphExplainTool(Tool):
         project_name = params.get("project_name")
         if not project_name:
             return ToolResult(success=False, error="Must provide project_name.")
-        
+
         graph = self._registry.get_graph(project_name)
         if not graph:
             return ToolResult(success=False, error=f"Project '{project_name}' not found.")
@@ -175,7 +175,7 @@ class GraphPathTool(Tool):
         project_name = params.get("project_name")
         if not project_name:
             return ToolResult(success=False, error="Must provide project_name.")
-        
+
         graph = self._registry.get_graph(project_name)
         if not graph:
             return ToolResult(success=False, error=f"Project '{project_name}' not found.")
@@ -230,7 +230,7 @@ class GraphBuildTool(Tool):
         project_name = params.get("project_name")
         if not project_name:
             return ToolResult(success=False, error="Must provide project_name.")
-        
+
         graph = self._registry.get_graph(project_name)
         if not graph:
             return ToolResult(success=False, error=f"Project '{project_name}' not found.")

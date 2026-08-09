@@ -8,12 +8,12 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
-from typing import Any
 
-import structlog
 import httpx
-from jarvis.events.bus import Event, EventTypes, get_event_bus
+import structlog
+
 from jarvis.config.settings import get_settings
+from jarvis.events.bus import Event, EventTypes, get_event_bus
 from jarvis.providers.base import APIKeyRotator
 
 logger = structlog.get_logger(__name__)
@@ -44,7 +44,7 @@ class TextToSpeech:
         self._stop_requested = False
         self._settings = get_settings()
         self._elevenlabs_rotator = APIKeyRotator(
-            self._settings.elevenlabs.api_keys, 
+            self._settings.elevenlabs.api_keys,
             self._settings.elevenlabs.api_key
         )
 
@@ -52,7 +52,7 @@ class TextToSpeech:
         """Speak the text, falling back to Edge-TTS."""
         if not text or not text.strip():
             return
-        
+
         self._is_speaking = True
         self._stop_requested = False
 
@@ -93,15 +93,15 @@ class TextToSpeech:
         api_key = self._elevenlabs_rotator.get_key()
         if not api_key:
             raise ValueError("ElevenLabs API key not configured.")
-        
+
         voice_id = getattr(self, "_voice_id", None) or self._settings.elevenlabs.voice_id
         url = f"{self._settings.elevenlabs.base_url.rstrip('/')}/v1/text-to-speech/{voice_id}"
-        
+
         headers = {
             "xi-api-key": api_key,
             "Content-Type": "application/json"
         }
-        
+
         payload = {
             "text": text,
             "model_id": self._settings.elevenlabs.model,
@@ -110,7 +110,7 @@ class TextToSpeech:
                 "similarity_boost": 0.75
             }
         }
-        
+
         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
             tmp_path = tmp.name
 
@@ -175,7 +175,7 @@ class TextToSpeech:
         """Synthesize speech to an audio file (MP3) without playing."""
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         try:
             provider = self._settings.tts_provider
             if provider == "elevenlabs":
@@ -196,15 +196,15 @@ class TextToSpeech:
         api_key = self._elevenlabs_rotator.get_key()
         if not api_key:
             raise ValueError("ElevenLabs API key not configured.")
-        
+
         voice_id = getattr(self, "_voice_id", None) or self._settings.elevenlabs.voice_id
         url = f"{self._settings.elevenlabs.base_url.rstrip('/')}/v1/text-to-speech/{voice_id}"
-        
+
         headers = {
             "xi-api-key": api_key,
             "Content-Type": "application/json"
         }
-        
+
         payload = {
             "text": text,
             "model_id": self._settings.elevenlabs.model,
@@ -213,13 +213,13 @@ class TextToSpeech:
                 "similarity_boost": 0.75
             }
         }
-        
+
         async with httpx.AsyncClient(timeout=self._settings.elevenlabs.timeout) as client:
             response = await client.post(url, headers=headers, json=payload)
             response.raise_for_status()
             with open(output_path, "wb") as f:
                 f.write(response.content)
-                
+
         logger.info("tts.synthesized_elevenlabs_to_file", path=str(output_path))
         return output_path
 

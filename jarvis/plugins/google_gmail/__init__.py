@@ -1,15 +1,17 @@
-from jarvis.tools.registry import ToolRegistry
 from jarvis.events.bus import EventBus
+from jarvis.tools.registry import ToolRegistry
+
 from .tools import (
-    GmailListMessagesTool,
-    GmailReadMessageTool,
-    GmailSendMessageTool,
     GmailDraftMessageTool,
-    GmailReplyToMessageTool,
     GmailGetLabelsTool,
-    GmailModifyLabelsTool,
     GmailGetUnreadCountTool,
+    GmailListMessagesTool,
+    GmailModifyLabelsTool,
+    GmailReadMessageTool,
+    GmailReplyToMessageTool,
+    GmailSendMessageTool,
 )
+
 
 def setup(registry: ToolRegistry, bus: EventBus) -> None:
     """Register all Gmail tools."""

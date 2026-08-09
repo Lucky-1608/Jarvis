@@ -1,9 +1,9 @@
-from typing import Optional
-from jarvis.team.sub_agent import SubAgent
-from jarvis.router.ai_router import AIRouter
-from jarvis.plugins.file_manager import ReadFileTool
 
+from jarvis.plugins.file_manager import ReadFileTool
 from jarvis.plugins.sql_connector.tools import SQLQueryTool
+from jarvis.router.ai_router import AIRouter
+from jarvis.team.sub_agent import SubAgent
+
 
 class DatabaseAgent(SubAgent):
     name = "Database Agent"
@@ -25,6 +25,6 @@ CONSTRAINTS & RULES:
 OUTPUT FORMAT:
 Provide your output in clear, structured Markdown. Use headings, bullet points, and code blocks where applicable. Ensure your final deliverable is immediately actionable by the Orchestrator or the user."""
 
-    def __init__(self, router: Optional[AIRouter] = None):
+    def __init__(self, router: AIRouter | None = None):
         tools = [ReadFileTool(), SQLQueryTool()]
         super().__init__(name=self.name, persona=self.persona, router=router, tools=tools)

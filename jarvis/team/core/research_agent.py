@@ -1,7 +1,8 @@
-from typing import Optional
-from jarvis.team.sub_agent import SubAgent
+
 from jarvis.router.ai_router import AIRouter
+from jarvis.team.sub_agent import SubAgent
 from jarvis.tools.builtin.web_tools import get_web_tools
+
 
 class ResearchAgent(SubAgent):
     name = "Research Agent"
@@ -22,6 +23,6 @@ CONSTRAINTS & RULES:
 OUTPUT FORMAT:
 Provide your output in clear, structured Markdown. Use headings, bullet points, and code blocks where applicable. Ensure your final deliverable is immediately actionable by the Orchestrator or the user."""
 
-    def __init__(self, router: Optional[AIRouter] = None):
+    def __init__(self, router: AIRouter | None = None):
         tools = get_web_tools()
         super().__init__(name=self.name, persona=self.persona, router=router, tools=tools)

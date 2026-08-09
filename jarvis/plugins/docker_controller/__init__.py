@@ -1,6 +1,8 @@
-from jarvis.tools.registry import ToolRegistry
 from jarvis.events.bus import EventBus
-from .tools import DockerRunTool, DockerBuildTool
+from jarvis.tools.registry import ToolRegistry
+
+from .tools import DockerBuildTool, DockerRunTool
+
 
 def setup(registry: ToolRegistry, bus: EventBus) -> None:
     registry.register(DockerRunTool())

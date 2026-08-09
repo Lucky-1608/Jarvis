@@ -4,16 +4,23 @@ Jarvis OS - OAuth Routes
 API endpoints for initiating and handling OAuth2 callbacks.
 Includes account management (disconnect, label, refresh).
 """
-from datetime import datetime, timezone, timedelta
-from fastapi import APIRouter, Request, Depends, HTTPException, status
+from datetime import UTC, datetime, timedelta
+
+import structlog
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
-import structlog
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from jarvis.database.core import get_db
 from jarvis.database.models import OAuthAccount, User
-from sqlalchemy import select
-from jarvis.integrations.oauth import oauth, get_google_auth_url, get_notion_auth_url, get_github_auth_url
+from jarvis.integrations.oauth import (
+    get_github_auth_url,
+    get_google_auth_url,
+    get_notion_auth_url,
+    oauth,
+)
 
 logger = structlog.get_logger(__name__)
 router = APIRouter()
@@ -38,7 +45,7 @@ async def login_google(request: Request):
     import os
     if os.getenv("GOOGLE_CLIENT_ID", "stub_client_id") == "stub_client_id":
         return {"error": "Not Configured", "message": "Please configure GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in your .env file."}
-    
+
     redirect_uri = str(request.url_for('auth_google_callback'))
     return await get_google_auth_url(request, redirect_uri)
 
@@ -53,25 +60,25 @@ async def auth_google_callback(request: Request, db: AsyncSession = Depends(get_
             email = userinfo.get("email")
             logger.info("oauth.google.success", email=email)
             user_id = await get_or_create_default_user(db)
-            
+
             # Calculate token expiry
             expires_in = token.get("expires_in", 3600)
-            token_expires_at = datetime.now(timezone.utc) + timedelta(seconds=int(expires_in))
-            
+            token_expires_at = datetime.now(UTC) + timedelta(seconds=int(expires_in))
+
             # Get granted scopes
             granted_scopes = token.get("scope", "")
-            
+
             # Save or update token
             result = await db.execute(select(OAuthAccount).where(
-                OAuthAccount.user_id == user_id, 
-                OAuthAccount.provider == "google", 
+                OAuthAccount.user_id == user_id,
+                OAuthAccount.provider == "google",
                 OAuthAccount.account_id == email
             ))
             account = result.scalar_one_or_none()
             if not account:
                 account = OAuthAccount(user_id=user_id, provider="google", account_id=email)
                 db.add(account)
-                
+
             account.access_token = token.get("access_token")
             account.token_expires_at = token_expires_at
             account.scopes = granted_scopes
@@ -100,7 +107,7 @@ async def disconnect_google_account(account_id: str, db: AsyncSession = Depends(
     account = result.scalar_one_or_none()
     if not account:
         raise HTTPException(status_code=404, detail=f"Google account '{account_id}' not found")
-    
+
     await db.delete(account)
     await db.commit()
     logger.info("oauth.google.disconnected", account=account_id)
@@ -125,7 +132,7 @@ async def update_google_account_label(
     account = result.scalar_one_or_none()
     if not account:
         raise HTTPException(status_code=404, detail=f"Google account '{account_id}' not found")
-    
+
     account.label = data.label
     await db.commit()
     logger.info("oauth.google.label_updated", account=account_id, label=data.label)
@@ -147,7 +154,7 @@ async def force_refresh_google_token(
     account = result.scalar_one_or_none()
     if not account:
         raise HTTPException(status_code=404, detail=f"Google account '{account_id}' not found")
-    
+
     if not account.refresh_token:
         raise HTTPException(
             status_code=400,
@@ -158,7 +165,7 @@ async def force_refresh_google_token(
     success = await client._refresh_access_token()
     if not success:
         raise HTTPException(status_code=500, detail="Token refresh failed")
-    
+
     return {
         "message": "Token refreshed successfully",
         "account_id": account_id,
@@ -187,21 +194,21 @@ async def auth_notion_callback(request: Request, db: AsyncSession = Depends(get_
     try:
         token = await oauth.notion.authorize_access_token(request)
         logger.info("oauth.notion.success")
-        
+
         bot_id = token.get("bot_id", "default_notion_bot")
         user_id = await get_or_create_default_user(db)
-        
+
         # Save or update token
         result = await db.execute(select(OAuthAccount).where(
-            OAuthAccount.user_id == user_id, 
-            OAuthAccount.provider == "notion", 
+            OAuthAccount.user_id == user_id,
+            OAuthAccount.provider == "notion",
             OAuthAccount.account_id == bot_id
         ))
         account = result.scalar_one_or_none()
         if not account:
             account = OAuthAccount(user_id=user_id, provider="notion", account_id=bot_id)
             db.add(account)
-            
+
         account.access_token = token.get("access_token")
         await db.commit()
 
@@ -234,22 +241,22 @@ async def auth_github_callback(request: Request, db: AsyncSession = Depends(get_
         token = await oauth.github.authorize_access_token(request)
         resp = await oauth.github.get('user', token=token)
         profile = resp.json()
-        
+
         username = profile.get("login")
         logger.info("oauth.github.success", username=username)
         user_id = await get_or_create_default_user(db)
-        
+
         # Save or update token
         result = await db.execute(select(OAuthAccount).where(
-            OAuthAccount.user_id == user_id, 
-            OAuthAccount.provider == "github", 
+            OAuthAccount.user_id == user_id,
+            OAuthAccount.provider == "github",
             OAuthAccount.account_id == username
         ))
         account = result.scalar_one_or_none()
         if not account:
             account = OAuthAccount(user_id=user_id, provider="github", account_id=username)
             db.add(account)
-            
+
         account.access_token = token.get("access_token")
         await db.commit()
 

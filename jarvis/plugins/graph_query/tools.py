@@ -1,5 +1,5 @@
-from typing import Any
 from jarvis.tools.base import Tool, ToolCategory, ToolMetadata, ToolParameter, ToolResult
+
 
 class GraphQueryTool(Tool):
     @property
@@ -13,7 +13,7 @@ class GraphQueryTool(Tool):
                 ToolParameter(name="entity", type="string", description="Entity name")
             ]
         )
-        
+
     async def execute(self, **kwargs) -> ToolResult:
         entity = kwargs.get("entity")
         return ToolResult(success=True, output={"edges": [f"Simulated relation for: {entity}"]})

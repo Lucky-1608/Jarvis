@@ -1,8 +1,9 @@
-from typing import Any
-from jarvis.plugins.sdk import Plugin, PluginMetadata
 from jarvis.events.bus import EventBus
+from jarvis.plugins.sdk import Plugin, PluginMetadata
 from jarvis.tools.base import Tool
-from .tools import StaticAnalysisTool, DependencyScannerTool, SecretsDetectorTool
+
+from .tools import DependencyScannerTool, SecretsDetectorTool, StaticAnalysisTool
+
 
 class SecurityScannerPlugin(Plugin):
     def metadata(self) -> PluginMetadata:

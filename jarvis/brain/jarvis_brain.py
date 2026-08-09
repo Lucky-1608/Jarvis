@@ -15,12 +15,15 @@ from __future__ import annotations
 
 import re
 import time
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator
+from typing import Any
 
 import structlog
 from traceroot import observe
 
+from jarvis.automation.browser.tools import get_browser_tools
+from jarvis.automation.desktop.tools import get_desktop_tools
 from jarvis.config.settings import get_settings
 from jarvis.events.bus import Event, EventTypes, get_event_bus
 from jarvis.executor.executor import Executor
@@ -29,14 +32,12 @@ from jarvis.memory.memory_manager import MemoryManager, MemoryType
 from jarvis.planner.planner import Planner
 from jarvis.providers.base import Message, StreamChunk
 from jarvis.router.ai_router import AIRouter
+from jarvis.tools.builtin.social_tools import get_social_tools
 from jarvis.tools.builtin.system_tools import get_system_tools
 from jarvis.tools.builtin.web_tools import get_web_tools
-from jarvis.tools.builtin.social_tools import get_social_tools
-from jarvis.vision.vision_tools import get_vision_tools
-from jarvis.automation.browser.tools import get_browser_tools
-from jarvis.automation.desktop.tools import get_desktop_tools
 from jarvis.tools.registry import ToolRegistry
 from jarvis.verification.verifier import Verifier
+from jarvis.vision.vision_tools import get_vision_tools
 
 logger = structlog.get_logger(__name__)
 
@@ -132,7 +133,6 @@ class JarvisBrain:
         self._tools.register_many(get_vision_tools())
         self._tools.register_many(get_browser_tools())
         self._tools.register_many(get_desktop_tools())
-        import jarvis.team # Ensure agents are registered
         from jarvis.tools.builtin.team_tools import get_team_tools
         self._tools.register_many(get_team_tools(self._router))
         from jarvis.tools.builtin.n8n_tools import get_n8n_tools
@@ -220,11 +220,11 @@ class JarvisBrain:
                 from jarvis.router.tool_selector import ToolSelector
                 if not hasattr(self, "_tool_selector"):
                     self._tool_selector = ToolSelector(self._router, self._tools)
-                
+
                 selected_names = await self._tool_selector.select_tools(user_input)
                 # Keep only tools that exist in the registry
                 selected_tools = [self._tools.get(name) for name in selected_names if self._tools.get(name)]
-                
+
                 # If for some reason the selector failed to pick any tools, fallback to all tools
                 if selected_tools:
                     openai_tools = [t.metadata.to_openai_schema() for t in selected_tools]
@@ -232,39 +232,39 @@ class JarvisBrain:
                     openai_tools = self._tools.to_openai_tools()
             else:
                 openai_tools = self._tools.to_openai_tools()
-        
+
         MAX_STEPS = 5
         tool_results: list[dict[str, Any]] = []
         plan_dict = None
-        
-        from jarvis.providers.base import Message
+
 
         for step_idx in range(MAX_STEPS):
             ai_response = await self._router.chat(messages, tools=openai_tools)
-            
+
             if not ai_response.tool_calls:
-                # If the model emits a generic tool-calling fallback message, 
+                # If the model emits a generic tool-calling fallback message,
                 # re-run the chat without tools so it answers conversationally.
                 if ai_response.content and "I don't have a specific function to call" in ai_response.content:
                     ai_response = await self._router.chat(messages)
                 break
-                
+
             messages.append(Message(
                 role="assistant",
                 content=ai_response.content or "",
                 tool_calls=ai_response.tool_calls
             ))
 
-            from jarvis.planner.planner import ExecutionPlan, PlanStep
             import json
             import time as _time
+
+            from jarvis.planner.planner import ExecutionPlan, PlanStep
 
             steps = []
             requires_confirmation = False
             for i, tc in enumerate(ai_response.tool_calls):
                 func = tc.get("function", {})
                 tool_name = func.get("name")
-                
+
                 tool = self._tools.get(tool_name)
                 if tool and tool.is_dangerous:
                     requires_confirmation = True
@@ -293,7 +293,7 @@ class JarvisBrain:
                 requires_confirmation=requires_confirmation,
                 reasoning=f"Determined via native tool calling (step {step_idx + 1})",
             )
-            
+
             workflow_entry = {
                 "id": f"plan_{int(_time.time())}",
                 "goal": user_input,
@@ -320,7 +320,7 @@ class JarvisBrain:
                     "result": step.result,
                     "error": step.error,
                 })
-                
+
                 result_str = str(step.result) if step.status.value == "completed" else str(step.error)
                 messages.append(Message(
                     role="tool",
@@ -397,11 +397,11 @@ class JarvisBrain:
             await self.initialize()
 
         direct_plan = self._create_direct_control_plan(user_input)
-        
+
         # Determine if the query likely needs tools
         lower = user_input.lower()
         needs_tools = direct_plan is not None
-        
+
         # If the command contains conjunctions or action verbs, it likely needs tools
         if not needs_tools:
             if re.search(r"\b(and|then|search|find|open|close|play|run|execute|start|stop)\b", lower) or "," in lower:
@@ -447,7 +447,7 @@ class JarvisBrain:
         text = " ".join(user_input.strip().split())
         lower = text.lower()
         lower = re.sub(r"^\s*(jarvis|hey jarvis|ok jarvis|okay jarvis)[,\s]+", "", lower)
-        
+
         # If the command contains conjunctions, it's a compound command. Let the LLM handle it.
         if re.search(r"\b(and|then)\b", lower) or "," in lower:
             return None

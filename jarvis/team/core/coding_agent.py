@@ -1,8 +1,9 @@
-from typing import Optional
-from jarvis.team.sub_agent import SubAgent
+
+from jarvis.plugins.file_manager import ListDirectoryTool, ReadFileTool, WriteFileTool
 from jarvis.router.ai_router import AIRouter
-from jarvis.plugins.file_manager import ReadFileTool, WriteFileTool, ListDirectoryTool
+from jarvis.team.sub_agent import SubAgent
 from jarvis.tools.base import Tool
+
 
 class CodingAgent(SubAgent):
     name = "Coding Agent"
@@ -23,7 +24,7 @@ CONSTRAINTS & RULES:
 OUTPUT FORMAT:
 Provide your output in clear, structured Markdown. Use headings, bullet points, and code blocks where applicable. Ensure your final deliverable is immediately actionable by the Orchestrator or the user."""
 
-    def __init__(self, router: Optional[AIRouter] = None):
+    def __init__(self, router: AIRouter | None = None):
         # Instantiate specific tools for this agent
         tools: list[Tool] = [
             ReadFileTool(),

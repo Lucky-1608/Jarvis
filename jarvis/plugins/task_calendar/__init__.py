@@ -1,12 +1,14 @@
-from jarvis.tools.registry import ToolRegistry
 from jarvis.events.bus import EventBus
+from jarvis.tools.registry import ToolRegistry
+
 from .tools import (
-    TasksListTasklistsTool,
-    TasksGetTasksTool,
     TasksCreateTaskTool,
-    TasksUpdateTaskTool,
     TasksDeleteTaskTool,
+    TasksGetTasksTool,
+    TasksListTasklistsTool,
+    TasksUpdateTaskTool,
 )
+
 
 def setup(registry: ToolRegistry, bus: EventBus) -> None:
     """Register Google Tasks tools."""

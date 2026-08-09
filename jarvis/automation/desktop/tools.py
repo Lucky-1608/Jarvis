@@ -164,10 +164,10 @@ class WindowManagerTool(Tool):
 
     async def execute(self, **params: Any) -> ToolResult:
         action = params.get("action")
-        
+
         try:
             from jarvis.automation.desktop.window import WindowManager
-            
+
             if action == "list_all":
                 return ToolResult(success=True, output={"windows": WindowManager.get_all_windows()})
             elif action == "get_active":
@@ -179,7 +179,7 @@ class WindowManagerTool(Tool):
                 return ToolResult(success=True, output=WindowManager.activate_window(title))
             else:
                 return ToolResult(success=False, error=f"Unknown action: {action}")
-                
+
         except Exception as exc:
             return ToolResult(success=False, error=str(exc))
 

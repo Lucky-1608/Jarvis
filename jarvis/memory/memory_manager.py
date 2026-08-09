@@ -8,8 +8,8 @@ Multi-tier memory system (spec Volume 4):
   - Semantic:        vector-searchable knowledge
   - Episodic:        past events and actions
 
-All long-lived memories are stored in ChromaDB collections with
-BAAI/bge-small-en-v1.5 embeddings.
+All long-lived memories are stored in Supabase (PostgreSQL) using pgvector
+with BAAI/bge-small-en-v1.5 embeddings.
 """
 
 from __future__ import annotations
@@ -18,14 +18,16 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from pathlib import Path
 from typing import Any
 
 import structlog
+from sqlalchemy import String, cast, delete, func, select
 
 from jarvis.config.settings import get_settings
+from jarvis.database.core import AsyncSessionLocal
+from jarvis.database.models import MemoryNode
 from jarvis.events.bus import Event, EventTypes, get_event_bus
-from jarvis.memory.embeddings import JarvisEmbeddingFunction, chunk_text, generate_chunk_id
+from jarvis.memory.embeddings import JarvisEmbeddingFunction, chunk_text
 
 logger = structlog.get_logger(__name__)
 
@@ -81,15 +83,13 @@ class MemoryManager:
     """
     Central memory system for Jarvis OS.
 
-    Manages multiple ChromaDB collections, one per ``MemoryType``.
+    Manages PostgreSQL pgvector storage via SQLAlchemy MemoryNode.
     Provides store, search, and lifecycle operations.
     """
 
     def __init__(self) -> None:
         self._settings = get_settings().memory
         self._bus = get_event_bus()
-        self._client = None
-        self._collections: dict[str, Any] = {}
         self._embedding_fn = JarvisEmbeddingFunction()
 
         # Working memory (in-process, not persisted)
@@ -97,30 +97,6 @@ class MemoryManager:
         # Short-term conversation buffer
         self._conversation_buffer: list[dict[str, str]] = []
         self._max_buffer = 50
-
-    # -- Initialisation -----------------------------------------------------
-
-    def _ensure_client(self):
-        """Lazily create the ChromaDB client and collections."""
-        if self._client is not None:
-            return
-
-        import chromadb
-
-        persist_dir = self._settings.chroma_persist_dir
-        Path(persist_dir).mkdir(parents=True, exist_ok=True)
-
-        self._client = chromadb.PersistentClient(path=persist_dir)
-        logger.info("memory.chromadb_initialized", persist_dir=persist_dir)
-
-        # Create/get a collection for each memory type
-        for mem_type in MemoryType:
-            self._collections[mem_type.value] = self._client.get_or_create_collection(
-                name=mem_type.value,
-                embedding_function=self._embedding_fn,
-                metadata={"hnsw:space": "cosine"},
-            )
-        logger.info("memory.collections_ready", count=len(self._collections))
 
     # -- Working Memory (ephemeral) -----------------------------------------
 
@@ -156,7 +132,7 @@ class MemoryManager:
         """Clear the conversation buffer."""
         self._conversation_buffer.clear()
 
-    # -- Long-term Memory (ChromaDB) ----------------------------------------
+    # -- Long-term Memory (pgvector) ----------------------------------------
 
     async def store(
         self,
@@ -168,50 +144,35 @@ class MemoryManager:
         project_id: int | None = None,
     ) -> list[str]:
         """
-        Store content in long-term memory.
-
-        If *chunk* is True, long content is split into overlapping
-        chunks before storing (better retrieval quality).
-
-        Returns the list of stored memory IDs.
+        Store content in long-term memory via pgvector.
         """
-        self._ensure_client()
-        collection = self._collections[memory_type.value]
         meta = metadata or {}
         stored_ids = []
 
-        # Optionally chunk long content
         texts = chunk_text(content) if (chunk and len(content) > 500) else [content]
+        embeddings = self._embedding_fn(texts)
 
-        for i, text in enumerate(texts):
-            entry = MemoryEntry(
-                content=text,
-                memory_type=memory_type,
-                metadata={**meta, "chunk_index": i, "total_chunks": len(texts)},
-                importance=importance,
-            )
+        async with AsyncSessionLocal() as session:
+            for i, (text, emb) in enumerate(zip(texts, embeddings)):
+                entry_id = uuid.uuid4().hex[:16]
 
-            # Prepare metadata for ChromaDB (must be str/int/float/bool)
-            chroma_meta = {
-                "memory_type": memory_type.value,
-                "timestamp": entry.timestamp,
-                "importance": importance,
-                "chunk_index": i,
-                "total_chunks": len(texts),
-            }
-            if project_id is not None:
-                chroma_meta["project_id"] = project_id
-            # Add user metadata (filter non-serializable values)
-            for k, v in meta.items():
-                if isinstance(v, (str, int, float, bool)):
-                    chroma_meta[k] = v
+                db_meta = {**meta, "chunk_index": i, "total_chunks": len(texts)}
+                if project_id is not None:
+                    db_meta["project_id"] = project_id
 
-            collection.add(
-                ids=[entry.id],
-                documents=[text],
-                metadatas=[chroma_meta],
-            )
-            stored_ids.append(entry.id)
+                node = MemoryNode(
+                    id=entry_id,
+                    content=text,
+                    memory_type=memory_type.value,
+                    metadata_=db_meta,
+                    timestamp=time.time(),
+                    importance=importance,
+                    embedding=emb
+                )
+                session.add(node)
+                stored_ids.append(entry_id)
+
+            await session.commit()
 
         await self._bus.publish(Event(
             type=EventTypes.MEMORY_STORED,
@@ -240,64 +201,51 @@ class MemoryManager:
         project_id: int | None = None,
     ) -> list[SearchResult]:
         """
-        Search memories by semantic similarity.
-
-        If *memory_type* is None, searches across **all** collections.
+        Search memories by semantic similarity using pgvector.
         """
         import os
+
         import httpx
-        self._ensure_client()
+
         results: list[SearchResult] = []
-
-        collections_to_search = (
-            [self._collections[memory_type.value]]
-            if memory_type
-            else list(self._collections.values())
-        )
-
         jina_api_key = os.getenv("JINA_API_KEY")
         fetch_limit = max(limit, 50) if jina_api_key else limit
 
-        for collection in collections_to_search:
-            if collection.count() == 0:
-                continue
+        # Generate query embedding
+        query_vector = self._embedding_fn([query])[0]
 
-            try:
-                where_clause = {"project_id": project_id} if project_id is not None else None
-                search_results = collection.query(
-                    query_texts=[query],
-                    n_results=min(fetch_limit, collection.count()),
-                    where=where_clause,
-                )
-            except Exception as exc:
-                logger.warning("memory.search_error", error=str(exc))
-                continue
+        async with AsyncSessionLocal() as session:
+            # calculate cosine distance
+            distance_col = MemoryNode.embedding.cosine_distance(query_vector).label("distance")
 
-            if not search_results or not search_results.get("documents"):
-                continue
+            stmt = select(MemoryNode, distance_col).order_by(distance_col).limit(fetch_limit)
 
-            documents = search_results["documents"][0]
-            metadatas = search_results["metadatas"][0]
-            distances = search_results["distances"][0]
-            ids = search_results["ids"][0]
+            if memory_type:
+                stmt = stmt.where(MemoryNode.memory_type == memory_type.value)
 
-            for doc, meta, dist, doc_id in zip(documents, metadatas, distances, ids):
-                # Convert cosine distance to relevance score (0–1)
+            if project_id is not None:
+                # filter by project_id in JSON metadata
+                stmt = stmt.where(cast(MemoryNode.metadata_["project_id"].as_string(), String) == str(project_id))
+
+            db_result = await session.execute(stmt)
+            rows = db_result.all()
+
+            for node, dist in rows:
                 relevance = max(0.0, 1.0 - dist)
                 if relevance < min_relevance:
                     continue
 
                 entry = MemoryEntry(
-                    id=doc_id,
-                    content=doc,
-                    memory_type=MemoryType(meta.get("memory_type", "conversations")),
-                    metadata=meta,
-                    timestamp=meta.get("timestamp", 0),
-                    importance=meta.get("importance", 0.5),
+                    id=node.id,
+                    content=node.content,
+                    memory_type=MemoryType(node.memory_type),
+                    metadata=node.metadata_,
+                    timestamp=node.timestamp,
+                    importance=node.importance,
                 )
                 results.append(SearchResult(entry=entry, score=relevance, distance=dist))
 
-        # 2. Rerank (Stage 2)
+        # Rerank (Stage 2)
         if jina_api_key and len(results) > 1:
             try:
                 docs = [r.entry.content for r in results]
@@ -314,7 +262,7 @@ class MemoryManager:
                     )
                     resp.raise_for_status()
                     data = resp.json()
-                    
+
                     reranked_results = []
                     for item in data["results"]:
                         idx = item["index"]
@@ -322,7 +270,7 @@ class MemoryManager:
                         original_result = results[idx]
                         original_result.score = new_score
                         reranked_results.append(original_result)
-                    
+
                     results = reranked_results
                     logger.info("memory.jina_reranked", items=len(results))
             except Exception as exc:
@@ -347,63 +295,59 @@ class MemoryManager:
         """
         Fetch recent memories, optionally filtered by type.
         """
-        self._ensure_client()
-        
-        collections_to_search = (
-            [self._collections[memory_type.value]]
-            if memory_type
-            else list(self._collections.values())
-        )
-        
         all_entries: list[MemoryEntry] = []
-        for collection in collections_to_search:
-            try:
-                data = collection.get()
-                if not data or not data.get("documents"):
-                    continue
-                
-                for doc, meta, doc_id in zip(data["documents"], data["metadatas"], data["ids"]):
-                    all_entries.append(
-                        MemoryEntry(
-                            id=doc_id,
-                            content=doc,
-                            memory_type=MemoryType(meta.get("memory_type", "conversations")),
-                            metadata=meta,
-                            timestamp=meta.get("timestamp", 0),
-                            importance=meta.get("importance", 0.5),
-                        )
+
+        async with AsyncSessionLocal() as session:
+            stmt = select(MemoryNode).order_by(MemoryNode.timestamp.desc()).limit(limit)
+            if memory_type:
+                stmt = stmt.where(MemoryNode.memory_type == memory_type.value)
+
+            db_result = await session.execute(stmt)
+            for node in db_result.scalars():
+                all_entries.append(
+                    MemoryEntry(
+                        id=node.id,
+                        content=node.content,
+                        memory_type=MemoryType(node.memory_type),
+                        metadata=node.metadata_,
+                        timestamp=node.timestamp,
+                        importance=node.importance,
                     )
-            except Exception as exc:
-                logger.warning("memory.get_recent_error", error=str(exc))
-                continue
-                
-        # Sort by timestamp descending
-        all_entries.sort(key=lambda e: e.timestamp, reverse=True)
-        return all_entries[:limit]
+                )
+
+        return all_entries
 
     # -- Stats & maintenance ------------------------------------------------
 
-    def get_stats(self) -> dict[str, Any]:
+    async def get_stats(self) -> dict[str, Any]:
         """Return memory statistics."""
-        self._ensure_client()
         stats = {
             "working_memory_keys": len(self._working_memory),
             "conversation_buffer_size": len(self._conversation_buffer),
             "collections": {},
         }
-        for name, collection in self._collections.items():
-            stats["collections"][name] = {"count": collection.count()}
+
+        async with AsyncSessionLocal() as session:
+            stmt = select(MemoryNode.memory_type, func.count(MemoryNode.id)).group_by(MemoryNode.memory_type)
+            result = await session.execute(stmt)
+
+            for mem_type, count in result.all():
+                stats["collections"][mem_type] = {"count": count}
+
+            # Fill empty ones
+            for mt in MemoryType:
+                if mt.value not in stats["collections"]:
+                    stats["collections"][mt.value] = {"count": 0}
+
         return stats
 
     async def clear_collection(self, memory_type: MemoryType) -> int:
         """Delete all entries in a collection. Returns count deleted."""
-        self._ensure_client()
-        collection = self._collections[memory_type.value]
-        count = collection.count()
-        if count > 0:
-            # ChromaDB requires IDs to delete; get all then delete
-            all_data = collection.get()
-            if all_data["ids"]:
-                collection.delete(ids=all_data["ids"])
+        async with AsyncSessionLocal() as session:
+            stmt = delete(MemoryNode).where(MemoryNode.memory_type == memory_type.value)
+            result = await session.execute(stmt)
+            count = result.rowcount
+            await session.commit()
+
         logger.info("memory.collection_cleared", collection=memory_type.value, deleted=count)
         return count

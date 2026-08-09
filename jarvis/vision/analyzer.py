@@ -21,7 +21,6 @@ from typing import Any
 
 import structlog
 
-from jarvis.config.settings import get_settings
 from jarvis.events.bus import Event, EventTypes, get_event_bus
 from jarvis.providers.base import Message
 from jarvis.router.ai_router import AIRouter
@@ -236,12 +235,12 @@ class VisionAnalyzer:
     def _parse_vision_response(self, content: str) -> VisionResult:
         """Parse the LLM's JSON response into a VisionResult."""
         content = content.strip()
-        
+
         # Try to extract JSON from markdown blocks or braces if direct load fails
         import re
         json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", content, re.DOTALL)
         brace_match = re.search(r"(\{.*\})", content, re.DOTALL)
-        
+
         json_str = content
         if json_match:
             json_str = json_match.group(1)

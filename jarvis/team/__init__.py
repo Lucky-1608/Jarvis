@@ -1,36 +1,29 @@
 """
 Jarvis OS - Team Sub-Agents
 """
-from .registry import team_registry
-
 # Import Core Agents
-from .core import (
-    CodingAgent,
-    ResearchAgent,
-    ArchitectureAgent,
-    DevOpsAgent,
-    SecurityAgent
-)
+from .core import ArchitectureAgent, CodingAgent, DevOpsAgent, ResearchAgent, SecurityAgent
+from .registry import team_registry
 
 # Import Specialist Agents
 from .specialists import (
-    FrontendAgent,
-    DatabaseAgent,
-    UiUxAgent,
-    BackendAgent,
-    ApiAgent,
     AnalyticsAgent,
-    DocumentationAgent,
-    WritingAgent,
-    MultimediaAgent,
-    ProductivityAgent,
-    FinanceAgent,
+    ApiAgent,
+    BackendAgent,
     BrowserAgent,
+    DatabaseAgent,
+    DocumentationAgent,
+    FinanceAgent,
+    FrontendAgent,
     InventoryAgent,
-    LearningAgent,
     KnowledgeAgent,
+    LearningAgent,
+    MaintenanceAgent,
+    MultimediaAgent,
     PluginAgent,
-    MaintenanceAgent
+    ProductivityAgent,
+    UiUxAgent,
+    WritingAgent,
 )
 
 # Register Core Agents

@@ -8,8 +8,10 @@ Usage:
     python -m jarvis.database.migrate_oauth_columns
 """
 import asyncio
+
 import structlog
 from sqlalchemy import text
+
 from jarvis.database.core import engine
 
 logger = structlog.get_logger(__name__)

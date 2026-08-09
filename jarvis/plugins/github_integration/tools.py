@@ -1,6 +1,7 @@
 import os
-from typing import Any
+
 from jarvis.tools.base import Tool, ToolCategory, ToolMetadata, ToolParameter, ToolResult
+
 
 class GitHubPRTool(Tool):
     @property
@@ -17,12 +18,12 @@ class GitHubPRTool(Tool):
                 ToolParameter(name="base", type="string", description="Branch to merge into")
             ]
         )
-        
+
     async def execute(self, **kwargs) -> ToolResult:
         token = os.getenv("GITHUB_TOKEN")
         if not token:
             return ToolResult(success=False, error="GITHUB_TOKEN environment variable not set.")
-            
+
         repo = kwargs.get("repo")
         try:
             import requests
@@ -50,6 +51,6 @@ class GitHubReviewTool(Tool):
             dangerous=False,
             parameters=[]
         )
-        
+
     async def execute(self, **kwargs) -> ToolResult:
         return ToolResult(success=True, output={"message": "GitHub review functionality deferred."})

@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import time
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator
+from typing import Any
 
 
 @dataclass
@@ -61,7 +62,7 @@ class ProviderHealth:
 
 class APIKeyRotator:
     """Rotates through a list of API keys in a round-robin fashion."""
-    
+
     def __init__(self, api_keys_str: str, api_key: str = ""):
         self.keys = []
         if api_keys_str:

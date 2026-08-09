@@ -8,7 +8,8 @@ OpenAI-compatible chat completions API endpoint.
 from __future__ import annotations
 
 import json
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
 import httpx
 import structlog
@@ -16,11 +17,11 @@ import structlog
 from jarvis.config.settings import get_settings
 from jarvis.providers.base import (
     AIProvider,
+    APIKeyRotator,
     ChatResponse,
     Message,
     ProviderHealth,
     StreamChunk,
-    APIKeyRotator,
 )
 
 logger = structlog.get_logger(__name__)

@@ -149,17 +149,17 @@ class OpenAppTool(Tool):
     def _find_app_shortcut(app_name: str) -> str | None:
         if sys.platform != "win32":
             return None
-            
+
         import os
         from pathlib import Path
-        
+
         def clean_name(name: str) -> str:
             return "".join(c for c in name.lower() if c.isalnum())
-            
+
         app_name_clean = clean_name(app_name)
         if not app_name_clean:
             return None
-            
+
         start_menu_paths = [
             Path(os.environ.get("ProgramData", "C:\\ProgramData")) / "Microsoft\\Windows\\Start Menu\\Programs",
             Path(os.environ.get("APPDATA", "")) / "Microsoft\\Windows\\Start Menu\\Programs",
@@ -180,7 +180,7 @@ class OpenAppTool(Tool):
             for p in menu_path.rglob("*.lnk"):
                 if app_name_clean in clean_name(p.stem):
                     return str(p)
-                    
+
         return None
     _WEBSITE_MAP = {
         # E-commerce & Shopping (India Focus)
@@ -198,20 +198,20 @@ class OpenAppTool(Tool):
         "reliancedigital": "https://www.reliancedigital.in",
         "jiomart": "https://www.jiomart.com",
         "tataneu": "https://www.tatadigital.com",
-        
+
         # Quick Commerce & Food Delivery (India)
         "blinkit": "https://blinkit.com",
         "zepto": "https://www.zeptonow.com",
         "bigbasket": "https://www.bigbasket.com",
         "swiggy": "https://www.swiggy.com",
         "zomato": "https://www.zomato.com",
-        
+
         # Pharmacies & Health (India)
         "pharmeasy": "https://pharmeasy.in",
         "1mg": "https://www.1mg.com",
         "netmeds": "https://www.netmeds.com",
         "apollo": "https://www.apollopharmacy.in",
-        
+
         # Travel, Tickets & Utilities (India)
         "makemytrip": "https://www.makemytrip.com",
         "cleartrip": "https://www.cleartrip.com",
@@ -222,7 +222,7 @@ class OpenAppTool(Tool):
         "ola": "https://www.olacabs.com",
         "uber": "https://www.uber.com/in/en/",
         "urbancompany": "https://www.urbancompany.com",
-        
+
         # Global E-commerce
         "ebay": "https://www.ebay.com",
         "walmart": "https://www.walmart.com",
@@ -249,7 +249,7 @@ class OpenAppTool(Tool):
         "instagram": "https://www.instagram.com",
         "linkedin": "https://www.linkedin.com",
         "whatsapp": "https://web.whatsapp.com",
-        
+
         # Social Media & Messaging
         "tiktok": "https://www.tiktok.com",
         "snapchat": "https://www.snapchat.com",
@@ -265,7 +265,7 @@ class OpenAppTool(Tool):
         "viber": "https://www.viber.com",
         "line": "https://line.me",
         "signal": "https://signal.org",
-        
+
         # AI Tools & Platforms
         "chatgpt": "https://chatgpt.com",
         "claude": "https://claude.ai",
@@ -287,7 +287,7 @@ class OpenAppTool(Tool):
         "elevenlabs": "https://elevenlabs.io",
         "suno": "https://suno.com",
         "udio": "https://www.udio.com",
-        
+
         # Google Apps / Workspace
         "drive": "https://drive.google.com",
         "googledrive": "https://drive.google.com",
@@ -317,7 +317,7 @@ class OpenAppTool(Tool):
         "googleearth": "https://earth.google.com",
         "news": "https://news.google.com",
         "googlenews": "https://news.google.com",
-        
+
         # Streaming Platforms
         "hotstar": "https://www.hotstar.com",
         "primevideo": "https://www.primevideo.com",
@@ -348,7 +348,7 @@ class OpenAppTool(Tool):
     async def execute(self, **params: Any) -> ToolResult:
         app_name = params.get("app_name", "").strip().lower()
         target_url = params.get("target_url", "").strip()
-        
+
         if not app_name:
             return ToolResult(success=False, error="No application name provided.")
 
@@ -360,9 +360,9 @@ class OpenAppTool(Tool):
                 # Handle URLs provided directly in app_name
                 if "." in app_name and " " not in app_name and not app_name.startswith("http"):
                     app_name = f"https://{app_name}"
-                    
+
                 cmd_exe = self._APP_MAP_WINDOWS.get(app_name)
-                
+
                 if cmd_exe:
                     try:
                         if target_url:
@@ -386,7 +386,7 @@ class OpenAppTool(Tool):
                             ps_cmd = f"Get-StartApps | Where-Object {{ ($_.Name -replace '[^a-zA-Z0-9]', '') -match '{app_name_clean}' }} | Select-Object -ExpandProperty AppID"
                             proc = subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd], capture_output=True, text=True, creationflags=0x08000000)
                             app_ids = [line.strip() for line in proc.stdout.strip().split("\n") if line.strip()]
-                            
+
                             if app_ids:
                                 subprocess.Popen(f'explorer.exe shell:AppsFolder\\{app_ids[0]}', shell=True)
                             else:
@@ -552,7 +552,7 @@ class CloseAppTool(Tool):
                     success=True,
                     output=f"'{raw_app_name}' is not currently running (or was already successfully closed). Tried checking: {tried}.",
                 )
-            
+
             elif platform.system() == "Darwin":
                 proc = await asyncio.create_subprocess_shell(f'killall "{app_name}"', stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
                 stdout, stderr = await proc.communicate()
@@ -632,9 +632,10 @@ class CloseAppTool(Tool):
             return None
 
         try:
-            import pygetwindow as gw
             import ctypes
+
             import psutil
+            import pygetwindow as gw
         except ImportError:
             return None
 
@@ -646,7 +647,7 @@ class CloseAppTool(Tool):
         hwnd = window._hWnd
         window.close()
         time.sleep(0.5)
-        
+
         # Verify and force kill if still open
         remaining_hwnds = {w._hWnd for w in gw.getAllWindows()}
         if hwnd in remaining_hwnds:
@@ -668,9 +669,10 @@ class CloseAppTool(Tool):
             return None
 
         try:
-            import pygetwindow as gw
             import ctypes
+
             import psutil
+            import pygetwindow as gw
         except ImportError:
             return None
 
@@ -691,7 +693,7 @@ class CloseAppTool(Tool):
             window.close()
 
         time.sleep(0.5)
-        
+
         # Verify and force kill if still open
         remaining_hwnds = {w._hWnd for w in gw.getAllWindows()}
         for window in matches:
@@ -792,13 +794,13 @@ class KeyboardActionTool(Tool):
         try:
             import pyautogui
             import pygetwindow as gw
-            
+
             # Briefly sleep to ensure any previous window activations are processed
             time.sleep(0.5)
-            
+
             key_list = keys.split('+')
             pyautogui.hotkey(*key_list)
-            
+
             return ToolResult(
                 success=True,
                 output=f"Successfully sent keyboard shortcut: {keys}",
@@ -875,7 +877,7 @@ class RunCommandTool(Tool):
                 output=output,
                 error=output["stderr"] if proc.returncode != 0 else None,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return ToolResult(success=False, error=f"Command timed out after {timeout}s.")
         except Exception as exc:
             return ToolResult(success=False, error=str(exc))
@@ -988,7 +990,7 @@ class ReadFileTool(Tool):
             return ToolResult(success=False, error=f"Not a file: {path}")
 
         try:
-            with open(path, "r", encoding="utf-8", errors="replace") as f:
+            with open(path, encoding="utf-8", errors="replace") as f:
                 lines = []
                 for i, line in enumerate(f):
                     if i >= max_lines:
@@ -1124,7 +1126,7 @@ class GetDateTimeTool(Tool):
 
     async def execute(self, **params: Any) -> ToolResult:
         now = datetime.datetime.now()
-        utc = datetime.datetime.now(datetime.timezone.utc)
+        utc = datetime.datetime.now(datetime.UTC)
         return ToolResult(
             success=True,
             output={

@@ -4,6 +4,7 @@ Jarvis OS - Monitoring Daemon
 Background task for tracking system health (CPU, RAM, Disk).
 """
 import asyncio
+
 import psutil
 import structlog
 
@@ -36,15 +37,15 @@ class SystemMonitorDaemon:
                 cpu = psutil.cpu_percent(interval=1)
                 ram = psutil.virtual_memory().percent
                 disk = psutil.disk_usage('/').percent
-                
+
                 # In a real app, this would be published to an EventBus or WebSocket
                 logger.debug("system_monitor.heartbeat", cpu=cpu, ram=ram, disk=disk)
-                
+
                 # Check for critical thresholds
                 if cpu > 90.0:
                     logger.warning("system_monitor.alert", resource="cpu", value=cpu)
-                    
+
             except Exception as e:
                 logger.error("system_monitor.error", error=str(e))
-                
+
             await asyncio.sleep(self.interval)

@@ -1,6 +1,7 @@
 import subprocess
-from typing import Any
+
 from jarvis.tools.base import Tool, ToolCategory, ToolMetadata, ToolParameter, ToolResult
+
 
 class StaticAnalysisTool(Tool):
     @property
@@ -14,7 +15,7 @@ class StaticAnalysisTool(Tool):
                 ToolParameter(name="path", type="string", description="Path to scan")
             ]
         )
-        
+
     async def execute(self, **kwargs) -> ToolResult:
         path = kwargs.get("path", ".")
         try:

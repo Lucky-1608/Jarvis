@@ -6,7 +6,6 @@ Manages the Playwright lifecycle for browser automation.
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 
 import structlog
@@ -25,12 +24,12 @@ class BrowserEngine:
     """
 
     @classmethod
-    async def get_page(cls) -> "Page":
+    async def get_page(cls) -> Page:
         """Get the active Playwright page, initializing if necessary."""
         global _playwright, _browser, _context, _page
 
         try:
-            from playwright.async_api import async_playwright, Page
+            from playwright.async_api import Page, async_playwright
         except ImportError:
             raise RuntimeError(
                 "playwright is required for browser automation. "
@@ -64,7 +63,7 @@ class BrowserEngine:
         page = await cls.get_page()
         logger.info("browser.navigating", url=url)
         response = await page.goto(url, wait_until="domcontentloaded")
-        
+
         return {
             "url": page.url,
             "title": await page.title(),
@@ -91,13 +90,13 @@ class BrowserEngine:
     async def extract_content(cls, format: str = "text") -> dict[str, Any]:
         """Extract text or HTML content from the current page."""
         page = await cls.get_page()
-        
+
         if format == "html":
             content = await page.content()
         else:
             # Extract plain text from body
             content = await page.evaluate("document.body.innerText")
-            
+
         return {
             "url": page.url,
             "title": await page.title(),
@@ -109,7 +108,7 @@ class BrowserEngine:
     async def shutdown(cls) -> None:
         """Close the browser and Playwright instances."""
         global _playwright, _browser, _context, _page
-        
+
         logger.info("browser.shutting_down")
         if _page:
             await _page.close()

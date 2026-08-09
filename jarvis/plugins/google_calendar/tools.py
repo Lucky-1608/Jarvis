@@ -4,12 +4,12 @@ Jarvis OS — Google Calendar Tools.
 Provides 8 tools for Google Calendar interaction via the Calendar API v3.
 """
 
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from jarvis.tools.base import Tool, ToolCategory, ToolMetadata, ToolParameter, ToolResult
-from jarvis.integrations.google_client import GoogleClient, get_google_account
 from jarvis.database.core import AsyncSessionLocal
+from jarvis.integrations.google_client import GoogleClient, get_google_account
+from jarvis.tools.base import Tool, ToolCategory, ToolMetadata, ToolParameter, ToolResult
 
 CALENDAR_BASE = "https://www.googleapis.com/calendar/v3"
 
@@ -86,7 +86,7 @@ class CalendarListEventsTool(Tool):
         )
 
     async def execute(self, **kwargs) -> ToolResult:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         time_min = kwargs.get("time_min") or now.isoformat()
         time_max = kwargs.get("time_max") or (now + timedelta(days=7)).isoformat()
         max_results = min(int(kwargs.get("max_results", 20)), 50)
@@ -476,7 +476,7 @@ class CalendarGetAgendaTool(Tool):
 
     async def execute(self, **kwargs) -> ToolResult:
         account_email = kwargs.get("account_email")
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         end_of_day = now.replace(hour=23, minute=59, second=59)
 
         db, account, client = await _get_client_and_account(account_email)

@@ -7,7 +7,8 @@ Falls back when OpenCode is unavailable or for simple tasks.
 
 from __future__ import annotations
 
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
 import httpx
 import structlog
@@ -62,7 +63,7 @@ class OllamaProvider(AIProvider):
         }
         if tools:
             payload["tools"] = tools
-            
+
         if response_format:
             payload["format"] = "json"
 

@@ -6,11 +6,10 @@ Transcript extraction uses the youtube-transcript-api library (fallback to capti
 """
 
 import re
-from typing import Any
 
-from jarvis.tools.base import Tool, ToolCategory, ToolMetadata, ToolParameter, ToolResult
-from jarvis.integrations.google_client import GoogleClient, get_google_account
 from jarvis.database.core import AsyncSessionLocal
+from jarvis.integrations.google_client import GoogleClient, get_google_account
+from jarvis.tools.base import Tool, ToolCategory, ToolMetadata, ToolParameter, ToolResult
 
 YOUTUBE_BASE = "https://www.googleapis.com/youtube/v3"
 

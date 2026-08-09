@@ -13,7 +13,7 @@ Never injects unnecessary history — every token counts (spec Vol 4).
 
 from __future__ import annotations
 
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from jarvis.memory.graphify_registry import GraphifyRegistry
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 import structlog
 
 from jarvis.config.settings import get_settings
-from jarvis.memory.memory_manager import MemoryManager, MemoryType
+from jarvis.memory.memory_manager import MemoryManager
 from jarvis.providers.base import Message
 
 logger = structlog.get_logger(__name__)
@@ -82,7 +82,7 @@ class ContextManager:
     and the AI router — it decides *what* the LLM sees.
     """
 
-    def __init__(self, memory: MemoryManager, graph_registry: "GraphifyRegistry | None" = None) -> None:
+    def __init__(self, memory: MemoryManager, graph_registry: GraphifyRegistry | None = None) -> None:
         self._memory = memory
         self._max_context_memories = 10
         self._max_context_tokens = 4000  # approximate budget

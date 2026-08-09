@@ -1,6 +1,7 @@
 import socket
-from typing import Any
+
 from jarvis.tools.base import Tool, ToolCategory, ToolMetadata, ToolParameter, ToolResult
+
 
 class NetworkScannerTool(Tool):
     @property
@@ -15,11 +16,11 @@ class NetworkScannerTool(Tool):
                 ToolParameter(name="ports", type="string", description="List of ports to scan")
             ]
         )
-        
+
     async def execute(self, **kwargs) -> ToolResult:
         host = kwargs.get("host")
         ports = kwargs.get("ports", [22, 80, 443, 8080])
-        
+
         open_ports = []
         try:
             for port in ports:

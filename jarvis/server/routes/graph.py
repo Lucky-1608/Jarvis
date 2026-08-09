@@ -84,7 +84,7 @@ async def add_project(req: AddProjectRequest):
 async def list_projects():
     if not _brain or not hasattr(_brain, '_graph_registry') or not _brain._graph_registry:
         raise HTTPException(status_code=503, detail="Knowledge graph registry not available")
-    
+
     # Try multiple ways to get projects depending on registry implementation
     registry = _brain._graph_registry
     if hasattr(registry, 'list_projects'):
@@ -95,5 +95,5 @@ async def list_projects():
         projects = list(registry._projects.keys())
     else:
         projects = []
-    
+
     return {"projects": projects}

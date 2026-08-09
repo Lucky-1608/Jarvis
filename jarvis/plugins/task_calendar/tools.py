@@ -4,9 +4,9 @@ Jarvis OS — Google Tasks Tools.
 Provides 5 tools for Google Tasks API v1 interaction.
 """
 
-from jarvis.tools.base import Tool, ToolCategory, ToolMetadata, ToolParameter, ToolResult
-from jarvis.integrations.google_client import GoogleClient, get_google_account
 from jarvis.database.core import AsyncSessionLocal
+from jarvis.integrations.google_client import GoogleClient, get_google_account
+from jarvis.tools.base import Tool, ToolCategory, ToolMetadata, ToolParameter, ToolResult
 
 TASKS_BASE = "https://tasks.googleapis.com/tasks/v1"
 
@@ -196,7 +196,7 @@ class TasksUpdateTaskTool(Tool):
                     return ToolResult(success=False, error=f"Task not found: {get_resp.status_code}")
 
                 task = get_resp.json()
-                
+
                 if "title" in kwargs:
                     task["title"] = kwargs["title"]
                 if "notes" in kwargs:

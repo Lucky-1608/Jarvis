@@ -110,7 +110,7 @@ class WebSearchTool(Tool):
             if url and title:
                 # DDG wraps URLs in a redirect; extract the real URL
                 if "uddg=" in url:
-                    from urllib.parse import unquote, parse_qs, urlparse
+                    from urllib.parse import parse_qs, unquote, urlparse
 
                     parsed = urlparse(url)
                     qs = parse_qs(parsed.query)

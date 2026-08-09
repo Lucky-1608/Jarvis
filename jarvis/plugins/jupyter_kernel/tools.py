@@ -1,5 +1,5 @@
-from typing import Any
 from jarvis.tools.base import Tool, ToolCategory, ToolMetadata, ToolParameter, ToolResult
+
 
 class JupyterExecutionTool(Tool):
     @property
@@ -13,11 +13,12 @@ class JupyterExecutionTool(Tool):
                 ToolParameter(name="code", type="string", description="Python code to run")
             ]
         )
-        
+
     async def execute(self, **kwargs) -> ToolResult:
         code = kwargs.get("code")
         try:
-            import io, sys, contextlib
+            import contextlib
+            import io
             output = io.StringIO()
             with contextlib.redirect_stdout(output):
                 exec(code, globals())

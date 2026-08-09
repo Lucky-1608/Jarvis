@@ -12,7 +12,6 @@ import io
 import tempfile
 import wave
 from pathlib import Path
-from typing import Any
 
 import structlog
 
@@ -51,8 +50,8 @@ class AudioRecorder:
         Returns raw PCM audio bytes (16kHz, mono, 16-bit).
         """
         try:
-            import sounddevice as sd
             import numpy as np
+            import sounddevice as sd
         except ImportError:
             raise RuntimeError(
                 "sounddevice is required for audio recording. "
@@ -83,7 +82,7 @@ class AudioRecorder:
             # Check for silence (normalize int16 to float32 [-1.0, 1.0])
             audio_float = audio_data.astype(np.float32) / 32768.0
             volume = np.sqrt(np.mean(audio_float**2))
-            
+
             if volume < silence_threshold:
                 silent_chunks += 1
             else:
@@ -136,8 +135,8 @@ class AudioPlayer:
             raise FileNotFoundError(f"Audio file not found: {filepath}")
 
         try:
-            import sounddevice as sd
             import numpy as np
+            import sounddevice as sd
 
             # Read WAV file
             with wave.open(str(filepath), "rb") as wf:

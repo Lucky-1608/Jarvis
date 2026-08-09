@@ -1,6 +1,7 @@
 import os
-from typing import Any
+
 from jarvis.tools.base import Tool, ToolCategory, ToolMetadata, ToolParameter, ToolResult
+
 
 class GenerateImageTool(Tool):
     @property
@@ -14,12 +15,12 @@ class GenerateImageTool(Tool):
                 ToolParameter(name="prompt", type="string", description="Description of the image")
             ]
         )
-        
+
     async def execute(self, **kwargs) -> ToolResult:
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             return ToolResult(success=False, error="OPENAI_API_KEY environment variable not set.")
-            
+
         prompt = kwargs.get("prompt")
         try:
             import requests

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import subprocess
 from typing import Any
+
 import structlog
 
 from jarvis.tools.base import (
@@ -43,7 +44,7 @@ class TwitterSearchTool(Tool):
         query = params.get("query", "").strip()
         if not query:
             return ToolResult(success=False, error="Query cannot be empty.")
-            
+
         try:
             # Using twitter-cli search
             result = subprocess.run(
@@ -61,7 +62,7 @@ class TwitterSearchTool(Tool):
             )
         except FileNotFoundError:
             return ToolResult(
-                success=False, 
+                success=False,
                 error="twitter-cli is not installed. Please install it first (e.g., npm install -g twitter-cli or equivalent)."
             )
         except subprocess.CalledProcessError as e:
@@ -90,7 +91,7 @@ class RedditSearchTool(Tool):
         query = params.get("query", "").strip()
         if not query:
             return ToolResult(success=False, error="Query cannot be empty.")
-            
+
         try:
             result = subprocess.run(
                 ["rdt-cli", "search", query],
@@ -107,7 +108,7 @@ class RedditSearchTool(Tool):
             )
         except FileNotFoundError:
             return ToolResult(
-                success=False, 
+                success=False,
                 error="rdt-cli is not installed. Please install it first."
             )
         except subprocess.CalledProcessError as e:
@@ -136,7 +137,7 @@ class YouTubeSearchTool(Tool):
         query = params.get("query", "").strip()
         if not query:
             return ToolResult(success=False, error="Query cannot be empty.")
-            
+
         try:
             search_query = f"ytsearch3:{query}"
             result = subprocess.run(
@@ -154,7 +155,7 @@ class YouTubeSearchTool(Tool):
             )
         except FileNotFoundError:
             return ToolResult(
-                success=False, 
+                success=False,
                 error="yt-dlp is not installed. Please install it first (e.g., pip install yt-dlp)."
             )
         except subprocess.CalledProcessError as e:

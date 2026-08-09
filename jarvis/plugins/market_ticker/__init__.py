@@ -1,11 +1,13 @@
 import httpx
+
+from jarvis.events.bus import EventBus
 from jarvis.tools.base import Tool, ToolCategory, ToolMetadata, ToolParameter, ToolResult
 from jarvis.tools.registry import ToolRegistry
-from jarvis.events.bus import EventBus
+
 
 class GetCryptoPriceTool(Tool):
     """Fetches real-time crypto prices."""
-    
+
     @property
     def metadata(self) -> ToolMetadata:
         return ToolMetadata(
@@ -33,10 +35,10 @@ class GetCryptoPriceTool(Tool):
                 response = await client.get(url)
                 response.raise_for_status()
                 data = response.json()
-                
+
                 if coin_id not in data:
                     return ToolResult(success=False, error=f"Could not find price data for '{coin_id}'. Ensure you are using the correct CoinGecko ID.")
-                    
+
                 price = data[coin_id].get("usd")
                 return ToolResult(success=True, output=f"The current price of {coin_id.capitalize()} is ${price:,.2f} USD.")
         except Exception as e:

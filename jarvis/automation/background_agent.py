@@ -6,6 +6,7 @@ Base class for proactive tasks that run in the background.
 
 import asyncio
 from typing import Any
+
 import structlog
 
 from jarvis.events.bus import Event, EventBus
@@ -31,7 +32,7 @@ class BackgroundAgent:
         """Start the agent's background task."""
         if self._running:
             return
-            
+
         self._running = True
         self._task = asyncio.create_task(self._main_loop())
         logger.info("background_agent.started", agent=self.name, interval=self._interval)
@@ -72,7 +73,7 @@ class BackgroundAgent:
         }
         if data:
             payload["data"] = data
-            
+
         await self._bus.publish(Event(
             type="hud.notification",
             data=payload,

@@ -1,10 +1,13 @@
 """
 Jarvis OS - Database Models
 """
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, JSON
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import JSON, Column, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+
 from jarvis.database.core import Base
+
 
 class User(Base):
     __tablename__ = "users"
@@ -66,5 +69,17 @@ class OAuthAccount(Base):
     scopes = Column(String, nullable=True)  # Space-separated granted scopes
     metadata_ = Column("metadata", JSON, default={})
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
+
     user = relationship("User", back_populates="oauth_accounts")
+
+
+class MemoryNode(Base):
+    __tablename__ = "memory_nodes"
+
+    id = Column(String(50), primary_key=True, index=True)
+    content = Column(Text, nullable=False)
+    memory_type = Column(String(50), index=True, nullable=False)
+    metadata_ = Column("metadata", JSON, default={})
+    timestamp = Column(Float, nullable=False)
+    importance = Column(Float, default=0.5)
+    embedding = Column(Vector(384))

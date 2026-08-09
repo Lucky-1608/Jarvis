@@ -6,14 +6,12 @@ All tools use the shared GoogleClient for authenticated requests.
 """
 
 import base64
-import json
-from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from typing import Any
+from email.mime.text import MIMEText
 
-from jarvis.tools.base import Tool, ToolCategory, ToolMetadata, ToolParameter, ToolResult
-from jarvis.integrations.google_client import GoogleClient, get_google_account
 from jarvis.database.core import AsyncSessionLocal
+from jarvis.integrations.google_client import GoogleClient, get_google_account
+from jarvis.tools.base import Tool, ToolCategory, ToolMetadata, ToolParameter, ToolResult
 
 GMAIL_BASE = "https://gmail.googleapis.com/gmail/v1/users/me"
 

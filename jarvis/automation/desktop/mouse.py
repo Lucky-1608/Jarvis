@@ -27,7 +27,7 @@ class MouseController:
         # PyAutoGUI functions block, so run them in a separate thread
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, lambda: pyautogui.moveTo(x, y, duration))
-        
+
         logger.info("mouse.moved", x=x, y=y)
         return {"action": "move", "x": x, "y": y, "status": "success"}
 
@@ -41,7 +41,7 @@ class MouseController:
 
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, lambda: pyautogui.click(x=x, y=y, button=button, clicks=clicks))
-        
+
         logger.info("mouse.clicked", x=x, y=y, button=button, clicks=clicks)
         return {"action": "click", "x": x, "y": y, "button": button, "clicks": clicks, "status": "success"}
 
@@ -55,6 +55,6 @@ class MouseController:
 
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, lambda: pyautogui.dragTo(x, y, duration, button=button))
-        
+
         logger.info("mouse.dragged", x=x, y=y, button=button)
         return {"action": "drag", "x": x, "y": y, "button": button, "status": "success"}

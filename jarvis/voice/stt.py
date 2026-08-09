@@ -6,15 +6,17 @@ Converts spoken audio into text.
 
 from __future__ import annotations
 
-import os
 import asyncio
-import structlog
+import os
+from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any
 
 import httpx
-from jarvis.events.bus import Event, EventTypes, get_event_bus
+import structlog
+
 from jarvis.config.settings import get_settings
+from jarvis.events.bus import get_event_bus
 from jarvis.providers.base import APIKeyRotator
 
 logger = structlog.get_logger(__name__)
@@ -30,7 +32,7 @@ class SpeechToText:
         self._bus = get_event_bus()
         self._settings = get_settings()
         self._elevenlabs_rotator = APIKeyRotator(
-            self._settings.elevenlabs.api_keys, 
+            self._settings.elevenlabs.api_keys,
             self._settings.elevenlabs.api_key
         )
 
@@ -41,7 +43,7 @@ class SpeechToText:
         if not speech_key or not service_region:
             logger.error("stt.azure_missing_credentials", msg="AZURE_SPEECH_KEY or AZURE_SPEECH_REGION not set")
             raise ValueError("Missing Azure Speech credentials (AZURE_SPEECH_KEY, AZURE_SPEECH_REGION)")
-        
+
         speech_config = speechsdk.SpeechConfig(subscription=speech_key, region=service_region)
         if language:
             speech_config.speech_recognition_language = language
@@ -56,12 +58,12 @@ class SpeechToText:
         try:
             import azure.cognitiveservices.speech as speechsdk
             speech_config = self._get_speech_config(language)
-            
+
             # Note: Azure expects a specific audio format, typically 16kHz 16-bit mono.
             push_stream = speechsdk.audio.PushAudioInputStream()
             audio_config = speechsdk.audio.AudioConfig(stream=push_stream)
             speech_recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config, audio_config=audio_config)
-            
+
             push_stream.write(audio_bytes)
             push_stream.close()
 
@@ -86,23 +88,23 @@ class SpeechToText:
         api_key = self._elevenlabs_rotator.get_key()
         if not api_key:
             raise ValueError("ElevenLabs API key not configured.")
-        
+
         url = f"{self._settings.elevenlabs.base_url.rstrip('/')}/v1/speech-to-text"
         headers = {
             "xi-api-key": api_key
         }
-        
+
         files = {
             "file": ("audio.wav", audio_bytes, "audio/wav")
         }
-        
+
         data = {
             "model_id": "scribe_v1"
         }
-        
+
         if language:
             data["language_code"] = language.split('-')[0]
-            
+
         async with httpx.AsyncClient(timeout=self._settings.elevenlabs.timeout) as client:
             response = await client.post(url, headers=headers, files=files, data=data)
             response.raise_for_status()
@@ -116,7 +118,7 @@ class SpeechToText:
     ) -> str:
         """Transcribe audio bytes using configured STT provider, falling back to Azure."""
         provider = self._settings.stt_provider
-        
+
         try:
             if provider == "elevenlabs":
                 return await self._transcribe_elevenlabs(audio_bytes, language)
@@ -128,7 +130,7 @@ class SpeechToText:
             if provider == "azure":
                 logger.error("stt.azure_failed", error=str(e))
                 return ""
-                
+
             logger.warning("stt.primary_failed", provider=provider, error=str(e), msg="Falling back to Azure STT.")
             try:
                 return await self._transcribe_azure_bytes(audio_bytes, language)

@@ -6,8 +6,9 @@ and reduce LLM hallucinations.
 from __future__ import annotations
 
 import json
-from typing import Any
+
 import structlog
+
 from jarvis.providers.base import Message
 from jarvis.router.ai_router import AIRouter
 from jarvis.tools.registry import ToolRegistry
@@ -55,20 +56,20 @@ class ToolSelector:
                 response_format={"type": "json_object"},
                 temperature=0.0,
             )
-            
+
             content = response.content or ""
             # Some providers might wrap json in markdown block
             content = content.replace("```json", "").replace("```", "").strip()
-            
+
             data = json.loads(content)
             selected_tools = data.get("tools", [])
-            
+
             if not isinstance(selected_tools, list):
                 selected_tools = []
-                
+
             logger.info("tool_selector.success", input_preview=user_input[:30], selected_count=len(selected_tools))
             return [str(t) for t in selected_tools]
-            
+
         except Exception as e:
             logger.warning("tool_selector.failed", error=str(e))
             # Fallback to returning ALL tools so the pipeline doesn't break

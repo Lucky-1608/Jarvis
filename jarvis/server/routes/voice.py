@@ -108,8 +108,9 @@ async def transcribe_stream(ws: WebSocket):
     Server writes cumulative audio to a temp file, runs STT, and returns text.
     """
     await ws.accept()
-    from jarvis.voice.stt import SpeechToText
     import structlog
+
+    from jarvis.voice.stt import SpeechToText
     logger = structlog.get_logger(__name__)
 
     stt = SpeechToText(model_size="base")

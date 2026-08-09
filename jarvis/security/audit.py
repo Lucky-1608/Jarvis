@@ -5,6 +5,7 @@ Provides functions to log sensitive actions to the relational database.
 """
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from jarvis.database.models import AuditLog
 
 logger = structlog.get_logger(__name__)

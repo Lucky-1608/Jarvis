@@ -12,8 +12,6 @@ from __future__ import annotations
 
 import hashlib
 import os
-from functools import lru_cache
-from typing import Any
 
 import httpx
 import structlog
@@ -149,16 +147,16 @@ class JarvisEmbeddingFunction:
     Pass this to ChromaDB collection creation so it uses
     BAAI/bge-small-en-v1.5 automatically.
     """
-    
+
     def name(self) -> str:
         return "JarvisEmbeddingFunction"
 
     def __call__(self, input: list[str]) -> list[list[float]]:
         return embed_texts(input)
-        
+
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         return embed_texts(texts)
-        
+
     def embed_query(self, text: str) -> list[float]:
         from jarvis.memory.embeddings import embed_text
         return embed_text(text)

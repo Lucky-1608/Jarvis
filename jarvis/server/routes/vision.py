@@ -10,8 +10,6 @@ POST /api/vision/errors      — Check screen for errors
 from __future__ import annotations
 
 import base64
-import tempfile
-from pathlib import Path
 
 from fastapi import APIRouter, File, UploadFile
 from pydantic import BaseModel, Field

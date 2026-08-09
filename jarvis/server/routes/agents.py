@@ -9,12 +9,15 @@ POST /api/agents/{id}/terminate — Terminate an agent
 """
 
 from __future__ import annotations
+
 import time
-from pydantic import BaseModel
+
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+
 from jarvis.server.dependencies import get_brain
 from jarvis.team.sub_agent import SubAgent
-from jarvis.tools.builtin.team_tools import get_agent_history, _agent_history
+from jarvis.tools.builtin.team_tools import _agent_history, get_agent_history
 
 router = APIRouter()
 
@@ -32,7 +35,7 @@ def _get_system_agents() -> list[dict]:
             "persona": "Decomposes complex user requests into structured, multi-step execution plans using LLM reasoning.",
             "status": "running",
             "created_at": None,
-            "task": f"Watching for complex requests to decompose",
+            "task": "Watching for complex requests to decompose",
         },
         {
             "id": "sys_executor",
@@ -98,7 +101,7 @@ def _get_system_agents() -> list[dict]:
             "task": "Routing AI requests to optimal provider",
         },
     ]
-    
+
     # Inject registered Team/Specialist agents
     try:
         from jarvis.team.registry import team_registry
@@ -117,7 +120,7 @@ def _get_system_agents() -> list[dict]:
                 })
     except ImportError:
         pass
-        
+
     return system_agents
 
 

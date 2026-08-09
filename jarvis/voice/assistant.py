@@ -18,7 +18,7 @@ from typing import Any
 
 import structlog
 
-from jarvis.events.bus import Event, EventTypes, get_event_bus
+from jarvis.events.bus import get_event_bus
 
 logger = structlog.get_logger(__name__)
 
@@ -51,9 +51,9 @@ class VoiceAssistant:
             return
 
         from jarvis.brain.jarvis_brain import JarvisBrain
+        from jarvis.voice.audio import AudioRecorder
         from jarvis.voice.stt import SpeechToText
         from jarvis.voice.tts import TextToSpeech
-        from jarvis.voice.audio import AudioRecorder
 
         self._brain = JarvisBrain()
         await self._brain.initialize()

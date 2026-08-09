@@ -17,7 +17,6 @@ load_dotenv()
 traceroot.initialize()
 
 import asyncio
-import sys
 
 import click
 from rich.console import Console

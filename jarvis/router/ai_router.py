@@ -13,7 +13,8 @@ Routing strategy (from spec Volume 5):
 
 from __future__ import annotations
 
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
 import structlog
 
@@ -26,13 +27,12 @@ from jarvis.providers.base import (
     ProviderHealth,
     StreamChunk,
 )
+from jarvis.providers.gemini import GeminiProvider
+from jarvis.providers.grok import GrokProvider
+from jarvis.providers.nvidia import NvidiaNimProvider
 from jarvis.providers.ollama import OllamaProvider
 from jarvis.providers.ollama_cloud import OllamaCloudProvider
 from jarvis.providers.opencode import OpenCodeProvider
-
-from jarvis.providers.nvidia import NvidiaNimProvider
-from jarvis.providers.grok import GrokProvider
-from jarvis.providers.gemini import GeminiProvider
 
 logger = structlog.get_logger(__name__)
 
@@ -61,11 +61,11 @@ class AIRouter:
     def __init__(self) -> None:
         settings = get_settings()
         self._primary_name = settings.ai_primary_provider
-        
+
         # Handle multiple fallback providers separated by comma
         fallback_str = getattr(settings, 'ai_fallback_providers', getattr(settings, 'ai_fallback_provider', ''))
         self._fallback_names = [n.strip() for n in fallback_str.split(',') if n.strip()]
-        
+
         self._providers: dict[str, AIProvider] = {}
         self._metrics: dict[str, list[float]] = {}  # provider → latency samples
         self._bus = get_event_bus()

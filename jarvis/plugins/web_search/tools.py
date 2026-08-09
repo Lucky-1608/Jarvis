@@ -1,5 +1,5 @@
-from typing import Any
 from jarvis.tools.base import Tool, ToolCategory, ToolMetadata, ToolParameter, ToolResult
+
 
 class WebSearchTool(Tool):
     @property
@@ -13,19 +13,20 @@ class WebSearchTool(Tool):
                 ToolParameter(name="query", type="string", description="Search query")
             ]
         )
-        
+
     async def execute(self, **kwargs) -> ToolResult:
         query = kwargs.get("query")
         if not query:
             return ToolResult(success=False, error="Query is required")
-            
+
         try:
             import os
-            import httpx
             from urllib.parse import quote
-            
+
+            import httpx
+
             jina_api_key = os.getenv("JINA_API_KEY")
-            
+
             if jina_api_key:
                 encoded_query = quote(query)
                 with httpx.Client(timeout=30.0) as client:

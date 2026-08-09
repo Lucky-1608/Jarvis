@@ -1,6 +1,5 @@
-import os
-from typing import Any
 from jarvis.tools.base import Tool, ToolCategory, ToolMetadata, ToolParameter, ToolResult
+
 
 class SQLQueryTool(Tool):
     @property
@@ -16,15 +15,15 @@ class SQLQueryTool(Tool):
                 ToolParameter(name="connection_string", type="string", description="The database connection URL. Required.")
             ]
         )
-        
+
     async def execute(self, **kwargs) -> ToolResult:
         db_url = kwargs.get("connection_string")
         if not db_url:
             return ToolResult(success=False, error="No database connection string provided. You must pass 'connection_string'.")
-            
+
         query = kwargs.get("query")
         fetch = kwargs.get("fetch", True)
-        
+
         try:
             from sqlalchemy import create_engine, text
             engine = create_engine(db_url)

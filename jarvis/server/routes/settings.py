@@ -4,10 +4,13 @@ Jarvis OS - Settings Routes
 API endpoints for managing API keys and checking integration statuses.
 """
 import os
+from datetime import UTC
+
 import structlog
 from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from jarvis.database.core import get_db
 from jarvis.database.models import OAuthAccount
 
@@ -25,13 +28,13 @@ def mask_key(key: str, prefix: str = "sk-") -> str | None:
 @router.get("/keys")
 async def get_api_keys():
     """Returns the masked API keys for the current user/system."""
-    
+
     opencode_key = os.getenv("OPENCODE_API_KEY", "")
     nvidia_key = os.getenv("NVIDIA_API_KEY", "")
     grok_key = os.getenv("GROK_API_KEY", "")
     gemini_key = os.getenv("GEMINI_API_KEY", "")
     jina_key = os.getenv("JINA_API_KEY", "")
-    
+
     return {
         "opencode": mask_key(opencode_key, "sk-"),
         "nvidia": mask_key(nvidia_key, "nvapi-"),
@@ -48,7 +51,7 @@ async def get_integrations_status(db: AsyncSession = Depends(get_db)):
     # Temporarily assume user_id 1 for local OS usage
     result = await db.execute(select(OAuthAccount).where(OAuthAccount.user_id == 1))
     accounts = result.scalars().all()
-    
+
     def _account_info(acc: OAuthAccount) -> dict:
         info = {
             "id": acc.id,
@@ -59,10 +62,10 @@ async def get_integrations_status(db: AsyncSession = Depends(get_db)):
         expires = getattr(acc, "token_expires_at", None)
         if expires:
             info["token_expires_at"] = expires.isoformat()
-            from datetime import datetime, timezone
-            info["token_active"] = datetime.now(timezone.utc) < expires.replace(
-                tzinfo=timezone.utc
-            ) if expires.tzinfo is None else datetime.now(timezone.utc) < expires
+            from datetime import datetime
+            info["token_active"] = datetime.now(UTC) < expires.replace(
+                tzinfo=UTC
+            ) if expires.tzinfo is None else datetime.now(UTC) < expires
         else:
             info["token_expires_at"] = None
             info["token_active"] = None
@@ -99,9 +102,11 @@ async def get_system_settings():
         "ai_tool_selector_enabled": settings.ai_tool_selector_enabled
     }
 
+
 from pydantic import BaseModel
-from typing import Dict, Any
+
 from jarvis.utils.env_updater import update_env_file
+
 
 class SystemSettingsUpdate(BaseModel):
     ai_tool_selector_enabled: bool
@@ -112,20 +117,20 @@ async def update_system_settings(data: SystemSettingsUpdate):
     from jarvis.config.settings import get_settings
     settings = get_settings()
     settings.ai_tool_selector_enabled = data.ai_tool_selector_enabled
-    
+
     # Persist to .env
     env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), ".env")
     update_env_file(env_path, {
         "AI_TOOL_SELECTOR_ENABLED": "true" if data.ai_tool_selector_enabled else "false"
     })
-    
+
     return {"success": True, "ai_tool_selector_enabled": settings.ai_tool_selector_enabled}
 
 @router.post("/plugins")
-async def update_plugin_keys(keys: Dict[str, str]):
+async def update_plugin_keys(keys: dict[str, str]):
     """Updates plugin API keys in .env and runtime environment."""
     env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), ".env")
-    
+
     # Map frontend key names to .env variables
     key_mapping = {
         "github_token": "GITHUB_TOKEN",
@@ -133,16 +138,16 @@ async def update_plugin_keys(keys: Dict[str, str]):
         "eth_rpc_url": "ETH_RPC_URL",
         "database_url": "DATABASE_URL"
     }
-    
+
     updates = {}
     for k, v in keys.items():
         if k in key_mapping and v:
             # Only update if it's not a masked string
             if '***' not in v and '...' not in v:
                 updates[key_mapping[k]] = v
-                
+
     if updates:
         update_env_file(env_path, updates)
-        
+
     return {"success": True, "updated_keys": list(updates.keys())}
 

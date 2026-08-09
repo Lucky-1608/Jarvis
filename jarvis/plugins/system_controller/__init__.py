@@ -1,13 +1,15 @@
-import subprocess
 import os
 import platform
+import subprocess
+
+from jarvis.events.bus import EventBus
 from jarvis.tools.base import Tool, ToolCategory, ToolMetadata, ToolParameter, ToolResult
 from jarvis.tools.registry import ToolRegistry
-from jarvis.events.bus import EventBus
+
 
 class ExecuteCommandTool(Tool):
     """Executes a local system command."""
-    
+
     @property
     def metadata(self) -> ToolMetadata:
         return ToolMetadata(
@@ -28,21 +30,21 @@ class ExecuteCommandTool(Tool):
         command = kwargs.get("command")
         if not command:
             return ToolResult(success=False, error="No command provided.")
-            
+
         try:
             # Use shell=True to allow shell builtins and pipes
             result = subprocess.run(
-                command, 
-                shell=True, 
-                capture_output=True, 
-                text=True, 
+                command,
+                shell=True,
+                capture_output=True,
+                text=True,
                 timeout=30.0
             )
-            
+
             output = result.stdout
             if result.stderr:
                 output += f"\n[STDERR]\n{result.stderr}"
-                
+
             return ToolResult(success=result.returncode == 0, output=output.strip() or "Command executed successfully with no output.")
         except subprocess.TimeoutExpired:
             return ToolResult(success=False, error=f"Command '{command}' timed out.")
@@ -51,7 +53,7 @@ class ExecuteCommandTool(Tool):
 
 class GetSystemStatsTool(Tool):
     """Gets basic system statistics."""
-    
+
     @property
     def metadata(self) -> ToolMetadata:
         return ToolMetadata(
@@ -80,7 +82,7 @@ class GetSystemStatsTool(Tool):
                 stats["memory_used_percent"] = mem.percent
             except ImportError:
                 stats["note"] = "psutil module not installed; CPU/RAM usage not available."
-                
+
             return ToolResult(success=True, output=stats)
         except Exception as e:
             return ToolResult(success=False, error=f"Error getting system stats: {str(e)}")

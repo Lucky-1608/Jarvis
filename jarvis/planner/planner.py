@@ -194,7 +194,7 @@ class Planner:
             )
 
             content = response.content.strip()
-            
+
             # Extract JSON from markdown block or outermost braces
             import re
             json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", content, re.DOTALL)
@@ -204,7 +204,7 @@ class Planner:
                 brace_match = re.search(r"(\{.*\})", content, re.DOTALL)
                 if brace_match:
                     content = brace_match.group(1)
-            
+
             plan_data = json.loads(content)
             plan = self._parse_plan(user_input, plan_data)
 
@@ -233,7 +233,7 @@ class Planner:
     def _parse_plan(self, goal: str, data: dict[str, Any]) -> ExecutionPlan:
         """Parse the LLM JSON response into an ``ExecutionPlan``."""
         steps = []
-        
+
         # Handle simplified {"tool": "name", "args": {...}} format from weaker models
         if "tool" in data and ("args" in data or "params" in data or "arguments" in data) and "steps" not in data:
             tool_name = data["tool"]
@@ -254,12 +254,12 @@ class Planner:
                 tool_name = step_data.get("tool")
                 if tool_name == "null" or tool_name is None:
                     tool_name = None
-    
+
                 # Validate tool exists
                 if tool_name and tool_name not in self._tools:
                     logger.warning("planner.unknown_tool", tool=tool_name)
                     tool_name = None  # fall back to AI response
-    
+
                 steps.append(PlanStep(
                     id=step_data.get("id", len(steps)),
                     description=step_data.get("description", ""),

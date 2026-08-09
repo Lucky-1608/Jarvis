@@ -3,14 +3,15 @@ Jarvis OS - Notification Router
 
 Centralized routing of alerts and notifications across channels.
 """
-import structlog
 from typing import Literal
+
+import structlog
 
 logger = structlog.get_logger(__name__)
 
 class NotificationRouter:
     """Routes messages based on priority and user preferences."""
-    
+
     async def send(self, message: str, priority: Literal["low", "medium", "high", "critical"] = "low", user_id: int | None = None):
         """
         Sends a notification. 

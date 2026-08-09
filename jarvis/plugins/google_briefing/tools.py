@@ -6,11 +6,11 @@ to generate comprehensive summaries (e.g., Daily Briefing, Meeting Prep).
 """
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from jarvis.tools.base import Tool, ToolCategory, ToolMetadata, ToolParameter, ToolResult
-from jarvis.integrations.google_client import GoogleClient, get_google_account
 from jarvis.database.core import AsyncSessionLocal
+from jarvis.integrations.google_client import GoogleClient, get_google_account
+from jarvis.tools.base import Tool, ToolCategory, ToolMetadata, ToolParameter, ToolResult
 
 # We will directly call the API endpoints here for efficiency,
 # rather than instantiating the tools from other plugins.
@@ -48,7 +48,7 @@ class DailyBriefingTool(Tool):
         if not client:
             return ToolResult(success=False, error="No Google account connected.")
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         end_of_day = now.replace(hour=23, minute=59, second=59)
 
         try:
@@ -141,7 +141,7 @@ class MeetingPrepTool(Tool):
                 event_resp = await client.get(f"{CALENDAR_BASE}/calendars/primary/events/{event_id}")
                 if event_resp.status_code != 200:
                     return ToolResult(success=False, error=f"Event not found: {event_resp.status_code}")
-                
+
                 event = event_resp.json()
                 title = event.get("summary", "(No title)")
                 attendees = event.get("attendees", [])
@@ -161,7 +161,7 @@ class MeetingPrepTool(Tool):
                         f"{GMAIL_BASE}/messages",
                         params={"q": query, "maxResults": 3},
                     )
-                    
+
                     if gmail_resp.status_code == 200:
                         messages = gmail_resp.json().get("messages", [])
                         if messages:

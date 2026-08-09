@@ -1,6 +1,7 @@
 import subprocess
-from typing import Any
+
 from jarvis.tools.base import Tool, ToolCategory, ToolMetadata, ToolParameter, ToolResult
+
 
 class DockerRunTool(Tool):
     @property
@@ -15,11 +16,11 @@ class DockerRunTool(Tool):
                 ToolParameter(name="command", type="string", description="Command to run")
             ]
         )
-        
+
     async def execute(self, **kwargs) -> ToolResult:
         image = kwargs.get("image")
         command = kwargs.get("command", "")
-        
+
         try:
             cmd = ["docker", "run", "--rm", image]
             if command:
@@ -44,11 +45,11 @@ class DockerBuildTool(Tool):
                 ToolParameter(name="path", type="string", description="Path to Dockerfile")
             ]
         )
-        
+
     async def execute(self, **kwargs) -> ToolResult:
         tag = kwargs.get("tag")
         path = kwargs.get("path", ".")
-        
+
         try:
             cmd = ["docker", "build", "-t", tag, path]
             res = subprocess.run(cmd, capture_output=True, text=True, check=True)

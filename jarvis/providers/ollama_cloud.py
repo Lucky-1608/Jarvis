@@ -6,7 +6,8 @@ Connects to a remote Ollama Cloud instance.
 
 from __future__ import annotations
 
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
 import httpx
 import structlog
@@ -14,11 +15,11 @@ import structlog
 from jarvis.config.settings import get_settings
 from jarvis.providers.base import (
     AIProvider,
+    APIKeyRotator,
     ChatResponse,
     Message,
     ProviderHealth,
     StreamChunk,
-    APIKeyRotator,
 )
 
 logger = structlog.get_logger(__name__)
@@ -70,7 +71,7 @@ class OllamaCloudProvider(AIProvider):
         }
         if tools:
             payload["tools"] = tools
-            
+
         if response_format:
             payload["format"] = "json"
 

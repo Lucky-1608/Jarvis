@@ -3,17 +3,18 @@ Jarvis OS - DevOps Engine
 
 Monitors CI/CD pipelines, tracks deployments, and handles operational workflows.
 """
-import structlog
 import subprocess
+
+import structlog
 
 logger = structlog.get_logger(__name__)
 
 class DevOpsEngine:
     """Specialized engine for ops tasks."""
-    
+
     def __init__(self, project_root: str):
         self.project_root = project_root
-        
+
     def restart_docker_compose(self) -> str:
         """Restarts the local docker-compose stack."""
         try:
@@ -28,7 +29,7 @@ class DevOpsEngine:
         except Exception as e:
             logger.error("devops_engine.restart_failed", error=str(e))
             return str(e)
-            
+
     def trigger_github_action(self, workflow_id: str) -> bool:
         """Triggers a remote CI/CD pipeline."""
         # Stub for GitHub API call

@@ -7,11 +7,12 @@ Always-on listener that waits for the wake word "Jarvis".
 
 from __future__ import annotations
 
-from typing import Callable, Coroutine, Any
+from collections.abc import Callable, Coroutine
+from typing import Any
 
 import structlog
 
-from jarvis.events.bus import Event, EventTypes, get_event_bus
+from jarvis.events.bus import get_event_bus
 
 logger = structlog.get_logger(__name__)
 
@@ -43,7 +44,7 @@ class WakeWordDetector:
         """Disabled Wake Word Detection."""
         self._active = True
         logger.warning("wake_word.disabled", msg="Wake Word detection is disabled.")
-        
+
         import asyncio
         while self._active:
             await asyncio.sleep(1.0)

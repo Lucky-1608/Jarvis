@@ -26,7 +26,7 @@ class KeyboardController:
 
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, lambda: pyautogui.typewrite(text, interval=interval))
-        
+
         logger.info("keyboard.typed", text_length=len(text))
         return {"action": "type", "length": len(text), "status": "success"}
 
@@ -40,7 +40,7 @@ class KeyboardController:
 
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, lambda: pyautogui.press(key))
-        
+
         logger.info("keyboard.pressed", key=key)
         return {"action": "press", "key": key, "status": "success"}
 
@@ -54,6 +54,6 @@ class KeyboardController:
 
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, lambda: pyautogui.hotkey(*keys))
-        
+
         logger.info("keyboard.hotkey", keys=keys)
         return {"action": "hotkey", "keys": keys, "status": "success"}

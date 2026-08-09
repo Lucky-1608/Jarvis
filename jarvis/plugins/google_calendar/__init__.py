@@ -1,15 +1,17 @@
-from jarvis.tools.registry import ToolRegistry
 from jarvis.events.bus import EventBus
+from jarvis.tools.registry import ToolRegistry
+
 from .tools import (
-    CalendarListEventsTool,
-    CalendarGetEventTool,
-    CalendarCreateEventTool,
-    CalendarUpdateEventTool,
-    CalendarDeleteEventTool,
     CalendarCheckAvailabilityTool,
-    CalendarListCalendarsTool,
+    CalendarCreateEventTool,
+    CalendarDeleteEventTool,
     CalendarGetAgendaTool,
+    CalendarGetEventTool,
+    CalendarListCalendarsTool,
+    CalendarListEventsTool,
+    CalendarUpdateEventTool,
 )
+
 
 def setup(registry: ToolRegistry, bus: EventBus) -> None:
     """Register all Google Calendar tools."""

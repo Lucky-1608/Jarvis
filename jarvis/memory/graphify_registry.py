@@ -17,13 +17,13 @@ class GraphifyRegistry:
         self.base_dir = Path(base_data_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)
         self.projects_file = self.base_dir / "projects.json"
-        
+
         self.projects: dict[str, str] = {}
         self.graphs: dict[str, GraphifyMemory] = {}
-        
+
         if self.projects_file.exists():
             try:
-                with open(self.projects_file, "r", encoding="utf-8") as f:
+                with open(self.projects_file, encoding="utf-8") as f:
                     data = json.load(f)
                     self.projects = data.get("projects", {})
             except Exception as e:
@@ -49,16 +49,16 @@ class GraphifyRegistry:
         """Add a new project, build its graph, and save to registry."""
         project_dir = self.base_dir / project_name
         memory = GraphifyMemory(str(project_dir))
-        
+
         stats = await memory.build(target_dir)
-        
+
         self.projects[project_name] = target_dir
         self.graphs[project_name] = memory
-        
+
         try:
             with open(self.projects_file, "w", encoding="utf-8") as f:
                 json.dump({"projects": self.projects}, f, indent=2)
         except Exception as e:
             logger.error("Failed to save projects.json", error=str(e), exc_info=True)
-            
+
         return stats
