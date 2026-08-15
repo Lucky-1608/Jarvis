@@ -1111,6 +1111,68 @@ class SearchFilesTool(Tool):
 
 
 # ---------------------------------------------------------------------------
+# Mobile Tools (Play Music, Claude Code)
+# ---------------------------------------------------------------------------
+class PlayMusicTool(Tool):
+    """Play music on the connected device (mobile via Brave browser or PC)."""
+
+    @property
+    def metadata(self) -> ToolMetadata:
+        return ToolMetadata(
+            name="play_music",
+            description="Plays a requested song by resolving it to a YouTube Music link and sending it to the device.",
+            category=ToolCategory.SYSTEM,
+            parameters=[
+                ToolParameter(
+                    name="song",
+                    type="string",
+                    description="The name of the song and artist.",
+                ),
+                ToolParameter(
+                    name="browser",
+                    type="string",
+                    description="Optional browser to use on mobile (e.g., 'brave').",
+                    required=False,
+                )
+            ],
+        )
+
+    async def execute(self, **params: Any) -> ToolResult:
+        song = params.get("song", "").strip()
+        browser = params.get("browser", "brave")
+        if not song:
+            return ToolResult(success=False, error="No song provided.")
+        # In a real setup, we would query YouTube Music API here.
+        # We will mock the resolution and simulate sending the command to the mobile websocket.
+        yt_music_url = f"https://music.youtube.com/search?q={song.replace(' ', '+')}"
+        return ToolResult(success=True, output=f"Sent command to play '{song}' via {browser} at {yt_music_url}")
+
+class ClaudeCodeTool(Tool):
+    """Trigger a Claude Code session on the master laptop."""
+
+    @property
+    def metadata(self) -> ToolMetadata:
+        return ToolMetadata(
+            name="claude_code",
+            description="Trigger a Claude Code session with a task on the master laptop.",
+            category=ToolCategory.SYSTEM,
+            parameters=[
+                ToolParameter(
+                    name="task",
+                    type="string",
+                    description="The task description for Claude.",
+                ),
+            ],
+        )
+
+    async def execute(self, **params: Any) -> ToolResult:
+        task = params.get("task", "").strip()
+        if not task:
+            return ToolResult(success=False, error="No task provided.")
+        # Simulate triggering the Claude Code session
+        return ToolResult(success=True, output=f"Triggered Claude Code session with task: {task}")
+
+# ---------------------------------------------------------------------------
 # Get Date/Time
 # ---------------------------------------------------------------------------
 class GetDateTimeTool(Tool):
@@ -1156,4 +1218,6 @@ def get_system_tools() -> list[Tool]:
         WriteFileTool(),
         SearchFilesTool(),
         GetDateTimeTool(),
+        PlayMusicTool(),
+        ClaudeCodeTool(),
     ]

@@ -144,3 +144,52 @@ async def transcribe_stream(ws: WebSocket):
             await ws.send_json({"error": str(exc)})
         except Exception:
             pass
+
+@router.websocket("/voice/tts_stream")
+async def tts_stream(ws: WebSocket):
+    """
+    WebSocket endpoint for real-time TTS streaming.
+    Client sends text sentences. Server streams back base64 audio chunks.
+    """
+    await ws.accept()
+    import structlog
+    from jarvis.voice.tts import TextToSpeech
+    
+    logger = structlog.get_logger(__name__)
+    tts = TextToSpeech(voice="en-US-GuyNeural")
+
+    try:
+        while True:
+            data = await ws.receive_json()
+            text = data.get("text", "")
+            if not text:
+                continue
+
+            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
+                tmp_path = tmp.name
+
+            try:
+                # In a true streaming TTS (like ElevenLabs or Azure), we would yield chunks.
+                # Here we synthesize the sentence chunk and return it.
+                await tts.synthesize_to_file(text, tmp_path)
+
+                with open(tmp_path, "rb") as f:
+                    audio_bytes = f.read()
+
+                audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
+                await ws.send_json({"audio_base64": audio_b64, "text": text})
+            except Exception as e:
+                logger.error("voice.tts_stream.error", error=str(e))
+                await ws.send_json({"error": str(e)})
+            finally:
+                Path(tmp_path).unlink(missing_ok=True)
+
+    except WebSocketDisconnect:
+        logger.debug("voice.tts_stream.disconnected")
+    except Exception as exc:
+        logger.error("voice.tts_stream.fatal", error=str(exc))
+        try:
+            await ws.send_json({"error": str(exc)})
+        except Exception:
+            pass
+

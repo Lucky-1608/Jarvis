@@ -112,6 +112,14 @@ class ElevenLabsSettings(BaseSettings):
     timeout: int = 120
     max_retries: int = 3
 
+class ObsidianSettings(BaseSettings):
+    """Obsidian vault configuration."""
+
+    model_config = SettingsConfigDict(env_prefix="OBSIDIAN_", env_file=".env", extra="ignore")
+
+    vault_path: str = str(PROJECT_ROOT / "data" / "obsidian_vault")
+    enabled: bool = True
+
 
 # ---------------------------------------------------------------------------
 # Memory settings
@@ -187,6 +195,7 @@ class JarvisSettings(BaseSettings):
     grok: GrokSettings = Field(default_factory=GrokSettings)
     gemini: GeminiSettings = Field(default_factory=GeminiSettings)
     elevenlabs: ElevenLabsSettings = Field(default_factory=ElevenLabsSettings)
+    obsidian: ObsidianSettings = Field(default_factory=ObsidianSettings)
     memory: MemorySettings = Field(default_factory=MemorySettings)
     server: ServerSettings = Field(default_factory=ServerSettings)
 

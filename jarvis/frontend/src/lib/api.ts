@@ -49,8 +49,9 @@ export async function getBaseUrl(forceRefresh = false): Promise<string> {
       break; // relative path is assumed to work
     }
     try {
-      const res = await fetch(`${url}/`, { signal: AbortSignal.timeout(2000) });
-      if (res.ok || res.status === 404) {
+      // Ping the specific health endpoint so we don't accidentally get 200 OK from the frontend's own index.html
+      const res = await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(2000) });
+      if (res.ok) {
         found = url;
         break;
       }
@@ -71,10 +72,10 @@ export async function getBaseUrl(forceRefresh = false): Promise<string> {
 export async function checkBackendHealth(): Promise<boolean> {
   try {
     const base = await getBaseUrl(true);
-    const res = await fetch(`${base}/`, {
+    const res = await fetch(`${base}/api/health`, {
       signal: AbortSignal.timeout(3000),
     });
-    return res.ok || res.status === 404;
+    return res.ok;
   } catch {
     return false;
   }

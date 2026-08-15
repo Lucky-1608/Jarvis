@@ -93,17 +93,25 @@ class AnalyzeScreenTool(Tool):
                     required=False,
                     default="Describe what's on screen.",
                 ),
+                ToolParameter(
+                    name="target",
+                    type="string",
+                    description="What device to read: 'pc' or 'phone'.",
+                    required=False,
+                    default="pc",
+                ),
             ],
         )
 
     async def execute(self, **params: Any) -> ToolResult:
         query = params.get("query", "Describe what's on screen.")
+        target = params.get("target", "pc").strip().lower()
 
         try:
             from jarvis.vision.analyzer import VisionAnalyzer
 
             analyzer = VisionAnalyzer()
-            result = await analyzer.read_screen()
+            result = await analyzer.read_screen(target=target)
 
             return ToolResult(
                 success=True,

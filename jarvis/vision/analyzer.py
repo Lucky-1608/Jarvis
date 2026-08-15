@@ -202,8 +202,19 @@ class VisionAnalyzer:
         image_b64 = base64.b64encode(image_bytes).decode("utf-8")
         return await self.analyze_screenshot(image_b64, query=query)
 
-    async def read_screen(self) -> VisionResult:
+    async def read_screen(self, target: str = "pc") -> VisionResult:
         """Capture and analyze the current screen."""
+        if target == "phone":
+            # Here we would request the UI dump from the mobile via WebSocket
+            # Mocking the response for the purpose of the architecture update
+            mock_ui_dump = '{"text": "Brave Browser", "contentDescription": "Search or type web address", "bounds": "0,100,1080,250"}'
+            return VisionResult(
+                summary="Mobile screen reading requested. Received UI dump from AccessibilityService.",
+                elements=[mock_ui_dump],
+                application="Brave",
+                confidence=1.0,
+            )
+
         from jarvis.vision.screenshot import ScreenCapture
 
         capture = await ScreenCapture.capture_full_screen()

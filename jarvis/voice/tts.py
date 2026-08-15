@@ -90,17 +90,8 @@ class TextToSpeech:
 
     async def _speak_elevenlabs(self, text: str) -> None:
         """ElevenLabs TTS implementation."""
-        api_key = self._elevenlabs_rotator.get_key()
-        if not api_key:
-            raise ValueError("ElevenLabs API key not configured.")
-
         voice_id = getattr(self, "_voice_id", None) or self._settings.elevenlabs.voice_id
         url = f"{self._settings.elevenlabs.base_url.rstrip('/')}/v1/text-to-speech/{voice_id}"
-
-        headers = {
-            "xi-api-key": api_key,
-            "Content-Type": "application/json"
-        }
 
         payload = {
             "text": text,
@@ -115,11 +106,28 @@ class TextToSpeech:
             tmp_path = tmp.name
 
         try:
-            async with httpx.AsyncClient(timeout=self._settings.elevenlabs.timeout) as client:
-                response = await client.post(url, headers=headers, json=payload)
-                response.raise_for_status()
-                with open(tmp_path, "wb") as f:
-                    f.write(response.content)
+            for attempt in range(self._settings.elevenlabs.max_retries):
+                api_key = self._elevenlabs_rotator.get_key()
+                if not api_key:
+                    raise ValueError("ElevenLabs API key not configured.")
+
+                headers = {
+                    "xi-api-key": api_key,
+                    "Content-Type": "application/json"
+                }
+
+                try:
+                    async with httpx.AsyncClient(timeout=self._settings.elevenlabs.timeout) as client:
+                        response = await client.post(url, headers=headers, json=payload)
+                        response.raise_for_status()
+                        with open(tmp_path, "wb") as f:
+                            f.write(response.content)
+                        break  # Success, exit retry loop
+                except httpx.HTTPStatusError as e:
+                    if e.response.status_code == 429 and attempt < self._settings.elevenlabs.max_retries - 1:
+                        logger.debug("tts.elevenlabs.ratelimited", msg="Rotating key due to 429")
+                        continue
+                    raise
 
             if self._stop_requested:
                 return
@@ -193,17 +201,8 @@ class TextToSpeech:
 
     async def _synthesize_elevenlabs_to_file(self, text: str, output_path: Path) -> Path:
         """Synthesize using ElevenLabs."""
-        api_key = self._elevenlabs_rotator.get_key()
-        if not api_key:
-            raise ValueError("ElevenLabs API key not configured.")
-
         voice_id = getattr(self, "_voice_id", None) or self._settings.elevenlabs.voice_id
         url = f"{self._settings.elevenlabs.base_url.rstrip('/')}/v1/text-to-speech/{voice_id}"
-
-        headers = {
-            "xi-api-key": api_key,
-            "Content-Type": "application/json"
-        }
 
         payload = {
             "text": text,
@@ -214,11 +213,28 @@ class TextToSpeech:
             }
         }
 
-        async with httpx.AsyncClient(timeout=self._settings.elevenlabs.timeout) as client:
-            response = await client.post(url, headers=headers, json=payload)
-            response.raise_for_status()
-            with open(output_path, "wb") as f:
-                f.write(response.content)
+        for attempt in range(self._settings.elevenlabs.max_retries):
+            api_key = self._elevenlabs_rotator.get_key()
+            if not api_key:
+                raise ValueError("ElevenLabs API key not configured.")
+
+            headers = {
+                "xi-api-key": api_key,
+                "Content-Type": "application/json"
+            }
+
+            try:
+                async with httpx.AsyncClient(timeout=self._settings.elevenlabs.timeout) as client:
+                    response = await client.post(url, headers=headers, json=payload)
+                    response.raise_for_status()
+                    with open(output_path, "wb") as f:
+                        f.write(response.content)
+                    break
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 429 and attempt < self._settings.elevenlabs.max_retries - 1:
+                    logger.debug("tts.elevenlabs.ratelimited", msg="Rotating key due to 429")
+                    continue
+                raise
 
         logger.info("tts.synthesized_elevenlabs_to_file", path=str(output_path))
         return output_path

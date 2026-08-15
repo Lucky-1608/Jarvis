@@ -85,15 +85,8 @@ class SpeechToText:
 
     async def _transcribe_elevenlabs(self, audio_bytes: bytes, language: str | None = None) -> str:
         """Transcribe audio bytes using ElevenLabs STT."""
-        api_key = self._elevenlabs_rotator.get_key()
-        if not api_key:
-            raise ValueError("ElevenLabs API key not configured.")
-
         url = f"{self._settings.elevenlabs.base_url.rstrip('/')}/v1/speech-to-text"
-        headers = {
-            "xi-api-key": api_key
-        }
-
+        
         files = {
             "file": ("audio.wav", audio_bytes, "audio/wav")
         }
@@ -105,11 +98,28 @@ class SpeechToText:
         if language:
             data["language_code"] = language.split('-')[0]
 
-        async with httpx.AsyncClient(timeout=self._settings.elevenlabs.timeout) as client:
-            response = await client.post(url, headers=headers, files=files, data=data)
-            response.raise_for_status()
-            result = response.json()
-            return result.get("text", "")
+        for attempt in range(self._settings.elevenlabs.max_retries):
+            api_key = self._elevenlabs_rotator.get_key()
+            if not api_key:
+                raise ValueError("ElevenLabs API key not configured.")
+
+            headers = {
+                "xi-api-key": api_key
+            }
+
+            try:
+                async with httpx.AsyncClient(timeout=self._settings.elevenlabs.timeout) as client:
+                    response = await client.post(url, headers=headers, files=files, data=data)
+                    response.raise_for_status()
+                    result = response.json()
+                    return result.get("text", "")
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 429 and attempt < self._settings.elevenlabs.max_retries - 1:
+                    logger.debug("stt.elevenlabs.ratelimited", msg="Rotating key due to 429")
+                    continue
+                raise
+        
+        return ""
 
     async def transcribe_bytes(
         self,
