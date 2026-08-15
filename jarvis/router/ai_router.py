@@ -6,7 +6,6 @@ tracks latency, and provides a unified interface to the brain.
 
 Routing strategy (from spec Volume 5):
   - Simple deterministic → Python (no LLM needed)
-  - Local reasoning     → Ollama
   - Complex reasoning   → OpenCode (primary) / Cloud fallback
   - Vision              → NVIDIA NIM (Phase 2)
 """
@@ -30,7 +29,6 @@ from jarvis.providers.base import (
 from jarvis.providers.gemini import GeminiProvider
 from jarvis.providers.grok import GrokProvider
 from jarvis.providers.nvidia import NvidiaNimProvider
-from jarvis.providers.ollama import OllamaProvider
 from jarvis.providers.ollama_cloud import OllamaCloudProvider
 from jarvis.providers.opencode import OpenCodeProvider
 
@@ -39,7 +37,6 @@ logger = structlog.get_logger(__name__)
 # Map of provider name → class
 PROVIDER_REGISTRY: dict[str, type[AIProvider]] = {
     "opencode": OpenCodeProvider,
-    "ollama": OllamaProvider,
     "ollama_cloud": OllamaCloudProvider,
     "nvidia": NvidiaNimProvider,
     "grok": GrokProvider,

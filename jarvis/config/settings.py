@@ -37,16 +37,6 @@ class OpenCodeSettings(BaseSettings):
     max_retries: int = 3
 
 
-class OllamaSettings(BaseSettings):
-    """Ollama local AI provider configuration."""
-
-    model_config = SettingsConfigDict(env_prefix="OLLAMA_", env_file=".env", extra="ignore")
-
-    base_url: str = "http://localhost:11434"
-    model: str = "llama3.1"
-    timeout: int = 300  # local models can be slower
-    max_retries: int = 2
-
 class OllamaCloudSettings(BaseSettings):
     """Ollama Cloud AI provider configuration."""
 
@@ -176,7 +166,7 @@ class JarvisSettings(BaseSettings):
 
     # --- AI routing ---------------------------------------------------------
     ai_primary_provider: str = "ollama_cloud"
-    ai_fallback_providers: str = "opencode,nvidia,grok,gemini,ollama"
+    ai_fallback_providers: str = "opencode,nvidia,grok,gemini"
     ai_tool_selector_enabled: bool = False
 
     # --- Voice routing ------------------------------------------------------
@@ -189,7 +179,6 @@ class JarvisSettings(BaseSettings):
 
     # --- Sub-settings (composed manually) -----------------------------------
     opencode: OpenCodeSettings = Field(default_factory=OpenCodeSettings)
-    ollama: OllamaSettings = Field(default_factory=OllamaSettings)
     ollama_cloud: OllamaCloudSettings = Field(default_factory=OllamaCloudSettings)
     nvidia: NvidiaNimSettings = Field(default_factory=NvidiaNimSettings)
     grok: GrokSettings = Field(default_factory=GrokSettings)

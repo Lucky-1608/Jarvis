@@ -20,7 +20,7 @@ async def health_check():
 
     Returns status for:
     - Brain (core orchestrator)
-    - AI providers (OpenCode, Ollama)
+    - AI providers (OpenCode)
     - Memory system (ChromaDB)
     - Tool registry
     """
