@@ -7,6 +7,7 @@ WS   /api/chat/stream   — Streaming chat via WebSocket
 
 from __future__ import annotations
 
+import asyncio
 import json
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -95,6 +96,8 @@ async def chat_stream(ws: WebSocket):
                 })
 
     except WebSocketDisconnect:
+        pass
+    except asyncio.CancelledError:
         pass
     except Exception as exc:
         try:

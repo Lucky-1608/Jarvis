@@ -46,6 +46,8 @@ async def hud_websocket(websocket: WebSocket):
             queue.task_done()
     except WebSocketDisconnect:
         logger.info("hud.websocket_disconnected", id=subscriber_id)
+    except asyncio.CancelledError:
+        logger.info("hud.websocket_cancelled", id=subscriber_id)
     except Exception as e:
         logger.error("hud.websocket_error", error=str(e))
     finally:

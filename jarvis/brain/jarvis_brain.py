@@ -13,6 +13,7 @@ All other modules are internal.
 
 from __future__ import annotations
 
+import asyncio
 import re
 import time
 from collections.abc import AsyncIterator
@@ -703,11 +704,18 @@ class JarvisBrain:
     async def get_health(self) -> dict[str, Any]:
         """Return health status of all subsystems."""
         provider_health = await self._router.health_check() if self._router else {}
+        memory_stats = {}
+        if self._memory:
+            try:
+                memory_stats = await asyncio.wait_for(self._memory.get_stats(), timeout=3.0)
+            except Exception:
+                memory_stats = {"error": "Timeout or failed to get memory stats"}
+
         return {
             "status": "healthy" if self._initialized else "not_initialized",
             "initialized": self._initialized,
             "tools_registered": self._tools.count if self._tools else 0,
-            "memory_stats": self._memory.get_stats() if self._memory else {},
+            "memory_stats": memory_stats,
             "providers": {
                 name: {
                     "available": h.available,

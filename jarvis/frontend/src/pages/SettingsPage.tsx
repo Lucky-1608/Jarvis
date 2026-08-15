@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { PageShell } from '../components/ui/PageShell';
 import { PageHeader } from '../components/ui/PageHeader';
-import { Settings, Key, Link as LinkIcon, Shield, Server, Github, Cpu, Box, Database, Webhook, Fingerprint } from 'lucide-react';
+import { Settings, Key, Link as LinkIcon, Shield, Server, Cpu, Box, Database, Webhook, Fingerprint } from 'lucide-react';
+import { FaGithub } from 'react-icons/fa';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { api } from '../lib/api';
@@ -431,7 +432,7 @@ export function SettingsPage() {
                 <div>
                   <div className="flex justify-between items-start mb-2">
                     <h3 className="text-lg font-medium flex items-center gap-2">
-                      <Github size={24} /> GitHub
+                      <FaGithub size={24} /> GitHub
                     </h3>
                   </div>
                   <p className="text-sm text-[var(--text-muted)] mb-4">Automate pull requests, issues, and CI/CD pipelines.</p>

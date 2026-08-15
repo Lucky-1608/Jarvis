@@ -8,6 +8,7 @@ GET  /api/voice/voices      — List available TTS voices
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import tempfile
 from pathlib import Path
@@ -138,6 +139,8 @@ async def transcribe_stream(ws: WebSocket):
 
     except WebSocketDisconnect:
         logger.debug("voice.stream.disconnected")
+    except asyncio.CancelledError:
+        pass
     except Exception as exc:
         logger.error("voice.stream.fatal", error=str(exc))
         try:
@@ -186,6 +189,8 @@ async def tts_stream(ws: WebSocket):
 
     except WebSocketDisconnect:
         logger.debug("voice.tts_stream.disconnected")
+    except asyncio.CancelledError:
+        pass
     except Exception as exc:
         logger.error("voice.tts_stream.fatal", error=str(exc))
         try:

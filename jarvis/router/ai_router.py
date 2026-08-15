@@ -241,9 +241,24 @@ class AIRouter:
 
     async def health_check(self) -> dict[str, ProviderHealth]:
         """Check health of all registered providers."""
+        import asyncio
+        from jarvis.providers.base import ProviderHealth
+
         results = {}
-        for name, prov in self._providers.items():
-            results[name] = await prov.health_check()
+        names = list(self._providers.keys())
+        
+        async def _check(name: str):
+            try:
+                # Add a 5-second timeout per provider
+                return await asyncio.wait_for(self._providers[name].health_check(), timeout=5.0)
+            except Exception as e:
+                return ProviderHealth(name=name, available=False, latency_ms=0, error=str(e))
+
+        tasks = [_check(name) for name in names]
+        health_results = await asyncio.gather(*tasks)
+
+        for name, res in zip(names, health_results):
+            results[name] = res
         return results
 
     def get_metrics(self) -> dict[str, dict[str, Any]]:
