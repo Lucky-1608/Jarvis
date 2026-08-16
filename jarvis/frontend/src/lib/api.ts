@@ -50,7 +50,7 @@ export async function getBaseUrl(forceRefresh = false): Promise<string> {
     }
     try {
       // Ping the specific health endpoint so we don't accidentally get 200 OK from the frontend's own index.html
-      const res = await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(2000) });
+      const res = await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(5000) });
       if (res.ok) {
         found = url;
         break;
