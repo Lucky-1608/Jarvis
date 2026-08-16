@@ -122,18 +122,13 @@ def create_app() -> FastAPI:
         # Check header or query param
         client_key = request.headers.get("X-API-Key") or request.query_params.get("token")
 
-        # Fallback to dev key if not provided (for local testing until DB is fully seeded)
-        dev_key = os.getenv("JARVIS_API_KEY", "JARVIS_DEV_KEY")
+        from jarvis.config.settings import get_settings
+        settings = get_settings()
 
-        # In a real implementation, this would look up `client_key` in the APIKey database table
-        # and attach the User to request.state.user.
-        # For now, we enforce that at least the dev key is present or a key is provided.
-        if not client_key and dev_key != "JARVIS_DEV_KEY":
-            return JSONResponse(status_code=403, content={"detail": "Forbidden: Missing API Key"})
-
-        if client_key and client_key != dev_key:
-            # Here we would decrypt and check against DB. Stubbed for transition.
-            pass
+        # Actively enforce authentication if enabled
+        if settings.server.require_auth:
+            if not client_key or client_key != settings.server.secret_key:
+                return JSONResponse(status_code=403, content={"detail": "Forbidden: Invalid or missing API Key"})
 
         return await call_next(request)
 

@@ -13,9 +13,9 @@ import { useJarvisStore } from '../store/jarvisStore';
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-const API_KEY = 'JARVIS_DEV_KEY';
-
+export function getApiKey(): string {
+  return localStorage.getItem('JARVIS_API_KEY') || 'JARVIS_DEV_KEY';
+}
 let activeBaseUrl: string | null = null;
 let isResolving = false;
 let resolveQueue: ((url: string) => void)[] = [];
@@ -113,7 +113,7 @@ export async function apiFetch<T = any>(
   const url = `${base}${path}`;
 
   const headers: Record<string, string> = {
-    'X-API-Key': API_KEY,
+    'X-API-Key': getApiKey(),
     ...(options.headers as Record<string, string> | undefined),
   };
 
