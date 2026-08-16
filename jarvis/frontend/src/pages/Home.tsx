@@ -103,7 +103,7 @@ export function Home() {
                   <ArcReactor />
                   <EffectComposer>
                     <Bloom luminanceThreshold={0.2} luminanceSmoothing={0.9} intensity={1.5} />
-                    <ChromaticAberration offset={new THREE.Vector2(0.002, 0.002)} radialModulation={false} modulationOffset={0} />
+                    <ChromaticAberration offset={[0.002, 0.002]} />
                     <Vignette eskil={false} offset={0.1} darkness={0.6} />
                   </EffectComposer>
                 </Canvas>
