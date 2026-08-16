@@ -103,8 +103,8 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def api_key_auth(request: Request, call_next):
-        # Allow unrestricted access to docs, root, and static frontend assets
-        if request.url.path in ["/", "/docs", "/openapi.json"]:
+        # Allow unrestricted access to docs, root, health, and static frontend assets
+        if request.url.path in ["/", "/docs", "/openapi.json", "/api/health"]:
             return await call_next(request)
 
         # Allow CORS preflight requests
