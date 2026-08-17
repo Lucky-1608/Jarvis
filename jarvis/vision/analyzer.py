@@ -43,23 +43,23 @@ You analyze screenshots and images to understand what's on screen.
 Always respond with valid JSON:
 ```json
 {
-  "summary": "Brief description of what's visible",
+  "summary": "Extremely detailed description of everything visible. You MUST transcribe visible code, terminal output, and text verbatim if an editor or console is open.",
   "elements": [
     {
-      "type": "button|text|input|menu|dialog|error|image|table|other",
-      "content": "The text or description of the element",
+      "type": "button|text|input|menu|dialog|error|image|table|code|other",
+      "content": "The exact text or description of the element",
       "location": "top-left|top-center|top-right|center|bottom-left|bottom-center|bottom-right",
       "coordinates": {"x": 0, "y": 0, "width": 0, "height": 0}
     }
   ],
   "application": "Name of the visible application (if identifiable)",
-  "errors_detected": ["List of any error messages or issues seen"],
+  "errors_detected": ["List of any error messages or issues seen verbatim"],
   "recommended_actions": ["Suggested next steps based on what's visible"],
   "confidence": 0.95
 }
 ```
 
-If you cannot analyze the image, set confidence to 0 and explain in summary."""
+If you cannot analyze the image, set confidence to 0 and explain in summary. Never apologize or say you cannot see the code if it is clearly visible."""
 
 
 @dataclass
@@ -149,8 +149,8 @@ class VisionAnalyzer:
                 messages,
                 temperature=0.2,
                 max_tokens=2048,
-                provider="nvidia",
-                model="meta/llama-3.2-11b-vision-instruct",
+                provider="gemini",
+                model="gemini-3.6-flash",
                 response_format={"type": "json_object"},
             )
 
@@ -202,7 +202,7 @@ class VisionAnalyzer:
         image_b64 = base64.b64encode(image_bytes).decode("utf-8")
         return await self.analyze_screenshot(image_b64, query=query)
 
-    async def read_screen(self, target: str = "pc") -> VisionResult:
+    async def read_screen(self, target: str = "pc", query: str = "What application is open? What's happening on screen? Describe all visible elements.") -> VisionResult:
         """Capture and analyze the current screen."""
         if target == "phone":
             # Here we would request the UI dump from the mobile via WebSocket
@@ -220,7 +220,7 @@ class VisionAnalyzer:
         capture = await ScreenCapture.capture_full_screen()
         return await self.analyze_screenshot(
             capture["base64"],
-            query="What application is open? What's happening on screen? Describe all visible elements.",
+            query=query,
         )
 
     async def find_element(self, description: str) -> VisionResult:

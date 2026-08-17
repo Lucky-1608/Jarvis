@@ -111,7 +111,7 @@ class AnalyzeScreenTool(Tool):
             from jarvis.vision.analyzer import VisionAnalyzer
 
             analyzer = VisionAnalyzer()
-            result = await analyzer.read_screen(target=target)
+            result = await analyzer.read_screen(target=target, query=query)
 
             return ToolResult(
                 success=True,

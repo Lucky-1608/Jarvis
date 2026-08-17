@@ -71,7 +71,8 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
                     "https://api.jina.ai/v1/embeddings",
                     headers={"Authorization": f"Bearer {jina_api_key}"},
                     json={
-                        "model": "jina-embeddings-v5-omni-small",
+                        "model": "jina-embeddings-v3",
+                        "dimensions": 384,
                         "input": texts
                     }
                 )
