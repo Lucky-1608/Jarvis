@@ -7,8 +7,9 @@ echo "Starting custom initialization..."
 NODE_VERSION="v18.17.1"
 NODE_DIST="node-${NODE_VERSION}-linux-x64"
 
-if [ ! -d "/home/node-bin" ]; then
+if [ ! -f "/home/node-bin/bin/npm" ]; then
     echo "Downloading Node.js..."
+    rm -rf /home/node-bin
     curl -O https://nodejs.org/dist/${NODE_VERSION}/${NODE_DIST}.tar.xz
     tar -xf ${NODE_DIST}.tar.xz
     mkdir -p /home/node-bin
