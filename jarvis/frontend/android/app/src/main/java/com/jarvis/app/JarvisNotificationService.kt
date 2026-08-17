@@ -16,8 +16,13 @@ class JarvisNotificationService : NotificationListenerService() {
             
             Log.d("JarvisNotification", "New Notification from $packageName: Title: $title, Text: $text")
             
-            // Here you can send this data back to the Capacitor bridge or backend websocket
-            // Example: sendEventToFrontend("notification", mapOf("app" to packageName, "title" to title, "text" to text))
+            val payload = org.json.JSONObject().apply {
+                put("type", "notification")
+                put("app", packageName)
+                put("title", title)
+                put("text", text)
+            }
+            JarvisBackgroundService.instance?.sendToBackend(payload)
         }
     }
 

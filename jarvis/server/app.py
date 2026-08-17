@@ -63,10 +63,47 @@ async def lifespan(app: FastAPI):
     await brain.initialize()
     set_brain(brain)
 
+    # Start Node.js bridges automatically
+    import subprocess
+    
+    base_dir = Path(__file__).resolve().parent.parent
+    whatsapp_dir = base_dir / "whatsapp-bridge"
+    telegram_dir = base_dir / "telegram-bridge"
+
+    whatsapp_proc = None
+    telegram_proc = None
+
+    if (whatsapp_dir / "index.js").exists():
+        logger.info("Starting WhatsApp bridge...")
+        try:
+            whatsapp_proc = subprocess.Popen(
+                ["node", "index.js"],
+                cwd=str(whatsapp_dir),
+            )
+        except Exception as e:
+            logger.error("Failed to start WhatsApp bridge", error=str(e))
+
+    if (telegram_dir / "index.js").exists():
+        logger.info("Starting Telegram bridge...")
+        try:
+            telegram_proc = subprocess.Popen(
+                ["node", "index.js"],
+                cwd=str(telegram_dir),
+            )
+        except Exception as e:
+            logger.error("Failed to start Telegram bridge", error=str(e))
+
     logger.info("server.ready", docs="/docs")
     yield
 
     # Shutdown
+    if whatsapp_proc:
+        logger.info("Stopping WhatsApp bridge...")
+        whatsapp_proc.terminate()
+    if telegram_proc:
+        logger.info("Stopping Telegram bridge...")
+        telegram_proc.terminate()
+
     if brain:
         await brain.shutdown()
     logger.info("server.stopped")

@@ -51,6 +51,7 @@ dependencies = [
 
     # --- Utilities ---
     "psutil>=5.9",
+    "pillow>=10.0",
 ]
 
 [project.optional-dependencies]

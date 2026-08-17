@@ -168,9 +168,15 @@ class GrokProvider(AIProvider):
     async def health_check(self) -> ProviderHealth:
         start = self._timer()
         try:
+            payload = {
+                "model": self._default_model,
+                "messages": [{"role": "user", "content": "hi"}],
+                "max_tokens": 1
+            }
             async with httpx.AsyncClient(timeout=10) as client:
-                resp = await client.get(
-                    f"{self._base_url}/models",
+                resp = await client.post(
+                    f"{self._base_url}/chat/completions",
+                    json=payload,
                     headers=self._headers(),
                 )
                 resp.raise_for_status()

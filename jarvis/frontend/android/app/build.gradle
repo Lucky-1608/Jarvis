@@ -22,7 +22,22 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
+    buildFeatures {
+        buildConfig = true
+    }
 }
+
+def envFile = file("../../.env")
+def viteApiBaseUrl = "http://10.0.2.2:8000"
+if (envFile.exists()) {
+    envFile.eachLine { line ->
+        if (line.startsWith("VITE_API_BASE_URL=")) {
+            viteApiBaseUrl = line.replace("VITE_API_BASE_URL=", "")
+        }
+    }
+}
+
+android.defaultConfig.buildConfigField "String", "VITE_API_BASE_URL", "\"${viteApiBaseUrl}\""
 
 
 
@@ -36,6 +51,7 @@ dependencies {
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')
+    implementation "com.squareup.okhttp3:okhttp:4.12.0"
 }
 
 apply from: 'capacitor.build.gradle'
