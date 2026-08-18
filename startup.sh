@@ -24,14 +24,7 @@ export PATH=/tmp/node-bin/bin:$PATH
 echo "Node version: $(node -v)"
 echo "NPM version: $(npm -v)"
 
-# 3. Install the bridge dependencies
-echo "Installing WhatsApp bridge dependencies..."
-cd jarvis/whatsapp-bridge && npm install
-cd ../..
-
-echo "Installing Telegram bridge dependencies..."
-cd jarvis/telegram-bridge && npm install
-cd ../..
+# 3. (npm install has been moved to GitHub Actions build step to reduce startup time)
 
 # 4. Start the Python FastAPI backend
 echo "Starting Jarvis Backend..."
