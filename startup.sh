@@ -7,19 +7,19 @@ echo "Starting custom initialization..."
 NODE_VERSION="v18.17.1"
 NODE_DIST="node-${NODE_VERSION}-linux-x64"
 
-if [ ! -f "/home/node-bin/bin/npm" ]; then
+if [ ! -f "/tmp/node-bin/bin/npm" ]; then
     echo "Downloading Node.js..."
-    rm -rf /home/node-bin
+    rm -rf /tmp/node-bin
     curl -O https://nodejs.org/dist/${NODE_VERSION}/${NODE_DIST}.tar.xz
     tar -xf ${NODE_DIST}.tar.xz
-    mkdir -p /home/node-bin
-    mv ${NODE_DIST}/* /home/node-bin/
+    mkdir -p /tmp/node-bin
+    cp -r ${NODE_DIST}/* /tmp/node-bin/
     rm -rf ${NODE_DIST} ${NODE_DIST}.tar.xz
     echo "Node.js downloaded and extracted."
 fi
 
 # 2. Add our local Node.js to the system PATH so Python's subprocess can find it
-export PATH=/home/node-bin/bin:$PATH
+export PATH=/tmp/node-bin/bin:$PATH
 
 echo "Node version: $(node -v)"
 echo "NPM version: $(npm -v)"
