@@ -24,7 +24,26 @@ export PATH=/tmp/node-bin/bin:$PATH
 echo "Node version: $(node -v)"
 echo "NPM version: $(npm -v)"
 
-# 3. (npm install has been moved to GitHub Actions build step to reduce startup time)
+# 3. Install the bridge dependencies persistently
+echo "Installing WhatsApp bridge dependencies..."
+cd jarvis/whatsapp-bridge
+mkdir -p /home/site/whatsapp_node_modules
+ln -s /home/site/whatsapp_node_modules node_modules
+if [ ! -f /home/site/whatsapp_node_modules/.installed ]; then
+    npm install
+    touch /home/site/whatsapp_node_modules/.installed
+fi
+cd ../..
+
+echo "Installing Telegram bridge dependencies..."
+cd jarvis/telegram-bridge
+mkdir -p /home/site/telegram_node_modules
+ln -s /home/site/telegram_node_modules node_modules
+if [ ! -f /home/site/telegram_node_modules/.installed ]; then
+    npm install
+    touch /home/site/telegram_node_modules/.installed
+fi
+cd ../..
 
 # 4. Start the Python FastAPI backend
 echo "Starting Jarvis Backend..."
