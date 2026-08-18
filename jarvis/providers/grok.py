@@ -34,9 +34,9 @@ class GrokProvider(AIProvider):
 
     def __init__(self) -> None:
         cfg = get_settings().grok
-        self._key_rotator = APIKeyRotator(cfg.api_keys, cfg.api_key)
+        self._key_rotator = APIKeyRotator(cfg.api_keys.strip('"\''), cfg.api_key.strip('"\''))
         self._base_url = cfg.base_url.rstrip("/")
-        self._default_model = cfg.model
+        self._default_model = cfg.model.strip('"\'')
         self._timeout = cfg.timeout
         self._max_retries = cfg.max_retries
 
@@ -171,7 +171,7 @@ class GrokProvider(AIProvider):
             payload = {
                 "model": self._default_model,
                 "messages": [{"role": "user", "content": "hi"}],
-                "max_tokens": 1
+                "max_tokens": 10
             }
             async with httpx.AsyncClient(timeout=10) as client:
                 resp = await client.post(
@@ -189,10 +189,16 @@ class GrokProvider(AIProvider):
                 )
         except Exception as exc:
             elapsed = self._timer() - start
+            err_msg = str(exc)
+            if hasattr(exc, "response") and exc.response is not None:
+                try:
+                    err_msg = f"HTTP {exc.response.status_code}: {exc.response.text}"
+                except Exception:
+                    pass
             return ProviderHealth(
                 name=self.name,
                 available=False,
                 latency_ms=elapsed,
-                error=str(exc),
+                error=err_msg,
                 model=self._default_model,
             )

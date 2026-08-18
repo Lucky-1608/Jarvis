@@ -34,9 +34,9 @@ class GeminiProvider(AIProvider):
 
     def __init__(self) -> None:
         cfg = get_settings().gemini
-        self._key_rotator = APIKeyRotator(cfg.api_keys, cfg.api_key)
+        self._key_rotator = APIKeyRotator(cfg.api_keys.strip('"\''), cfg.api_key.strip('"\''))
         self._base_url = cfg.base_url.rstrip("/")
-        self._default_model = cfg.model
+        self._default_model = cfg.model.strip('"\'')
         self._timeout = cfg.timeout
         self._max_retries = cfg.max_retries
 

@@ -32,6 +32,12 @@ async def hud_websocket(websocket: WebSocket):
 
     logger.info("hud.websocket_connected", id=subscriber_id)
 
+    # Replay the last known status for bridges so the UI isn't stuck on "Offline"
+    for event_type in ["telegram.status", "whatsapp.status", "whatsapp.qr"]:
+        history = bus.get_history(event_type=event_type, limit=1)
+        if history:
+            await queue.put(history[0])
+
     try:
         while True:
             # Wait for an event to be pushed to the queue

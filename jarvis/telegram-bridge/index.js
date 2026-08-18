@@ -73,10 +73,6 @@ async function connectToTelegram() {
         // Must have text content
         if (!text) return;
 
-        // Check if the trigger word "jarvis" is present
-        if (!text.toLowerCase().includes('jarvis')) {
-            return;
-        }
 
         console.log(`\n[Owner] ${text}`);
 
@@ -118,9 +114,6 @@ async function connectToTelegram() {
                 reply = String(data);
             }
 
-            if (!reply.startsWith('[Jarvis]: ')) {
-                reply = `[Jarvis]: ${reply}`;
-            }
 
             // Send reply back via Telegram as plain text
             await bot.sendMessage(chatId, reply, {
