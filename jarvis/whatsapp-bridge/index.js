@@ -38,7 +38,12 @@ async function connectToWhatsApp() {
     const makeWASocket = baileys.default || baileys.makeWASocket;
     const { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = baileys;
 
-    const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
+    const path = require('path');
+    const authFolder = process.env.WEBSITE_SITE_NAME 
+        ? '/home/site/auth_info_baileys' 
+        : 'auth_info_baileys';
+
+    const { state, saveCreds } = await useMultiFileAuthState(authFolder);
     const { version, isLatest } = await fetchLatestBaileysVersion();
     console.log(`[Bridge] Using WhatsApp Web v${version.join('.')}, isLatest: ${isLatest}`);
 
@@ -74,10 +79,10 @@ async function connectToWhatsApp() {
             
             if (statusCode === 401) {
                 console.log("⚠️ 401 Unauthorized. The WhatsApp session is corrupted or unlinked.");
-                console.log("Deleting auth_info_baileys to force a fresh QR code scan...");
+                console.log(`Deleting ${authFolder} to force a fresh QR code scan...`);
                 const fs = require('fs');
-                if (fs.existsSync('auth_info_baileys')) {
-                    fs.rmSync('auth_info_baileys', { recursive: true, force: true });
+                if (fs.existsSync(authFolder)) {
+                    fs.rmSync(authFolder, { recursive: true, force: true });
                 }
                 console.log("Restarting connection...");
                 connectToWhatsApp();

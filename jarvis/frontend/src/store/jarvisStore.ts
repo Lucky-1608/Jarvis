@@ -173,7 +173,9 @@ export const useJarvisStore = create<JarvisStore>((set, get) => ({
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = base ? base.replace(/^http/, 'ws') : `${wsProtocol}//${window.location.host}`;
     
-    wsInstance = new WebSocket(`${host}/api/hud/ws?token=JARVIS_DEV_KEY`);
+    // Use the actual API key from local storage
+    const token = localStorage.getItem('JARVIS_API_KEY') || 'JARVIS_DEV_KEY';
+    wsInstance = new WebSocket(`${host}/api/hud/ws?token=${token}`);
     
     wsInstance.onopen = () => {
       set({ backendConnected: true });
@@ -193,6 +195,8 @@ export const useJarvisStore = create<JarvisStore>((set, get) => ({
           set({ whatsappStatus: 'waiting_qr', whatsappQr: msg.data.payload });
         } else if (msg.type === 'whatsapp.status') {
           set({ whatsappStatus: msg.data.payload });
+        } else if (msg.type === 'telegram.status') {
+          set({ telegramStatus: msg.data.payload });
         } else if (msg.type === 'hud.notification') {
           const { title, message, level } = msg.data;
           get().addLog({ 
