@@ -4,7 +4,7 @@
 echo "Starting custom initialization..."
 
 # 1. Download and extract Node.js locally (since we might not have root access to use apt-get)
-NODE_VERSION="v18.17.1"
+NODE_VERSION="v20.15.1"
 NODE_DIST="node-${NODE_VERSION}-linux-x64"
 
 if [ ! -f "/tmp/node-bin/bin/npm" ]; then
