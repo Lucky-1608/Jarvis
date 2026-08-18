@@ -28,21 +28,17 @@ echo "NPM version: $(npm -v)"
 echo "Installing WhatsApp bridge dependencies..."
 cd jarvis/whatsapp-bridge
 mkdir -p /home/site/whatsapp_node_modules
+rm -rf node_modules
 ln -s /home/site/whatsapp_node_modules node_modules
-if [ ! -f /home/site/whatsapp_node_modules/.installed ]; then
-    npm install
-    touch /home/site/whatsapp_node_modules/.installed
-fi
+npm install --no-audit --no-fund
 cd ../..
 
 echo "Installing Telegram bridge dependencies..."
 cd jarvis/telegram-bridge
 mkdir -p /home/site/telegram_node_modules
+rm -rf node_modules
 ln -s /home/site/telegram_node_modules node_modules
-if [ ! -f /home/site/telegram_node_modules/.installed ]; then
-    npm install
-    touch /home/site/telegram_node_modules/.installed
-fi
+npm install --no-audit --no-fund
 cd ../..
 
 # 4. Start the Python FastAPI backend
