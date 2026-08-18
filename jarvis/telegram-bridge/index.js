@@ -17,7 +17,8 @@ if (!OWNER_ID || OWNER_ID === 'YOUR_OWNER_ID_HERE') {
     process.exit(1);
 }
 
-const JARVIS_EVENT_URL = 'http://127.0.0.1:8000/api/telegram/event';
+const JARVIS_BACKEND_URL = process.env.JARVIS_BACKEND_URL || 'http://127.0.0.1:8000';
+const JARVIS_EVENT_URL = `${JARVIS_BACKEND_URL}/api/telegram/event`;
 
 async function sendStatus(status, data = null) {
     try {
@@ -25,7 +26,7 @@ async function sendStatus(status, data = null) {
             type: status,
             data: data
         }, {
-            headers: { 'X-API-Key': 'JARVIS_DEV_KEY' }
+            headers: { 'X-API-Key': process.env.JARVIS_SECRET_KEY || 'JARVIS_DEV_KEY' }
         });
     } catch (err) {
         console.error("Could not send status to Jarvis:", err.message);
@@ -84,11 +85,11 @@ async function connectToTelegram() {
 
         try {
             // Forward to Jarvis API
-            const response = await axios.post('http://127.0.0.1:8000/api/chat', {
+            const response = await axios.post(`${JARVIS_BACKEND_URL}/api/chat`, {
                 message: text,
                 stream: false
             }, {
-                headers: { 'X-API-Key': 'JARVIS_DEV_KEY' }
+                headers: { 'X-API-Key': process.env.JARVIS_SECRET_KEY || 'JARVIS_DEV_KEY' }
             });
 
             // Extract plain text from the API response

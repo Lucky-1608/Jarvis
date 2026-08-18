@@ -1,5 +1,4 @@
 require('dotenv').config({ path: '../../.env' });
-const { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const qrcode = require('qrcode');
 const axios = require('axios');
@@ -15,7 +14,8 @@ if (!OWNER_NUMBER || OWNER_NUMBER === 'YOUR_NUMBER_HERE') {
 const formatNumber = (num) => `${num}@s.whatsapp.net`;
 const ownerJid = formatNumber(OWNER_NUMBER.replace(/[^0-9]/g, ''));
 
-const JARVIS_EVENT_URL = 'http://127.0.0.1:8000/api/whatsapp/event';
+const JARVIS_BACKEND_URL = process.env.JARVIS_BACKEND_URL || 'http://127.0.0.1:8000';
+const JARVIS_EVENT_URL = `${JARVIS_BACKEND_URL}/api/whatsapp/event`;
 
 // Debounce map: senderJid -> timestamp
 const userLastMessage = new Map();
@@ -26,7 +26,7 @@ async function sendStatus(status, data = null) {
             type: status,
             data: data
         }, {
-            headers: { 'X-API-Key': 'JARVIS_DEV_KEY' }
+            headers: { 'X-API-Key': process.env.JARVIS_SECRET_KEY || 'JARVIS_DEV_KEY' }
         });
     } catch (err) {
         console.error("Could not send status to Jarvis:", err.message);
@@ -34,6 +34,10 @@ async function sendStatus(status, data = null) {
 }
 
 async function connectToWhatsApp() {
+    const baileys = await import('@whiskeysockets/baileys');
+    const makeWASocket = baileys.default || baileys.makeWASocket;
+    const { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = baileys;
+
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
     const { version, isLatest } = await fetchLatestBaileysVersion();
     console.log(`[Bridge] Using WhatsApp Web v${version.join('.')}, isLatest: ${isLatest}`);
@@ -146,11 +150,11 @@ async function connectToWhatsApp() {
 
             try {
                 // Forward to Jarvis API
-                const response = await axios.post('http://127.0.0.1:8000/api/chat', {
+                const response = await axios.post(`${JARVIS_BACKEND_URL}/api/chat`, {
                     message: text,
                     stream: false
                 }, {
-                    headers: { 'X-API-Key': 'JARVIS_DEV_KEY' }
+                    headers: { 'X-API-Key': process.env.JARVIS_SECRET_KEY || 'JARVIS_DEV_KEY' }
                 });
 
                 // Extract plain text from the API response
