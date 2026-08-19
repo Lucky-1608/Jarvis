@@ -3,14 +3,14 @@
 
 echo "Starting custom initialization..."
 
-# 1. Download and extract Node.js locally (since we might not have root access to use apt-get)
+# 1. Download and extract Node.js locally
 NODE_VERSION="v20.15.1"
 NODE_DIST="node-${NODE_VERSION}-linux-x64"
 
 if [ ! -f "/tmp/node-bin/bin/npm" ]; then
     echo "Downloading Node.js..."
     rm -rf /tmp/node-bin
-    curl -O https://nodejs.org/dist/${NODE_VERSION}/${NODE_DIST}.tar.xz
+    curl -s -O https://nodejs.org/dist/${NODE_VERSION}/${NODE_DIST}.tar.xz
     tar -xf ${NODE_DIST}.tar.xz
     mkdir -p /tmp/node-bin
     cp -r ${NODE_DIST}/* /tmp/node-bin/
@@ -18,29 +18,43 @@ if [ ! -f "/tmp/node-bin/bin/npm" ]; then
     echo "Node.js downloaded and extracted."
 fi
 
-# 2. Add our local Node.js to the system PATH so Python's subprocess can find it
+# 2. Add our local Node.js to the system PATH
 export PATH=/tmp/node-bin/bin:$PATH
 
 echo "Node version: $(node -v)"
 echo "NPM version: $(npm -v)"
 
-# 3. Install the bridge dependencies persistently
-echo "Installing WhatsApp bridge dependencies..."
+# 3. Install the bridge dependencies persistently (only if missing)
+echo "Setting up WhatsApp bridge dependencies..."
 cd jarvis/whatsapp-bridge
 mkdir -p /home/site/whatsapp_node_modules
 rm -rf node_modules
 ln -s /home/site/whatsapp_node_modules node_modules
-npm install --no-audit --no-fund
+if [ ! -f "/home/site/whatsapp_node_modules/package-lock.json" ]; then
+    echo "Running npm install for WhatsApp bridge..."
+    npm install --no-audit --no-fund
+    cp package-lock.json /home/site/whatsapp_node_modules/ || true
+else
+    echo "WhatsApp dependencies already installed."
+fi
 cd ../..
 
-echo "Installing Telegram bridge dependencies..."
+echo "Setting up Telegram bridge dependencies..."
 cd jarvis/telegram-bridge
 mkdir -p /home/site/telegram_node_modules
 rm -rf node_modules
 ln -s /home/site/telegram_node_modules node_modules
-npm install --no-audit --no-fund
+if [ ! -f "/home/site/telegram_node_modules/package-lock.json" ]; then
+    echo "Running npm install for Telegram bridge..."
+    npm install --no-audit --no-fund
+    cp package-lock.json /home/site/telegram_node_modules/ || true
+else
+    echo "Telegram dependencies already installed."
+fi
 cd ../..
 
 # 4. Start the Python FastAPI backend
 echo "Starting Jarvis Backend..."
-python -m uvicorn jarvis.server.app:app --host 0.0.0.0 --port 8000
+# Use $PORT environment variable if Azure provides it, otherwise default to 8000
+PORT="${PORT:-8000}"
+python -m uvicorn jarvis.server.app:app --host 0.0.0.0 --port $PORT
