@@ -20,16 +20,22 @@ if (!OWNER_ID || OWNER_ID === 'YOUR_OWNER_ID_HERE') {
 const JARVIS_BACKEND_URL = process.env.JARVIS_BACKEND_URL || 'http://127.0.0.1:8000';
 const JARVIS_EVENT_URL = `${JARVIS_BACKEND_URL}/api/telegram/event`;
 
-async function sendStatus(status, data = null) {
-    try {
-        await axios.post(JARVIS_EVENT_URL, {
-            type: status,
-            data: data
-        }, {
-            headers: { 'X-API-Key': process.env.JARVIS_SECRET_KEY || 'JARVIS_DEV_KEY' }
-        });
-    } catch (err) {
-        console.error("Could not send status to Jarvis:", err.message);
+async function sendStatus(status, data = null, retries = 5) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            await axios.post(JARVIS_EVENT_URL, {
+                type: status,
+                data: data
+            }, {
+                headers: { 'X-API-Key': process.env.JARVIS_SECRET_KEY || 'JARVIS_DEV_KEY' }
+            });
+            return;
+        } catch (err) {
+            console.error(`Could not send status to Jarvis (attempt ${i + 1}/${retries}):`, err.message);
+            if (i < retries - 1) {
+                await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+        }
     }
 }
 
