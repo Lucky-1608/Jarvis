@@ -30,12 +30,12 @@ cd jarvis/whatsapp-bridge
 mkdir -p /home/site/whatsapp_node_modules
 rm -rf node_modules
 ln -s /home/site/whatsapp_node_modules node_modules
-if [ ! -f "/home/site/whatsapp_node_modules/package-lock.json" ]; then
+if ! cmp -s package.json /home/site/whatsapp_node_modules/package.json.cached; then
     echo "Running npm install for WhatsApp bridge..."
     npm install --no-audit --no-fund
-    cp package-lock.json /home/site/whatsapp_node_modules/ || true
+    cp package.json /home/site/whatsapp_node_modules/package.json.cached
 else
-    echo "WhatsApp dependencies already installed."
+    echo "WhatsApp dependencies already installed and up to date."
 fi
 cd ../..
 
@@ -44,12 +44,12 @@ cd jarvis/telegram-bridge
 mkdir -p /home/site/telegram_node_modules
 rm -rf node_modules
 ln -s /home/site/telegram_node_modules node_modules
-if [ ! -f "/home/site/telegram_node_modules/package-lock.json" ]; then
+if ! cmp -s package.json /home/site/telegram_node_modules/package.json.cached; then
     echo "Running npm install for Telegram bridge..."
     npm install --no-audit --no-fund
-    cp package-lock.json /home/site/telegram_node_modules/ || true
+    cp package.json /home/site/telegram_node_modules/package.json.cached
 else
-    echo "Telegram dependencies already installed."
+    echo "Telegram dependencies already installed and up to date."
 fi
 cd ../..
 
