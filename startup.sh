@@ -27,30 +27,32 @@ echo "NPM version: $(npm -v)"
 # 3. Install the bridge dependencies persistently (only if missing)
 echo "Setting up WhatsApp bridge dependencies..."
 cd jarvis/whatsapp-bridge
-mkdir -p /home/site/whatsapp_node_modules
-rm -rf node_modules
-ln -s /home/site/whatsapp_node_modules node_modules
-if ! cmp -s package.json /home/site/whatsapp_node_modules/package.json.cached; then
+mkdir -p /home/site/whatsapp_bridge_cache
+if ! cmp -s package.json /home/site/whatsapp_bridge_cache/package.json; then
     echo "Running npm install for WhatsApp bridge..."
-    npm install --no-audit --no-fund
-    cp package.json /home/site/whatsapp_node_modules/package.json.cached
+    cp package.json /home/site/whatsapp_bridge_cache/
+    [ -f package-lock.json ] && cp package-lock.json /home/site/whatsapp_bridge_cache/
+    npm install --prefix /home/site/whatsapp_bridge_cache --no-audit --no-fund
 else
     echo "WhatsApp dependencies already installed and up to date."
 fi
+rm -rf node_modules
+ln -s /home/site/whatsapp_bridge_cache/node_modules node_modules
 cd ../..
 
 echo "Setting up Telegram bridge dependencies..."
 cd jarvis/telegram-bridge
-mkdir -p /home/site/telegram_node_modules
-rm -rf node_modules
-ln -s /home/site/telegram_node_modules node_modules
-if ! cmp -s package.json /home/site/telegram_node_modules/package.json.cached; then
+mkdir -p /home/site/telegram_bridge_cache
+if ! cmp -s package.json /home/site/telegram_bridge_cache/package.json; then
     echo "Running npm install for Telegram bridge..."
-    npm install --no-audit --no-fund
-    cp package.json /home/site/telegram_node_modules/package.json.cached
+    cp package.json /home/site/telegram_bridge_cache/
+    [ -f package-lock.json ] && cp package-lock.json /home/site/telegram_bridge_cache/
+    npm install --prefix /home/site/telegram_bridge_cache --no-audit --no-fund
 else
     echo "Telegram dependencies already installed and up to date."
 fi
+rm -rf node_modules
+ln -s /home/site/telegram_bridge_cache/node_modules node_modules
 cd ../..
 
 # 4. Start the Python FastAPI backend
