@@ -1,3 +1,6 @@
+import { Capacitor } from '@capacitor/core';
+import { DeviceHands } from '../lib/device-bridge';
+
 // CompanionService.ts
 // Connects to the Jarvis Backend via WebSocket to receive system commands.
 
@@ -30,6 +33,7 @@ export class CompanionService {
       console.log('[Companion] Connected to Jarvis Backend.');
     };
 
+
     this.ws.onmessage = async (event) => {
       try {
         const data = JSON.parse(event.data);
@@ -48,10 +52,21 @@ export class CompanionService {
           } else if (action === 'open_app') {
             result = await window.electronAPI.openApp(params.app_name, params.target_url);
           }
+        } else if (Capacitor.isNativePlatform()) {
+          // We are on Mobile (Android/iOS)
+          if (action === 'open_app') {
+            try {
+              const res = await DeviceHands.launchApp({ name: params.app_name });
+              result = { status: res.success ? 'success' : 'error', output: res.message || res.error || 'Launched app.' };
+            } catch (err: any) {
+              result = { status: 'error', error: err.message || String(err) };
+            }
+          } else {
+             result = { status: 'error', error: 'Action not supported on mobile companion.' };
+          }
         } else {
-          // We are in browser or mobile. We can't execute shell commands here directly.
-          result = { status: 'error', error: 'Companion commands only supported on Desktop (Electron).' };
-          // If we had a Capacitor plugin, we would call it here.
+          // We are in a standard browser
+          result = { status: 'error', error: 'Companion commands only supported on Desktop (Electron) or Native Mobile (Capacitor).' };
         }
 
         // Send the result back

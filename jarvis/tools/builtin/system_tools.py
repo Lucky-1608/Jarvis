@@ -102,7 +102,7 @@ class OpenAppTool(Tool):
     def metadata(self) -> ToolMetadata:
         return ToolMetadata(
             name="open_app",
-            description="Open/launch a desktop application by name, optionally navigating to a URL if it is a browser.",
+            description="Open/launch an application by name on the user's PC or Mobile device, optionally navigating to a URL if it is a browser.",
             category=ToolCategory.SYSTEM,
             parameters=[
                 ToolParameter(
@@ -114,6 +114,11 @@ class OpenAppTool(Tool):
                     name="target_url",
                     type="string",
                     description="(Optional) The URL to open within the application, if the app is a web browser.",
+                ),
+                ToolParameter(
+                    name="device",
+                    type="string",
+                    description="The device to open the app on. Must be one of: 'pc', 'mobile', or 'both'. Defaults to 'pc'.",
                 ),
             ],
         )
@@ -354,25 +359,43 @@ class OpenAppTool(Tool):
         target_url_raw = params.get("target_url", "")
         target_url = str(target_url_raw).strip() if isinstance(target_url_raw, str) else ""
 
+        device_raw = params.get("device", "pc")
+        device = str(device_raw).strip().lower() if isinstance(device_raw, str) else "pc"
+        if device not in ("pc", "mobile", "both"):
+            device = "pc"
+
         if not app_name:
             return ToolResult(success=False, error="No application name provided.")
 
-        if companion_manager.has_companions():
-            try:
-                # Forward to connected companion
-                result = await companion_manager.send_command_and_wait(
-                    action="open_app", 
-                    params={"app_name": app_name, "target_url": target_url}
-                )
-                if result.get("status") == "success":
-                    return ToolResult(success=True, output=result.get("output", f"Opened {app_name} on companion device."))
-                else:
-                    return ToolResult(success=False, error=result.get("error", "Unknown error from companion."))
-            except Exception as e:
-                logger.error("companion.forward_failed", error=str(e))
-                # Fallback to local execution if forwarding fails
-                pass
+        results = []
+        errors = []
 
+        # 1. Open on Mobile (Companion)
+        if device in ("mobile", "both"):
+            if companion_manager.has_companions():
+                try:
+                    # Forward to connected companion
+                    result = await companion_manager.send_command_and_wait(
+                        action="open_app", 
+                        params={"app_name": app_name, "target_url": target_url}
+                    )
+                    if result.get("status") == "success":
+                        results.append(result.get("output", f"Opened {app_name} on companion device."))
+                    else:
+                        errors.append(f"Mobile error: {result.get('error', 'Unknown error from companion.')}")
+                except Exception as e:
+                    logger.error("companion.forward_failed", error=str(e))
+                    errors.append(f"Mobile forward failed: {str(e)}")
+            else:
+                errors.append("No mobile companion device connected.")
+
+        # If only mobile was requested, return early
+        if device == "mobile":
+            if errors and not results:
+                return ToolResult(success=False, error="; ".join(errors))
+            return ToolResult(success=True, output="\n".join(results) + ("\nErrors: " + "; ".join(errors) if errors else ""))
+
+        # 2. Open on PC (Local)
         try:
             if app_name in self._WEBSITE_MAP:
                 app_name = self._WEBSITE_MAP[app_name]
@@ -387,9 +410,9 @@ class OpenAppTool(Tool):
                 if cmd_exe:
                     try:
                         if target_url:
-                            subprocess.Popen(f'cmd /c start "" "{cmd_exe}" "{target_url}"', shell=True)
+                            os.startfile(cmd_exe, arguments=target_url)
                         else:
-                            subprocess.Popen(f'cmd /c start "" "{cmd_exe}"', shell=True)
+                            os.startfile(cmd_exe)
                     except Exception as e:
                         return ToolResult(success=False, error=f"Failed to open '{cmd_exe}': {e}")
                 else:
@@ -399,9 +422,9 @@ class OpenAppTool(Tool):
                         shortcut = self._find_app_shortcut(app_name)
                         if shortcut:
                             if target_url:
-                                subprocess.Popen(f'cmd /c start "" "{shortcut}" "{target_url}"', shell=True)
+                                os.startfile(shortcut, arguments=target_url)
                             else:
-                                subprocess.Popen(f'cmd /c start "" "{shortcut}"', shell=True)
+                                os.startfile(shortcut)
                         else:
                             app_name_clean = "".join(c for c in app_name.lower() if c.isalnum())
                             ps_cmd = f"Get-StartApps | Where-Object {{ ($_.Name -replace '[^a-zA-Z0-9]', '') -match '{app_name_clean}' }} | Select-Object -ExpandProperty AppID"
@@ -413,9 +436,9 @@ class OpenAppTool(Tool):
                             else:
                                 try:
                                     if target_url:
-                                        subprocess.Popen(f'cmd /c start "" "{app_name}" "{target_url}"', shell=True)
+                                        os.startfile(app_name, arguments=target_url)
                                     else:
-                                        subprocess.Popen(f'cmd /c start "" "{app_name}"', shell=True)
+                                        os.startfile(app_name)
                                 except OSError:
                                     return ToolResult(success=False, error=f"Could not find or open application '{app_name}'.")
             elif platform.system() == "Darwin":
@@ -428,13 +451,19 @@ class OpenAppTool(Tool):
                     subprocess.Popen(f"xdg-open {app_name} &", shell=True)
                 else:
                     subprocess.Popen(f"{app_name} &", shell=True)
-
-            return ToolResult(
-                success=True,
-                output=f"Launched '{app_name}' successfully.",
-            )
+            
+            results.append(f"Launched '{app_name}' successfully on PC.")
         except Exception as exc:
-            return ToolResult(success=False, error=f"Failed to open '{app_name}': {exc}")
+            errors.append(f"Failed to open '{app_name}' on PC: {exc}")
+
+        if errors and not results:
+            return ToolResult(success=False, error="; ".join(errors))
+        
+        final_output = "\n".join(results)
+        if errors:
+            final_output += f"\nErrors encountered: {'; '.join(errors)}"
+            
+        return ToolResult(success=True, output=final_output)
 
 
 # ---------------------------------------------------------------------------
@@ -459,31 +488,31 @@ class CloseAppTool(Tool):
         )
 
     _CLOSE_MAP_WINDOWS = {
-        "chrome": "chrome.exe",
-        "google chrome": "chrome.exe",
-        "firefox": "firefox.exe",
-        "edge": "msedge.exe",
-        "microsoft edge": "msedge.exe",
-        "brave": "brave.exe",
-        "notepad": "notepad.exe",
-        "calculator": "CalculatorApp.exe",
-        "explorer": "explorer.exe",
-        "file explorer": "explorer.exe",
-        "vscode": "Code.exe",
-        "vs code": "Code.exe",
-        "visual studio code": "Code.exe",
-        "task manager": "Taskmgr.exe",
-        "spotify": "Spotify.exe",
-        "word": "WINWORD.EXE",
-        "microsoft word": "WINWORD.EXE",
-        "excel": "EXCEL.EXE",
-        "microsoft excel": "EXCEL.EXE",
-        "powerpoint": "POWERPNT.EXE",
-        "microsoft powerpoint": "POWERPNT.EXE",
-        "paint": "mspaint.exe",
-        "cmd": "cmd.exe",
-        "terminal": "WindowsTerminal.exe",
-        "windows terminal": "WindowsTerminal.exe",
+        "chrome": ["chrome.exe"],
+        "google chrome": ["chrome.exe"],
+        "firefox": ["firefox.exe"],
+        "edge": ["msedge.exe"],
+        "microsoft edge": ["msedge.exe"],
+        "brave": ["brave.exe"],
+        "notepad": ["notepad.exe"],
+        "calculator": ["CalculatorApp.exe", "Calculator.exe", "win32calc.exe"],
+        "explorer": ["explorer.exe"],
+        "file explorer": ["explorer.exe"],
+        "vscode": ["Code.exe"],
+        "vs code": ["Code.exe"],
+        "visual studio code": ["Code.exe"],
+        "task manager": ["Taskmgr.exe"],
+        "spotify": ["Spotify.exe"],
+        "word": ["WINWORD.EXE"],
+        "microsoft word": ["WINWORD.EXE"],
+        "excel": ["EXCEL.EXE"],
+        "microsoft excel": ["EXCEL.EXE"],
+        "powerpoint": ["POWERPNT.EXE"],
+        "microsoft powerpoint": ["POWERPNT.EXE"],
+        "paint": ["mspaint.exe"],
+        "cmd": ["cmd.exe"],
+        "terminal": ["WindowsTerminal.exe"],
+        "windows terminal": ["WindowsTerminal.exe"],
     }
 
     _CURRENT_WINDOW_ALIASES = {
@@ -604,9 +633,9 @@ class CloseAppTool(Tool):
     @classmethod
     def _resolve_windows_process_names(cls, app_name: str) -> list[str]:
         names: list[str] = []
-        for key, exe in cls._CLOSE_MAP_WINDOWS.items():
+        for key, exe_list in cls._CLOSE_MAP_WINDOWS.items():
             if key in app_name:
-                names.append(exe)
+                names.extend(exe_list)
 
         if not names:
             names.append(app_name if app_name.endswith(".exe") else f"{app_name}.exe")
@@ -618,6 +647,19 @@ class CloseAppTool(Tool):
 
     @staticmethod
     async def _taskkill(process_name: str) -> ToolResult:
+        # First try graceful termination so UWP apps close their ApplicationFrameHost windows
+        proc_graceful = await asyncio.create_subprocess_exec(
+            "taskkill",
+            "/IM",
+            process_name,
+            "/T",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        await proc_graceful.communicate()
+        await asyncio.sleep(0.5)
+
+        # Force kill to ensure it's gone
         proc = await asyncio.create_subprocess_exec(
             "taskkill",
             "/F",
@@ -640,6 +682,9 @@ class CloseAppTool(Tool):
             )
 
         if "not found" in combined or "no tasks" in combined:
+            # If force kill says not found, it might have been gracefully closed!
+            if proc_graceful.returncode == 0:
+                 return ToolResult(success=True, output=f"Closed '{process_name}' gracefully.")
             return ToolResult(success=False, error=f"'{process_name}' is not running.")
 
         return ToolResult(
@@ -686,16 +731,42 @@ class CloseAppTool(Tool):
 
     @staticmethod
     def _close_matching_window(app_name: str) -> str | None:
-        if sys.platform != "win32":
-            return None
-
         try:
-            import ctypes
-
-            import psutil
             import pygetwindow as gw
+            import psutil
+            import ctypes
         except ImportError:
             return None
+
+        # Robust ctypes fallback for UWP apps (like Calculator) which pygetwindow often misses
+        # because of IsWindowVisible filters or ApplicationFrameHost cloaking.
+        if sys.platform == "win32":
+            EnumWindows = ctypes.windll.user32.EnumWindows
+            EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_int))
+            GetWindowText = ctypes.windll.user32.GetWindowTextW
+            GetWindowTextLength = ctypes.windll.user32.GetWindowTextLengthW
+            SendMessage = ctypes.windll.user32.SendMessageW
+            WM_CLOSE = 0x0010
+            
+            ctypes_closed = []
+            
+            def foreach_window(hwnd, lParam):
+                length = GetWindowTextLength(hwnd)
+                if length > 0:
+                    buff = ctypes.create_unicode_buffer(length + 1)
+                    GetWindowText(hwnd, buff, length + 1)
+                    title = buff.value.strip()
+                    if title and app_name in title.lower():
+                        SendMessage(hwnd, WM_CLOSE, 0, 0)
+                        ctypes_closed.append(title)
+                return True
+                
+            EnumWindows(EnumWindowsProc(foreach_window), 0)
+            
+            if ctypes_closed:
+                # Give the OS a moment to process the WM_CLOSE messages
+                import time
+                time.sleep(0.5)
 
         matches = []
         for window in gw.getAllWindows():
@@ -703,7 +774,7 @@ class CloseAppTool(Tool):
             if title and app_name in title.lower():
                 matches.append(window)
 
-        if not matches:
+        if not matches and (sys.platform == "win32" and not ctypes_closed):
             return None
 
         closed_titles = []
@@ -713,7 +784,8 @@ class CloseAppTool(Tool):
             closed_titles.append(window.title)
             window.close()
 
-        time.sleep(0.5)
+        if sys.platform == "win32" and ctypes_closed:
+            closed_titles.extend(ctypes_closed)
 
         # Verify and force kill if still open
         remaining_hwnds = {w._hWnd for w in gw.getAllWindows()}
@@ -729,6 +801,8 @@ class CloseAppTool(Tool):
                     except Exception:
                         pass
 
+        # Deduplicate titles
+        closed_titles = list(dict.fromkeys(closed_titles))
         return f"Closed {len(closed_titles)} window(s): {', '.join(closed_titles[:5])}."
 
     @staticmethod

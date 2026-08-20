@@ -12,6 +12,7 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        registerPlugin(DeviceHandsPlugin.class);
         super.onCreate(savedInstanceState);
         
         // Request permissions
