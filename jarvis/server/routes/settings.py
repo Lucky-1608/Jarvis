@@ -31,14 +31,14 @@ async def get_api_keys():
 
     opencode_key = os.getenv("OPENCODE_API_KEY", "")
     nvidia_key = os.getenv("NVIDIA_API_KEY", "")
-    grok_key = os.getenv("GROK_API_KEY", "")
+    groq_key = os.getenv("GROQ_API_KEYS", os.getenv("GROQ_API_KEY", ""))
     gemini_key = os.getenv("GEMINI_API_KEY", "")
     jina_key = os.getenv("JINA_API_KEY", "")
 
     return {
         "opencode": mask_key(opencode_key, "sk-"),
         "nvidia": mask_key(nvidia_key, "nvapi-"),
-        "grok": mask_key(grok_key, "gsk-"),
+        "groq": mask_key(groq_key, "gsk_"),
         "gemini": mask_key(gemini_key, "AI-"),
         "jina": mask_key(jina_key, "jina_"),
         "ollama_cloud_url": os.getenv("OLLAMA_CLOUD_BASE_URL", "https://ollama.com")

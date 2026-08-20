@@ -68,7 +68,7 @@ Language models lie about their own actions — not maliciously, but because pat
    (loop-proof              │      │         opencode →        │          Dashboard
     secretary)              │      │         gemini →          │        
                             │      │         ollama →          │
-   Telegram  ◄──Bot API───► │      │         grok → nvidia     │
+   Telegram  ◄──Bot API───► │      │         groq → nvidia     │
                             │      │                           │ ◄──WS──► Device nodes
    Gmail  ◄────poll───────► │      │                           │      laptop ✓  phone ✓
    (+ Guardian scan)        │      │                           │      (AccessibilityService)
@@ -107,7 +107,7 @@ Jarvis never goes offline due to a single API failure. It uses a **5-tier provid
 1. **OpenCode** (Primary focus)
 2. **Ollama Cloud** (Remote Llama/Minimax)
 3. **Nvidia NIM** (High-performance fallback for heavy lifting)
-4. **Grok / xAI** (Cloud fallback)
+4. **Groq** (Cloud fallback)
 5. **Google Gemini** (Cloud fallback)
 6. **Local Ollama** (Offline capability for absolute privacy)
 

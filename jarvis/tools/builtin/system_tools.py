@@ -284,7 +284,7 @@ class OpenAppTool(Tool):
         "replicate": "https://replicate.com",
         "anthropic": "https://www.anthropic.com",
         "openai": "https://openai.com",
-        "grok": "https://x.com/i/grok",
+        "groq": "https://groq.com",
         "civitai": "https://civitai.com",
         "elevenlabs": "https://elevenlabs.io",
         "suno": "https://suno.com",

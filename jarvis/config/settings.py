@@ -62,14 +62,14 @@ class NvidiaNimSettings(BaseSettings):
     max_retries: int = 3
 
 
-class GrokSettings(BaseSettings):
-    """Grok (xAI) provider configuration (cloud fallback)."""
+class GroqSettings(BaseSettings):
+    """Groq provider configuration (cloud fallback)."""
 
-    model_config = SettingsConfigDict(env_prefix="GROK_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_prefix="GROQ_", env_file=".env", extra="ignore")
 
     api_key: str = ""
     api_keys: str = ""
-    base_url: str = "https://api.x.ai/v1"
+    base_url: str = "https://api.groq.com/openai/v1"
     model: str = ""
     timeout: int = 120
     max_retries: int = 3
@@ -166,7 +166,7 @@ class JarvisSettings(BaseSettings):
 
     # --- AI routing ---------------------------------------------------------
     ai_primary_provider: str = "ollama_cloud"
-    ai_fallback_providers: str = "opencode,nvidia,grok,gemini"
+    ai_fallback_providers: str = "opencode,nvidia,groq,gemini"
     ai_tool_selector_enabled: bool = False
 
     # --- Voice routing ------------------------------------------------------
@@ -181,7 +181,7 @@ class JarvisSettings(BaseSettings):
     opencode: OpenCodeSettings = Field(default_factory=OpenCodeSettings)
     ollama_cloud: OllamaCloudSettings = Field(default_factory=OllamaCloudSettings)
     nvidia: NvidiaNimSettings = Field(default_factory=NvidiaNimSettings)
-    grok: GrokSettings = Field(default_factory=GrokSettings)
+    groq: GroqSettings = Field(default_factory=GroqSettings)
     gemini: GeminiSettings = Field(default_factory=GeminiSettings)
     elevenlabs: ElevenLabsSettings = Field(default_factory=ElevenLabsSettings)
     obsidian: ObsidianSettings = Field(default_factory=ObsidianSettings)

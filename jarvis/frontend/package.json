@@ -102,6 +102,10 @@
     "appId": "com.jarvis.app",
     "productName": "Jarvis",
     "icon": "public/arc_reactor.png",
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
     "directories": {
       "output": "release"
     },

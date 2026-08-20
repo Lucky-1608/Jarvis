@@ -16,7 +16,7 @@ export function SettingsPage() {
   const [keys, setKeys] = useState({
     opencode: '',
     nvidia: '',
-    grok: '',
+    groq: '',
     gemini: '',
     jina: '',
     ollama_url: 'http://localhost:11434'
@@ -86,7 +86,7 @@ export function SettingsPage() {
           setKeys({
             opencode: keysRes.data.opencode || '',
             nvidia: keysRes.data.nvidia || '',
-            grok: keysRes.data.grok || '',
+            groq: keysRes.data.groq || '',
             gemini: keysRes.data.gemini || '',
             jina: keysRes.data.jina || '',
             ollama_url: keysRes.data.ollama_url || 'http://localhost:11434'
@@ -219,11 +219,11 @@ export function SettingsPage() {
                 </div>
 
                 <div className="flex flex-col gap-2">
-                  <label className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Grok / xAI</label>
+                  <label className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Groq</label>
                   <div className="flex gap-2">
                     <Input 
                       type="password" 
-                      value={keys.grok} 
+                      value={keys.groq} 
                       placeholder={loading ? "Loading..." : "gsk-..."}
                       readOnly 
                       className="bg-[#0B0F19] font-mono" 

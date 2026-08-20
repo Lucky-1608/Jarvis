@@ -1,7 +1,7 @@
 """
-Jarvis OS — Grok (xAI) AI Provider.
+Jarvis OS — Groq AI Provider.
 
-Cloud fallback provider using xAI's Grok models via their
+Cloud fallback provider using Groq models via their
 OpenAI-compatible chat completions API.
 """
 
@@ -27,13 +27,13 @@ from jarvis.providers.base import (
 logger = structlog.get_logger(__name__)
 
 
-class GrokProvider(AIProvider):
-    """Grok (xAI) cloud AI provider — advanced reasoning fallback."""
+class GroqProvider(AIProvider):
+    """Groq cloud AI provider — advanced reasoning fallback."""
 
-    name = "grok"
+    name = "groq"
 
     def __init__(self) -> None:
-        cfg = get_settings().grok
+        cfg = get_settings().groq
         self._key_rotator = APIKeyRotator(cfg.api_keys.strip('"\''), cfg.api_key.strip('"\''))
         self._base_url = cfg.base_url.rstrip("/")
         self._default_model = cfg.model.strip('"\'')
@@ -101,7 +101,7 @@ class GrokProvider(AIProvider):
             except (httpx.HTTPStatusError, httpx.ConnectError, httpx.TimeoutException) as exc:
                 last_error = exc
                 logger.warning(
-                    "grok.chat.retry",
+                    "groq.chat.retry",
                     attempt=attempt,
                     max_retries=self._max_retries,
                     error=str(exc),
@@ -110,7 +110,7 @@ class GrokProvider(AIProvider):
                     break
 
         raise ConnectionError(
-            f"Grok chat failed after {self._max_retries} attempts: {last_error}"
+            f"Groq chat failed after {self._max_retries} attempts: {last_error}"
         )
 
     # -- Chat (streaming) ---------------------------------------------------

@@ -27,7 +27,7 @@ from jarvis.providers.base import (
     StreamChunk,
 )
 from jarvis.providers.gemini import GeminiProvider
-from jarvis.providers.grok import GrokProvider
+from jarvis.providers.groq import GroqProvider
 from jarvis.providers.nvidia import NvidiaNimProvider
 from jarvis.providers.ollama_cloud import OllamaCloudProvider
 from jarvis.providers.opencode import OpenCodeProvider
@@ -39,7 +39,7 @@ PROVIDER_REGISTRY: dict[str, type[AIProvider]] = {
     "opencode": OpenCodeProvider,
     "ollama_cloud": OllamaCloudProvider,
     "nvidia": NvidiaNimProvider,
-    "grok": GrokProvider,
+    "groq": GroqProvider,
     "gemini": GeminiProvider,
 }
 
