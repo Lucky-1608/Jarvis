@@ -1,6 +1,10 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { exec } from 'node:child_process';
+import util from 'node:util';
+
+const execAsync = util.promisify(exec);
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -54,6 +58,38 @@ app.on('window-all-closed', () => {
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();
+  }
+});
+
+// Setup IPC handlers
+ipcMain.handle('run-command', async (_, command: string, cwd?: string) => {
+  try {
+    const { stdout, stderr } = await execAsync(command, { cwd });
+    return { status: 'success', output: { stdout, stderr } };
+  } catch (error: any) {
+    return { status: 'error', error: error.message };
+  }
+});
+
+ipcMain.handle('open-app', async (_, appName: string, url?: string) => {
+  try {
+    const isWindows = process.platform === 'win32';
+    const isMac = process.platform === 'darwin';
+    let command = '';
+
+    if (isWindows) {
+      command = `start "" "${appName}"`;
+      if (url) command += ` "${url}"`;
+    } else if (isMac) {
+      command = url ? `open -a "${appName}" "${url}"` : `open -a "${appName}"`;
+    } else {
+      command = url ? `${appName} "${url}" &` : `${appName} &`;
+    }
+
+    await execAsync(command);
+    return { status: 'success' };
+  } catch (error: any) {
+    return { status: 'error', error: error.message };
   }
 });
 

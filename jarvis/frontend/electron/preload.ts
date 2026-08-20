@@ -1,7 +1,6 @@
-import { contextBridge } from 'electron';
+import { contextBridge, ipcRenderer } from 'electron';
 
-// Expose safe APIs to the renderer process
 contextBridge.exposeInMainWorld('electronAPI', {
-  // Example:
-  // sendMessage: (msg: string) => ipcRenderer.send('message', msg)
+  runCommand: (command: string, cwd?: string) => ipcRenderer.invoke('run-command', command, cwd),
+  openApp: (appName: string, url?: string) => ipcRenderer.invoke('open-app', appName, url)
 });

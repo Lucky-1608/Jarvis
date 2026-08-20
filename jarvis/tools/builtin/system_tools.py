@@ -27,6 +27,8 @@ from typing import Any
 import psutil
 import structlog
 
+from jarvis.server.companion_manager import companion_manager
+
 from jarvis.tools.base import (
     Tool,
     ToolCategory,
@@ -346,11 +348,30 @@ class OpenAppTool(Tool):
     }
 
     async def execute(self, **params: Any) -> ToolResult:
-        app_name = params.get("app_name", "").strip().lower()
-        target_url = params.get("target_url", "").strip()
+        app_name_raw = params.get("app_name", "")
+        app_name = str(app_name_raw).strip().lower() if isinstance(app_name_raw, str) else ""
+        
+        target_url_raw = params.get("target_url", "")
+        target_url = str(target_url_raw).strip() if isinstance(target_url_raw, str) else ""
 
         if not app_name:
             return ToolResult(success=False, error="No application name provided.")
+
+        if companion_manager.has_companions():
+            try:
+                # Forward to connected companion
+                result = await companion_manager.send_command_and_wait(
+                    action="open_app", 
+                    params={"app_name": app_name, "target_url": target_url}
+                )
+                if result.get("status") == "success":
+                    return ToolResult(success=True, output=result.get("output", f"Opened {app_name} on companion device."))
+                else:
+                    return ToolResult(success=False, error=result.get("error", "Unknown error from companion."))
+            except Exception as e:
+                logger.error("companion.forward_failed", error=str(e))
+                # Fallback to local execution if forwarding fails
+                pass
 
         try:
             if app_name in self._WEBSITE_MAP:
@@ -856,6 +877,23 @@ class RunCommandTool(Tool):
 
         if not command:
             return ToolResult(success=False, error="No command provided.")
+
+        if companion_manager.has_companions():
+            try:
+                # Forward to connected companion
+                result = await companion_manager.send_command_and_wait(
+                    action="run_command", 
+                    params={"command": command, "cwd": cwd, "timeout": timeout},
+                    timeout=timeout + 5
+                )
+                if result.get("status") == "success":
+                    return ToolResult(success=True, output=result.get("output", {}))
+                else:
+                    return ToolResult(success=False, error=result.get("error", "Unknown error from companion."))
+            except Exception as e:
+                logger.error("companion.forward_failed", error=str(e))
+                # Fallback to local execution if forwarding fails
+                pass
 
         try:
             proc = await asyncio.create_subprocess_shell(

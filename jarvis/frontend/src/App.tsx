@@ -14,6 +14,9 @@ import { AgentsPage } from './pages/AgentsPage';
 import { WorkflowsPage } from './pages/WorkflowsPage';
 import { SettingsPage } from './pages/SettingsPage';
 
+import { CompanionService } from './services/CompanionService';
+import { getBaseUrl } from './lib/api';
+
 const queryClient = new QueryClient();
 
 function Router() {
@@ -35,6 +38,26 @@ function Router() {
 function App() {
   const [hasKey, setHasKey] = useState(!!localStorage.getItem('JARVIS_API_KEY'));
   const [inputValue, setInputValue] = useState('');
+
+  useEffect(() => {
+    let companion: CompanionService | null = null;
+    let isMounted = true;
+
+    if (hasKey) {
+      getBaseUrl().then((baseUrl) => {
+        if (!isMounted) return;
+        companion = new CompanionService(baseUrl || window.location.origin);
+        companion.connect();
+      });
+    }
+
+    return () => {
+      isMounted = false;
+      if (companion) {
+        companion.disconnect();
+      }
+    };
+  }, [hasKey]);
 
   const handleKeySubmit = (e: React.FormEvent) => {
     e.preventDefault();

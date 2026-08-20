@@ -40,6 +40,7 @@ from jarvis.server.routes import (
     voice,
     whatsapp,
     workflows,
+    companion,
 )
 
 logger = structlog.get_logger(__name__)
@@ -181,6 +182,7 @@ def create_app() -> FastAPI:
     app.include_router(workflows.router, prefix="/api", tags=["Workflows"])
     app.include_router(whatsapp.router, prefix="/api", tags=["WhatsApp"])
     app.include_router(telegram.router, prefix="/api", tags=["Telegram"])
+    app.include_router(companion.router, prefix="/api", tags=["Companion"])
     app.include_router(oauth.router, prefix="/api/oauth", tags=["OAuth"])
     app.include_router(settings.router, prefix="/api/settings", tags=["Settings"])
 
