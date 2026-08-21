@@ -102,7 +102,7 @@ class OpenAppTool(Tool):
     def metadata(self) -> ToolMetadata:
         return ToolMetadata(
             name="open_app",
-            description="Open/launch an application by name on the user's PC or Mobile device, optionally navigating to a URL if it is a browser.",
+            description="Open/launch an application by name on the user's PC or Mobile device, optionally navigating to a URL if it is a browser. CRITICAL: You MUST call this tool EVERY SINGLE TIME the user asks to open an app, even if you just opened it in the previous turn. Do NOT assume it is already open based on chat history, and NEVER output a conversational response saying you opened it without actually emitting this tool call.",
             category=ToolCategory.SYSTEM,
             parameters=[
                 ToolParameter(
@@ -472,7 +472,7 @@ class CloseAppTool(Tool):
     def metadata(self) -> ToolMetadata:
         return ToolMetadata(
             name="close_app",
-            description="Close a desktop application by name, or close the current active app/window when app_name is 'current', 'active', or 'this app'.",
+            description="Close a desktop application by name, or close the current active app/window when app_name is 'current', 'active', or 'this app'. CRITICAL: You MUST call this tool EVERY SINGLE TIME the user asks to close an app, even if you just closed it in the previous turn. Do NOT rely on chat history to skip calling this tool, and NEVER say you closed it without actually emitting this tool call.",
             category=ToolCategory.SYSTEM,
             parameters=[
                 ToolParameter(
