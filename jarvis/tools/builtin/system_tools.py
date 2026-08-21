@@ -370,27 +370,23 @@ class OpenAppTool(Tool):
         results = []
         errors = []
 
-        # 1. Open on Mobile (Companion)
-        if device in ("mobile", "both"):
-            if companion_manager.has_companions():
-                try:
-                    # Forward to connected companion
-                    result = await companion_manager.send_command_and_wait(
-                        action="open_app", 
-                        params={"app_name": app_name, "target_url": target_url}
-                    )
-                    if result.get("status") == "success":
-                        results.append(result.get("output", f"Opened {app_name} on companion device."))
-                    else:
-                        errors.append(f"Mobile error: {result.get('error', 'Unknown error from companion.')}")
-                except Exception as e:
-                    logger.error("companion.forward_failed", error=str(e))
-                    errors.append(f"Mobile forward failed: {str(e)}")
-            else:
-                errors.append("No mobile companion device connected.")
-
-        # If only mobile was requested, return early
-        if device == "mobile":
+        # 1. Forward to Companion if connected
+        if companion_manager.has_companions():
+            try:
+                # Forward to connected companion
+                result = await companion_manager.send_command_and_wait(
+                    action="open_app", 
+                    params={"app_name": app_name, "target_url": target_url}
+                )
+                if result.get("status") == "success":
+                    results.append(result.get("output", f"Opened {app_name} on companion device."))
+                else:
+                    errors.append(f"Companion error: {result.get('error', 'Unknown error from companion.')}")
+            except Exception as e:
+                logger.error("companion.forward_failed", error=str(e))
+                errors.append(f"Companion forward failed: {str(e)}")
+            
+            # Since a companion is connected, we prioritize it (assuming cloud deployment) and return.
             if errors and not results:
                 return ToolResult(success=False, error="; ".join(errors))
             return ToolResult(success=True, output="\n".join(results) + ("\nErrors: " + "; ".join(errors) if errors else ""))
@@ -553,6 +549,21 @@ class CloseAppTool(Tool):
         app_name = self._normalize_app_name(str(raw_app_name))
         if not app_name:
             return ToolResult(success=False, error="No application name provided.")
+
+        # 1. Forward to Companion if connected
+        if companion_manager.has_companions():
+            try:
+                result = await companion_manager.send_command_and_wait(
+                    action="close_app", 
+                    params={"app_name": raw_app_name}
+                )
+                if result.get("status") == "success":
+                    return ToolResult(success=True, output=result.get("output", f"Closed {raw_app_name} on companion device."))
+                else:
+                    return ToolResult(success=False, error=f"Companion error: {result.get('error', 'Unknown error')}")
+            except Exception as e:
+                logger.error("companion.forward_failed", error=str(e))
+                return ToolResult(success=False, error=f"Companion forward failed: {str(e)}")
 
         try:
             if platform.system() == "Windows":

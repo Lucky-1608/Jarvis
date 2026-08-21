@@ -1,0 +1,22 @@
+FROM python:3.11-slim
+
+# Install required system packages for startup.sh
+RUN apt-get update && apt-get install -y curl xz-utils && rm -rf /var/lib/apt/lists/*
+
+# Set the working directory
+WORKDIR /app
+
+# Copy the entire project
+COPY . .
+
+# Install the Python dependencies (since requirements.txt uses -e .)
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Make the startup script executable
+RUN chmod +x startup.sh
+
+# Expose port 8000
+EXPOSE 8000
+
+# Run the startup script
+CMD ["./startup.sh"]

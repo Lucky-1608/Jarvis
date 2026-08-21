@@ -93,4 +93,26 @@ ipcMain.handle('open-app', async (_, appName: string, url?: string) => {
   }
 });
 
+ipcMain.handle('close-app', async (_, appName: string) => {
+  try {
+    const isWindows = process.platform === 'win32';
+    const isMac = process.platform === 'darwin';
+    let command = '';
+
+    if (isWindows) {
+      const processName = appName.toLowerCase().endsWith('.exe') ? appName : `${appName}.exe`;
+      command = `taskkill /IM "${processName}" /F`;
+    } else if (isMac) {
+      command = `killall "${appName}"`;
+    } else {
+      command = `pkill -f "${appName}"`;
+    }
+
+    await execAsync(command);
+    return { status: 'success' };
+  } catch (error: any) {
+    return { status: 'error', error: error.message };
+  }
+});
+
 app.whenReady().then(createWindow);

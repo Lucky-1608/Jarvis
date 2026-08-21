@@ -9,6 +9,7 @@ declare global {
     electronAPI?: {
       runCommand: (command: string, cwd?: string) => Promise<{ status: string, output?: any, error?: string }>;
       openApp: (appName: string, url?: string) => Promise<{ status: string, error?: string }>;
+      closeApp: (appName: string) => Promise<{ status: string, error?: string }>;
     };
   }
 }
@@ -51,6 +52,8 @@ export class CompanionService {
             result = await window.electronAPI.runCommand(params.command, params.cwd);
           } else if (action === 'open_app') {
             result = await window.electronAPI.openApp(params.app_name, params.target_url);
+          } else if (action === 'close_app') {
+            result = await window.electronAPI.closeApp(params.app_name);
           }
         } else if (Capacitor.isNativePlatform()) {
           // We are on Mobile (Android/iOS)
