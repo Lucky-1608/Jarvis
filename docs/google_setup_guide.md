@@ -24,16 +24,18 @@ Navigate to **APIs & Services → Library** and enable each of these:
 | Google Docs API | `Google Docs API` | Document read/create |
 | YouTube Data API v3 | `YouTube Data API` | Video search/info |
 
-## 3. Configure OAuth Consent Screen
+## 3. Configure OAuth Consent Screen (Google Auth Platform)
 
-1. Go to **APIs & Services → OAuth consent screen**
-2. Choose **External** (unless you have a Google Workspace org)
-3. Fill in:
+Google recently updated their interface to the **Google Auth Platform**. You'll see several sections on the left menu:
+
+1. Go to **Audience**:
+   - Set the User type to **External** (unless you have a Google Workspace org).
+   - Under **Test users**, add your personal Google account email(s) that you will use with Jarvis.
+2. Go to **Branding** and fill in:
    - **App name**: `Jarvis OS`
    - **User support email**: Your email
-   - **Developer contact**: Your email
-4. Click **Save and Continue**
-5. On the **Scopes** page, click **Add or Remove Scopes** and add:
+   - **Developer contact information**: Your email
+3. Go to **Data Access**. Click **Add or Remove Scopes** and add the following scopes:
    ```
    openid
    email
@@ -47,16 +49,14 @@ Navigate to **APIs & Services → Library** and enable each of these:
    https://www.googleapis.com/auth/documents
    https://www.googleapis.com/auth/youtube.readonly
    ```
-6. Click **Save and Continue**
-7. On the **Test users** page, add your Google account email(s)
-8. Click **Save and Continue**
+   *Note: Save your changes if prompted!*
 
-> **Note**: While in "Testing" mode, only test users you add can authenticate. To allow any Google account, you'll need to publish the app (requires Google review for sensitive scopes).
+> **Note**: While in "Testing" mode, only test users you add in the **Audience** tab can authenticate. To allow any Google account, you'll need to publish the app (requires Google review for sensitive scopes).
 
 ## 4. Create OAuth 2.0 Credentials
 
-1. Go to **APIs & Services → Credentials**
-2. Click **Create Credentials → OAuth client ID**
+1. Go to **Clients** in the left menu (or **APIs & Services → Credentials**)
+2. Click **Create OAuth client** (or **Create Credentials → OAuth client ID**)
 3. Choose **Web application**
 4. Name it `Jarvis Local`
 5. Under **Authorized redirect URIs**, add:
