@@ -5,6 +5,7 @@ const config: CapacitorConfig = {
   appName: 'Jarvis',
   webDir: 'dist',
   server: {
+    url: 'https://jarvisos-gdhfgnc4gscqecav.centralindia-01.azurewebsites.net',
     androidScheme: 'http',
     cleartext: true
   }

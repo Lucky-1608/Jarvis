@@ -44,7 +44,8 @@ function createWindow() {
     // Open devtools by default in dev mode
     // win.webContents.openDevTools();
   } else {
-    win.loadFile(path.join(RENDERER_DIST, 'index.html'));
+    // Load the live cloud version so it always stays up-to-date
+    win.loadURL('https://jarvisos-gdhfgnc4gscqecav.centralindia-01.azurewebsites.net');
   }
 }
 
