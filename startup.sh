@@ -59,4 +59,4 @@ cd ../..
 echo "Starting Jarvis Backend..."
 # Use $PORT environment variable if Azure provides it, otherwise default to 8000
 PORT="${PORT:-8000}"
-python -m uvicorn jarvis.server.app:app --host 0.0.0.0 --port $PORT
+python -m uvicorn jarvis.server.app:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips="*"
