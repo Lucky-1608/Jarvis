@@ -188,6 +188,8 @@ def create_app() -> FastAPI:
 
     @app.get("/", tags=["Root"])
     async def root():
+        if FRONTEND_DIST.is_dir():
+            return FileResponse(str(FRONTEND_DIST / "index.html"))
         return {
             "name": "Jarvis OS",
             "version": "0.1.0",
