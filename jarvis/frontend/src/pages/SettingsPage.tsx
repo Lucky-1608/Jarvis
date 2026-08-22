@@ -71,7 +71,38 @@ export function SettingsPage() {
   };
 
 
+  const handleOAuthLogin = async (provider: string) => {
+    const baseUrl = await getBaseUrl();
+    const url = `${baseUrl}/api/oauth/login/${provider}`;
+    
+    // Open in a centered popup window
+    const width = 500;
+    const height = 650;
+    const left = window.screenX + (window.outerWidth - width) / 2;
+    const top = window.screenY + (window.outerHeight - height) / 2;
+    
+    window.open(url, `${provider}_oauth`, `width=${width},height=${height},left=${left},top=${top},popup=yes`);
+  };
+
   useEffect(() => {
+    // If this page is opened in a popup window for OAuth, close it and notify parent
+    if (window.opener && window.name.includes('_oauth')) {
+      window.opener.postMessage({ type: 'OAUTH_COMPLETE' }, '*');
+      window.close();
+    }
+    
+    // Listen for completion messages from the popup
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'OAUTH_COMPLETE') {
+        // Refresh the integrations list
+        api.get('/api/settings/integrations').then(res => {
+          if (res.ok && res.data) setIntegrations(res.data);
+        });
+      }
+    };
+    
+    window.addEventListener('message', handleMessage);
+    
     async function fetchData() {
       try {
         const [keysRes, integrationsRes, pluginsRes, systemRes] = await Promise.all([
@@ -109,6 +140,8 @@ export function SettingsPage() {
       }
     }
     fetchData();
+    
+    return () => window.removeEventListener('message', handleMessage);
   }, []);
 
   return (
@@ -376,10 +409,7 @@ export function SettingsPage() {
                     </div>
                   )}
                 </div>
-                <Button onClick={async () => {
-                  const baseUrl = await getBaseUrl();
-                  window.location.href = `${baseUrl}/api/oauth/login/google`;
-                }} className="w-full bg-white text-black hover:bg-gray-200">
+                <Button onClick={() => handleOAuthLogin('google')} className="w-full bg-white text-black hover:bg-gray-200">
                   {integrations.google && integrations.google.length > 0 ? "Add Another Account" : "Connect to Google"}
                 </Button>
               </div>
@@ -408,10 +438,7 @@ export function SettingsPage() {
                     </div>
                   )}
                 </div>
-                <Button onClick={async () => {
-                  const baseUrl = await getBaseUrl();
-                  window.location.href = `${baseUrl}/api/oauth/login/notion`;
-                }} className="w-full bg-white text-black hover:bg-gray-200">
+                <Button onClick={() => handleOAuthLogin('notion')} className="w-full bg-white text-black hover:bg-gray-200">
                   {integrations.notion && integrations.notion.length > 0 ? "Add Another Workspace" : "Connect to Notion"}
                 </Button>
               </div>
@@ -437,10 +464,7 @@ export function SettingsPage() {
                     </div>
                   )}
                 </div>
-                <Button onClick={async () => {
-                  const baseUrl = await getBaseUrl();
-                  window.location.href = `${baseUrl}/api/oauth/login/github`;
-                }} className="w-full bg-[#2da44e] text-white hover:bg-[#2c974b]">
+                <Button onClick={() => handleOAuthLogin('github')} className="w-full bg-[#2da44e] text-white hover:bg-[#2c974b]">
                   {integrations.github && integrations.github.length > 0 ? "Add Another Account" : "Connect to GitHub"}
                 </Button>
               </div>
