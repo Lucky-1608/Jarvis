@@ -1,0 +1,1 @@
+let e=require("electron");e.contextBridge.exposeInMainWorld(`electronAPI`,{runCommand:(t,n)=>e.ipcRenderer.invoke(`run-command`,t,n),openApp:(t,n)=>e.ipcRenderer.invoke(`open-app`,t,n),closeApp:t=>e.ipcRenderer.invoke(`close-app`,t)});
