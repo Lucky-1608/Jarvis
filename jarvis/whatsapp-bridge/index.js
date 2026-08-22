@@ -40,8 +40,8 @@ async function connectToWhatsApp() {
 
     const path = require('path');
     const authFolder = process.env.WEBSITE_SITE_NAME 
-        ? '/home/site/auth_info_baileys' 
-        : 'auth_info_baileys';
+        ? path.join(process.env.HOME || process.env.USERPROFILE || '/home', 'site', 'auth_info_baileys')
+        : path.join(__dirname, 'auth_info_baileys');
 
     const { state, saveCreds } = await useMultiFileAuthState(authFolder);
     const { version, isLatest } = await fetchLatestBaileysVersion();
