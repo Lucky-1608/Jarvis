@@ -75,13 +75,32 @@ export function SettingsPage() {
     const baseUrl = await getBaseUrl();
     const url = `${baseUrl}/api/oauth/login/${provider}`;
     
-    // Open in a centered popup window
-    const width = 500;
-    const height = 650;
-    const left = window.screenX + (window.outerWidth - width) / 2;
-    const top = window.screenY + (window.outerHeight - height) / 2;
+    const electronAPI = (window as any).electronAPI;
     
-    window.open(url, `${provider}_oauth`, `width=${width},height=${height},left=${left},top=${top},popup=yes`);
+    if (electronAPI && electronAPI.openExternal) {
+      // Open in default system browser
+      electronAPI.openExternal(url);
+      
+      // Start polling for updates since we won't get a window message
+      const pollInterval = setInterval(() => {
+        api.get('/api/settings/integrations').then(res => {
+          if (res.ok && res.data) {
+            setIntegrations(res.data);
+          }
+        });
+      }, 3000);
+      
+      // Stop polling after 2 minutes
+      setTimeout(() => clearInterval(pollInterval), 120000);
+    } else {
+      // Open in a centered popup window (fallback for web)
+      const width = 500;
+      const height = 650;
+      const left = window.screenX + (window.outerWidth - width) / 2;
+      const top = window.screenY + (window.outerHeight - height) / 2;
+      
+      window.open(url, `${provider}_oauth`, `width=${width},height=${height},left=${left},top=${top},popup=yes`);
+    }
   };
 
   useEffect(() => {

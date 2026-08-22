@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { exec } from 'node:child_process';
@@ -110,6 +110,15 @@ ipcMain.handle('close-app', async (_, appName: string) => {
     }
 
     await execAsync(command);
+    return { status: 'success' };
+  } catch (error: any) {
+    return { status: 'error', error: error.message };
+  }
+});
+
+ipcMain.handle('open-external', async (_, url: string) => {
+  try {
+    await shell.openExternal(url);
     return { status: 'success' };
   } catch (error: any) {
     return { status: 'error', error: error.message };
