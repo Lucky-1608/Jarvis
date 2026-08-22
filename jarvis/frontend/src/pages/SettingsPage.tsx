@@ -5,7 +5,7 @@ import { Settings, Key, Link as LinkIcon, Shield, Server, Cpu, Box, Database, We
 import { FaGithub } from 'react-icons/fa';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { api } from '../lib/api';
+import { api, getBaseUrl } from '../lib/api';
 import { useToast } from '../hooks/use-toast';
 
 export function SettingsPage() {
@@ -18,8 +18,7 @@ export function SettingsPage() {
     nvidia: '',
     groq: '',
     gemini: '',
-    jina: '',
-    ollama_url: 'http://localhost:11434'
+    jina: ''
   });
   
   const [integrations, setIntegrations] = useState<{
@@ -88,8 +87,7 @@ export function SettingsPage() {
             nvidia: keysRes.data.nvidia || '',
             groq: keysRes.data.groq || '',
             gemini: keysRes.data.gemini || '',
-            jina: keysRes.data.jina || '',
-            ollama_url: keysRes.data.ollama_url || 'http://localhost:11434'
+            jina: keysRes.data.jina || ''
           });
         }
         
@@ -262,21 +260,6 @@ export function SettingsPage() {
               </div>
             </div>
 
-            {/* Local Models */}
-            <div className="bg-[rgba(255,255,255,0.02)] border border-[var(--border-subtle)] rounded-lg p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <Cpu className="text-[var(--accent-cyan)]" size={20} />
-                <h3 className="text-lg font-medium">Local Providers</h3>
-              </div>
-              <div className="flex flex-col gap-2">
-                <label className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Ollama Endpoint</label>
-                <div className="flex gap-2">
-                  <Input type="text" value={keys.ollama_url} onChange={(e) => setKeys({...keys, ollama_url: e.target.value})} className="bg-[#0B0F19] font-mono" />
-                  <Button variant="outline">Verify</Button>
-                </div>
-              </div>
-            </div>
-
           </div>
         )}
 
@@ -393,7 +376,10 @@ export function SettingsPage() {
                     </div>
                   )}
                 </div>
-                <Button onClick={() => window.location.href='/api/oauth/login/google'} className="w-full bg-white text-black hover:bg-gray-200">
+                <Button onClick={async () => {
+                  const baseUrl = await getBaseUrl();
+                  window.location.href = `${baseUrl}/api/oauth/login/google`;
+                }} className="w-full bg-white text-black hover:bg-gray-200">
                   {integrations.google && integrations.google.length > 0 ? "Add Another Account" : "Connect to Google"}
                 </Button>
               </div>
@@ -422,7 +408,10 @@ export function SettingsPage() {
                     </div>
                   )}
                 </div>
-                <Button onClick={() => window.location.href='/api/oauth/login/notion'} className="w-full bg-white text-black hover:bg-gray-200">
+                <Button onClick={async () => {
+                  const baseUrl = await getBaseUrl();
+                  window.location.href = `${baseUrl}/api/oauth/login/notion`;
+                }} className="w-full bg-white text-black hover:bg-gray-200">
                   {integrations.notion && integrations.notion.length > 0 ? "Add Another Workspace" : "Connect to Notion"}
                 </Button>
               </div>
@@ -448,7 +437,10 @@ export function SettingsPage() {
                     </div>
                   )}
                 </div>
-                <Button onClick={() => window.location.href='/api/oauth/login/github'} className="w-full bg-[#2da44e] text-white hover:bg-[#2c974b]">
+                <Button onClick={async () => {
+                  const baseUrl = await getBaseUrl();
+                  window.location.href = `${baseUrl}/api/oauth/login/github`;
+                }} className="w-full bg-[#2da44e] text-white hover:bg-[#2c974b]">
                   {integrations.github && integrations.github.length > 0 ? "Add Another Account" : "Connect to GitHub"}
                 </Button>
               </div>
