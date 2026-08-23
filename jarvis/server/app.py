@@ -141,20 +141,19 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def api_key_auth(request: Request, call_next):
-        # Allow unrestricted access to docs, root, health, static frontend assets, and OAuth endpoints
-        if request.url.path in ["/", "/docs", "/openapi.json", "/api/health"] or request.url.path.startswith("/api/oauth"):
-            return await call_next(request)
+        path = request.url.path
 
         # Allow CORS preflight requests
         if request.method == "OPTIONS":
             return await call_next(request)
 
-        # Allow frontend static files without API key
-        if request.url.path.startswith("/assets/") or request.url.path in ["/favicon.svg", "/robots.txt"]:
+        # Only enforce API key authentication on /api/ routes
+        # This allows SPA frontend routes (e.g. /settings) to load without an API key
+        if not path.startswith("/api/"):
             return await call_next(request)
 
-        # SPA catch-all: let index.html through (API key handled by the JS)
-        if request.url.path == "/index.html":
+        # Whitelist public API routes
+        if path == "/api/health" or path.startswith("/api/oauth"):
             return await call_next(request)
 
         # Check header or query param
