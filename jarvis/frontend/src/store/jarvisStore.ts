@@ -58,9 +58,6 @@ export interface LogEntry {
 }
 
 interface JarvisStore {
-  activeProjectId: string | null;
-  setActiveProjectId: (id: string | null) => void;
-
   aiState: AIState;
   setAIState: (state: AIState) => void;
   
@@ -105,9 +102,6 @@ interface JarvisStore {
 let wsInstance: WebSocket | null = null;
 
 export const useJarvisStore = create<JarvisStore>((set, get) => ({
-  activeProjectId: null,
-  setActiveProjectId: (id) => set({ activeProjectId: id }),
-
   aiState: 'idle',
   setAIState: (state) => set({ aiState: state }),
   

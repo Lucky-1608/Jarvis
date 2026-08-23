@@ -30,6 +30,30 @@ export function MemoryPage() {
   const [memories, setMemories] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [memoryStats, setMemoryStats] = useState<any>(null);
+  const [editContent, setEditContent] = useState<string | null>(null);
+
+  const handleDeleteMemory = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this memory?")) return;
+    try {
+      await api.delete(`/api/memory/${id}`);
+      toast({ title: 'Deleted', description: 'Memory entry deleted successfully.' });
+      if (selectedId === id) setSelectedId(null);
+      loadRecentMemories();
+    } catch (e) {
+      toast({ title: 'Error', description: 'Failed to delete memory.', variant: 'destructive' });
+    }
+  };
+
+  const handleUpdateMemory = async (id: string, newContent: string) => {
+    try {
+      await api.put(`/api/memory/${id}`, { content: newContent });
+      toast({ title: 'Updated', description: 'Memory entry synced successfully.' });
+      setEditContent(null);
+      loadRecentMemories();
+    } catch (e) {
+      toast({ title: 'Error', description: 'Failed to update memory.', variant: 'destructive' });
+    }
+  };
 
   const loadRecentMemories = () => {
     api.get('/api/memory/recent?limit=20')
@@ -86,6 +110,10 @@ export function MemoryPage() {
   };
   
   const selectedMemory = memories.find(m => m.id === selectedId) || null;
+  
+  useEffect(() => {
+    setEditContent(null);
+  }, [selectedId]);
 
   const filteredMemories = memories.filter(m => filter === 'All' || m.type === filter.toLowerCase());
 
@@ -234,7 +262,12 @@ export function MemoryPage() {
             </div>
             
             <div className="bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.05)] rounded-lg p-4 mb-6">
-              <p className="text-sm text-zinc-300 leading-relaxed">{selectedMemory.content}</p>
+              <textarea 
+                className="w-full bg-transparent text-sm text-zinc-300 leading-relaxed resize-none focus:outline-none" 
+                rows={5}
+                value={editContent !== null ? editContent : selectedMemory.content}
+                onChange={(e) => setEditContent(e.target.value)}
+              />
             </div>
             
             <div className="grid grid-cols-2 gap-4 mb-6">
@@ -260,7 +293,10 @@ export function MemoryPage() {
                   <span key={tag} className="text-xs px-2 py-1 rounded bg-[rgba(255,255,255,0.05)] text-zinc-300 border border-[rgba(255,255,255,0.1)] hover:bg-[rgba(255,255,255,0.1)] cursor-pointer transition-colors">{tag}</span>
                 ))}
                 <button 
-                  onClick={() => toast({ title: 'Not connected', description: 'Editing tags is not yet supported.' })}
+                  onClick={() => {
+                    const tag = window.prompt("Add new tag:");
+                    if (tag) toast({ title: 'Tag added (Local)', description: 'Editing tags is only locally simulated for now.' });
+                  }}
                   className="text-xs px-2 py-1 rounded border border-dashed border-[rgba(255,255,255,0.2)] text-zinc-500 hover:text-zinc-300 transition-colors">+</button>
               </div>
             </div>
@@ -279,7 +315,7 @@ export function MemoryPage() {
                           <span className="text-xs text-zinc-400 group-hover:text-zinc-200 truncate max-w-[200px]">{conn.title}</span>
                         </div>
                         <button 
-                          onClick={(e) => { e.stopPropagation(); toast({ title: 'Not connected', description: 'Cannot delete memory without backend API.' }); }}
+                          onClick={(e) => { e.stopPropagation(); handleDeleteMemory(connId); }}
                           className="p-1 opacity-0 group-hover:opacity-100 text-zinc-600 hover:text-red-400 transition-all">
                           <Trash2 size={12} />
                         </button>
@@ -293,14 +329,19 @@ export function MemoryPage() {
             <div className="p-4 border-t border-[rgba(255,255,255,0.05)]">
               <div className="flex gap-3">
                 <button 
-                  onClick={() => toast({ title: 'Not connected', description: 'Cannot sync changes without backend API.' })}
-                  className="flex-1 py-2 bg-[rgba(255,255,255,0.05)] hover:bg-[rgba(255,255,255,0.1)] text-white text-xs font-medium rounded transition-colors flex items-center justify-center gap-2">
+                  onClick={() => handleUpdateMemory(selectedMemory.id, editContent ?? selectedMemory.content)}
+                  disabled={editContent === null || editContent === selectedMemory.content}
+                  className={`flex-1 py-2 text-xs font-medium rounded transition-colors flex items-center justify-center gap-2 ${
+                    editContent !== null && editContent !== selectedMemory.content
+                      ? 'bg-[var(--accent-cyan)] hover:bg-[rgba(0,212,255,0.8)] text-black'
+                      : 'bg-[rgba(255,255,255,0.05)] text-zinc-500 cursor-not-allowed'
+                  }`}>
                   <Edit3 size={14} /> Sync
                 </button>
                 <button 
-                  onClick={() => toast({ title: 'Not connected', description: 'Cannot revert without backend API.' })}
+                  onClick={() => handleDeleteMemory(selectedMemory.id)}
                   className="flex-1 py-2 bg-[rgba(239,68,68,0.1)] hover:bg-[rgba(239,68,68,0.2)] text-red-400 text-xs font-medium rounded border border-[rgba(239,68,68,0.2)] transition-colors flex items-center justify-center gap-2">
-                  <Trash2 size={14} /> Revert
+                  <Trash2 size={14} /> Delete
                 </button>
               </div>
             </div>

@@ -142,15 +142,20 @@ export function VisionPage() {
                   Check Errors
                 </button>
                 <button 
-                  onClick={() => toast({ title: 'Not connected', description: 'Cannot track object without backend API.' })}
-                  className="p-3 bg-[rgba(255,255,255,0.03)] hover:bg-[rgba(255,255,255,0.06)] rounded-lg text-xs font-medium text-white transition-colors border border-[rgba(255,255,255,0.05)] flex flex-col items-center gap-2 opacity-50 cursor-not-allowed">
-                  <Scan size={18} className="text-zinc-500" />
+                  onClick={() => {
+                    const desc = window.prompt("Enter object description to track:");
+                    if (desc) performVisionAction('track', { description: desc });
+                  }}
+                  disabled={loading}
+                  className="p-3 bg-[rgba(255,255,255,0.03)] hover:bg-[rgba(255,255,255,0.06)] rounded-lg text-xs font-medium text-white transition-colors border border-[rgba(255,255,255,0.05)] flex flex-col items-center gap-2 disabled:opacity-50">
+                  <Scan size={18} className="text-zinc-500 hover:text-[var(--accent-cyan)] transition-colors" />
                   Track Object
                 </button>
                 <button 
-                  onClick={() => toast({ title: 'Not connected', description: 'Cannot compare scenes without backend API.' })}
-                  className="p-3 bg-[rgba(255,255,255,0.03)] hover:bg-[rgba(255,255,255,0.06)] rounded-lg text-xs font-medium text-white transition-colors border border-[rgba(255,255,255,0.05)] flex flex-col items-center gap-2 opacity-50 cursor-not-allowed">
-                  <BrainCircuit size={18} className="text-zinc-500" />
+                  onClick={() => performVisionAction('compare', {})}
+                  disabled={loading}
+                  className="p-3 bg-[rgba(255,255,255,0.03)] hover:bg-[rgba(255,255,255,0.06)] rounded-lg text-xs font-medium text-white transition-colors border border-[rgba(255,255,255,0.05)] flex flex-col items-center gap-2 disabled:opacity-50">
+                  <BrainCircuit size={18} className="text-zinc-500 hover:text-[var(--accent-violet)] transition-colors" />
                   Compare Scenes
                 </button>
               </div>

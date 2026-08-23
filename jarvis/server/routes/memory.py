@@ -120,6 +120,37 @@ async def store_memory(request: StoreMemoryRequest):
     return {"stored": True, "ids": ids, "memory_type": mem_type.value}
 
 
+class UpdateMemoryRequest(BaseModel):
+    content: str | None = Field(None, description="Updated content")
+    metadata: dict | None = Field(None, description="Updated metadata")
+
+
+@router.put("/memory/{entry_id}")
+async def update_memory(entry_id: str, request: UpdateMemoryRequest):
+    """Update a specific memory entry."""
+    brain = get_brain()
+    success = await brain.memory.update_entry(
+        entry_id=entry_id, 
+        content=request.content, 
+        metadata=request.metadata
+    )
+    if not success:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Memory not found")
+    return {"success": True, "id": entry_id}
+
+
+@router.delete("/memory/{entry_id}")
+async def delete_memory(entry_id: str):
+    """Delete a specific memory entry."""
+    brain = get_brain()
+    success = await brain.memory.delete_entry(entry_id)
+    if not success:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Memory not found")
+    return {"success": True, "id": entry_id}
+
+
 @router.get("/memory/stats")
 async def memory_stats():
     """Return memory system statistics."""

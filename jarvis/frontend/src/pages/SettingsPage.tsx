@@ -51,12 +51,20 @@ export function SettingsPage() {
   const handleUpdatePlugin = async (key: string, value: string) => {
     try {
       await api.post('/api/settings/plugins', { [key]: value });
-      toast({ title: 'API Key Saved', description: `Successfully updated ${key}.` });
+      toast({ title: 'Plugin Setting Saved', description: `Successfully updated ${key}.` });
     } catch (e) {
       toast({ title: 'Error', description: `Failed to update ${key}.`, variant: 'destructive' });
     }
   };
 
+  const handleUpdateKey = async (key: string, value: string) => {
+    try {
+      await api.post('/api/settings/keys', { [key]: value });
+      toast({ title: 'API Key Saved', description: `Successfully updated ${key}.` });
+    } catch (e) {
+      toast({ title: 'Error', description: `Failed to update ${key}.`, variant: 'destructive' });
+    }
+  };
 
   const handleSystemToggle = async () => {
     const newValue = !system.ai_tool_selector_enabled;
@@ -240,11 +248,11 @@ export function SettingsPage() {
                     <Input 
                       type="password" 
                       value={keys.opencode} 
+                      onChange={(e) => setKeys({...keys, opencode: e.target.value})}
                       placeholder={loading ? "Loading..." : "sk-..."}
-                      readOnly 
                       className="bg-[#0B0F19] font-mono" 
                     />
-                    <Button variant="outline">Update</Button>
+                    <Button variant="outline" onClick={() => handleUpdateKey('opencode', keys.opencode)}>Update</Button>
                   </div>
                 </div>
 
@@ -255,11 +263,11 @@ export function SettingsPage() {
                     <Input 
                       type="password" 
                       value={keys.nvidia} 
+                      onChange={(e) => setKeys({...keys, nvidia: e.target.value})}
                       placeholder={loading ? "Loading..." : "nvapi-..."}
-                      readOnly 
                       className="bg-[#0B0F19] font-mono" 
                     />
-                    <Button variant="outline">Update</Button>
+                    <Button variant="outline" onClick={() => handleUpdateKey('nvidia', keys.nvidia)}>Update</Button>
                   </div>
                 </div>
 
@@ -269,11 +277,11 @@ export function SettingsPage() {
                     <Input 
                       type="password" 
                       value={keys.groq} 
+                      onChange={(e) => setKeys({...keys, groq: e.target.value})}
                       placeholder={loading ? "Loading..." : "gsk-..."}
-                      readOnly 
                       className="bg-[#0B0F19] font-mono" 
                     />
-                    <Button variant="outline">Update</Button>
+                    <Button variant="outline" onClick={() => handleUpdateKey('groq', keys.groq)}>Update</Button>
                   </div>
                 </div>
 
@@ -283,11 +291,11 @@ export function SettingsPage() {
                     <Input 
                       type="password" 
                       value={keys.gemini} 
+                      onChange={(e) => setKeys({...keys, gemini: e.target.value})}
                       placeholder={loading ? "Loading..." : "AI-..."}
-                      readOnly 
                       className="bg-[#0B0F19] font-mono" 
                     />
-                    <Button variant="outline">Update</Button>
+                    <Button variant="outline" onClick={() => handleUpdateKey('gemini', keys.gemini)}>Update</Button>
                   </div>
                 </div>
 
@@ -297,11 +305,11 @@ export function SettingsPage() {
                     <Input 
                       type="password" 
                       value={keys.jina} 
+                      onChange={(e) => setKeys({...keys, jina: e.target.value})}
                       placeholder={loading ? "Loading..." : "jina_..."}
-                      readOnly 
                       className="bg-[#0B0F19] font-mono" 
                     />
-                    <Button variant="outline">Update</Button>
+                    <Button variant="outline" onClick={() => handleUpdateKey('jina', keys.jina)}>Update</Button>
                   </div>
                 </div>
               </div>
@@ -501,9 +509,31 @@ export function SettingsPage() {
                   <p className="text-sm text-[var(--text-muted)] mb-4">Chat with Jarvis via WhatsApp using Twilio API.</p>
                 </div>
                 {integrations.whatsapp ? (
-                  <Button variant="outline" className="w-full text-red-400 border-red-900/30 hover:bg-red-900/10">Disconnect</Button>
+                  <Button 
+                    variant="outline" 
+                    className="w-full text-red-400 border-red-900/30 hover:bg-red-900/10"
+                    onClick={async () => {
+                      if (window.confirm("Disconnect WhatsApp? This will remove your owner number.")) {
+                        await handleUpdatePlugin("whatsapp_owner_number", "");
+                        api.get('/api/settings/integrations').then(res => res.ok && setIntegrations(res.data));
+                      }
+                    }}
+                  >
+                    Disconnect
+                  </Button>
                 ) : (
-                  <Button className="w-full bg-[#25D366] text-white hover:bg-[#20b858]">Configure Twilio</Button>
+                  <Button 
+                    className="w-full bg-[#25D366] text-white hover:bg-[#20b858]"
+                    onClick={async () => {
+                      const num = window.prompt("Enter your WhatsApp Owner Number (e.g. 1234567890):");
+                      if (num !== null) {
+                        await handleUpdatePlugin("whatsapp_owner_number", num);
+                        api.get('/api/settings/integrations').then(res => res.ok && setIntegrations(res.data));
+                      }
+                    }}
+                  >
+                    Set Owner Number
+                  </Button>
                 )}
               </div>
 
@@ -524,9 +554,31 @@ export function SettingsPage() {
                   <p className="text-sm text-[var(--text-muted)] mb-4">Access your Jarvis assistant directly from Telegram.</p>
                 </div>
                 {integrations.telegram ? (
-                  <Button variant="outline" className="w-full text-red-400 border-red-900/30 hover:bg-red-900/10">Disconnect</Button>
+                  <Button 
+                    variant="outline" 
+                    className="w-full text-red-400 border-red-900/30 hover:bg-red-900/10"
+                    onClick={async () => {
+                      if (window.confirm("Disconnect Telegram? This will remove your bot token.")) {
+                        await handleUpdatePlugin("telegram_bot_token", "");
+                        api.get('/api/settings/integrations').then(res => res.ok && setIntegrations(res.data));
+                      }
+                    }}
+                  >
+                    Disconnect
+                  </Button>
                 ) : (
-                  <Button className="w-full bg-[#26A5E4] text-white hover:bg-[#2094ce]">Add Bot Token</Button>
+                  <Button 
+                    className="w-full bg-[#26A5E4] text-white hover:bg-[#2094ce]"
+                    onClick={async () => {
+                      const token = window.prompt("Enter your Telegram Bot Token:");
+                      if (token) {
+                        await handleUpdatePlugin("telegram_bot_token", token);
+                        api.get('/api/settings/integrations').then(res => res.ok && setIntegrations(res.data));
+                      }
+                    }}
+                  >
+                    Add Bot Token
+                  </Button>
                 )}
               </div>
 

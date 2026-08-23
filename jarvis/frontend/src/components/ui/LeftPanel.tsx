@@ -7,7 +7,7 @@ import {
 import { Link, useLocation } from 'wouter';
 
 const navItems = [
-  { id: 'projects', icon: Folder, label: 'Projects', path: '/' },
+  { id: 'projects', icon: Folder, label: 'Dashboard', path: '/' },
   { id: 'memory', icon: Brain, label: 'Memory', path: '/memory' },
   { id: 'vision', icon: Eye, label: 'Vision', path: '/vision' },
   { id: 'voice', icon: Mic, label: 'Voice', path: '/voice' },

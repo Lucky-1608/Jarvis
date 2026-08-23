@@ -317,6 +317,33 @@ class MemoryManager:
 
         return all_entries
 
+    async def delete_entry(self, entry_id: str) -> bool:
+        """Delete a specific memory entry by ID."""
+        async with AsyncSessionLocal() as session:
+            stmt = delete(MemoryNode).where(MemoryNode.id == entry_id)
+            result = await session.execute(stmt)
+            await session.commit()
+            return result.rowcount > 0
+
+    async def update_entry(self, entry_id: str, content: str | None = None, metadata: dict[str, Any] | None = None) -> bool:
+        """Update a specific memory entry's content or metadata."""
+        from sqlalchemy import update
+        async with AsyncSessionLocal() as session:
+            updates = {}
+            if content is not None:
+                updates["content"] = content
+                updates["embedding"] = self._embedding_fn([content])[0]
+            if metadata is not None:
+                updates["metadata_"] = metadata
+                
+            if not updates:
+                return False
+                
+            stmt = update(MemoryNode).where(MemoryNode.id == entry_id).values(**updates)
+            result = await session.execute(stmt)
+            await session.commit()
+            return result.rowcount > 0
+
     # -- Stats & maintenance ------------------------------------------------
 
     async def get_stats(self) -> dict[str, Any]:

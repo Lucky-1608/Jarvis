@@ -135,7 +135,9 @@ async def update_plugin_keys(keys: dict[str, str]):
         "github_token": "GITHUB_TOKEN",
         "homeassistant_url": "HOMEASSISTANT_URL",
         "eth_rpc_url": "ETH_RPC_URL",
-        "database_url": "DATABASE_URL"
+        "database_url": "DATABASE_URL",
+        "telegram_bot_token": "TELEGRAM_BOT_TOKEN",
+        "whatsapp_owner_number": "WHATSAPP_OWNER_NUMBER"
     }
 
     updates = {}
@@ -150,3 +152,36 @@ async def update_plugin_keys(keys: dict[str, str]):
 
     return {"success": True, "updated_keys": list(updates.keys())}
 
+
+@router.post("/keys")
+async def update_api_keys(keys: dict[str, str]):
+    """Updates AI provider API keys in .env and runtime environment."""
+    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), ".env")
+
+    # Map frontend key names to .env variables
+    key_mapping = {
+        "opencode": "OPENCODE_API_KEY",
+        "nvidia": "NVIDIA_API_KEY",
+        "groq": "GROQ_API_KEY",
+        "gemini": "GEMINI_API_KEY",
+        "jina": "JINA_API_KEY"
+    }
+
+    updates = {}
+    for k, v in keys.items():
+        if k in key_mapping and v:
+            # Only update if it's not a masked string
+            if '***' not in v and '...' not in v:
+                updates[key_mapping[k]] = v
+
+    if updates:
+        update_env_file(env_path, updates)
+        
+        # Also update os.environ so the backend picks it up immediately without restart if needed
+        # (For Groq, it also supports GROQ_API_KEYS plural)
+        for k, v in updates.items():
+            os.environ[k] = v
+            if k == "GROQ_API_KEY":
+                os.environ["GROQ_API_KEYS"] = v
+
+    return {"success": True, "updated_keys": list(updates.keys())}

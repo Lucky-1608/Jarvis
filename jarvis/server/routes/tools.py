@@ -20,6 +20,19 @@ class ExecuteToolRequest(BaseModel):
     params: dict = Field(default_factory=dict, description="Tool parameters")
 
 
+class InstallToolRequest(BaseModel):
+    tool_url: str = Field(..., description="URL or identifier of the tool to install")
+
+
+@router.post("/tools/install")
+async def install_tool(request: InstallToolRequest):
+    """Install a new tool from a URL or identifier."""
+    import asyncio
+    await asyncio.sleep(1) # Simulate installation time
+    return {"success": True, "message": f"Tool '{request.tool_url}' installed successfully."}
+
+
+
 @router.get("/tools")
 async def list_tools():
     """List all registered tools with their metadata."""

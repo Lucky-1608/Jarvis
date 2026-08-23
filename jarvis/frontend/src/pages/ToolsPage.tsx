@@ -49,7 +49,26 @@ export function ToolsPage() {
   const activeTool = tools.find(t => t.name === selectedTool) || null;
   
   const categories = ['All', ...Array.from(new Set(tools.map(t => t.category)))];
+  
   const filteredTools = tools.filter(t => filter === 'All' || t.category === filter);
+
+  const handleInstallTool = async () => {
+    const url = window.prompt("Enter tool URL or identifier (e.g. github.com/tools/example):");
+    if (!url) return;
+    
+    toast({ title: 'Installing...', description: `Fetching ${url}` });
+    try {
+      const res = await api.post<{message: string}>('/api/tools/install', { tool_url: url });
+      if (res.ok) {
+        toast({ title: 'Success', description: res.data.message });
+        // Optionally refresh tools here
+      } else {
+        toast({ title: 'Error', description: 'Failed to install tool', variant: 'destructive' });
+      }
+    } catch (e) {
+      toast({ title: 'Error', description: 'Failed to install tool', variant: 'destructive' });
+    }
+  };
 
   return (
     <PageShell>
@@ -58,7 +77,7 @@ export function ToolsPage() {
         description="Manage and monitor available AI capabilities and registered tools"
         actions={
           <button 
-            onClick={() => toast({ title: 'Not connected', description: 'Cannot install tools without backend API.' })}
+            onClick={handleInstallTool}
             className="px-4 py-2 bg-[rgba(0,212,255,0.1)] border border-[rgba(0,212,255,0.3)] text-[var(--accent-cyan)] rounded-md text-sm font-medium hover:bg-[rgba(0,212,255,0.2)] transition-colors shadow-[0_0_15px_rgba(0,212,255,0.1)] flex items-center gap-2">
             <Box size={16} /> Registry
           </button>

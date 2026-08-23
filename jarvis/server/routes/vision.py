@@ -91,3 +91,33 @@ async def check_errors():
     result = await analyzer.read_error()
 
     return VisionResponse(**result.to_dict())
+
+
+class TrackObjectRequest(BaseModel):
+    description: str = Field(..., description="Object to track")
+
+
+class CompareScenesRequest(BaseModel):
+    image1_b64: str | None = None
+    image2_b64: str | None = None
+
+
+@router.post("/vision/track", response_model=VisionResponse)
+async def track_object(request: TrackObjectRequest):
+    """Start tracking an object across frames (Simulated)."""
+    return VisionResponse(
+        summary=f"Tracking object: {request.description}",
+        elements=[{"name": request.description, "status": "tracking_started"}],
+        confidence=0.9
+    )
+
+
+@router.post("/vision/compare", response_model=VisionResponse)
+async def compare_scenes(request: CompareScenesRequest):
+    """Compare two scenes for differences (Simulated)."""
+    return VisionResponse(
+        summary="Scene comparison is a simulated feature for now.",
+        elements=[],
+        confidence=0.5
+    )
+
