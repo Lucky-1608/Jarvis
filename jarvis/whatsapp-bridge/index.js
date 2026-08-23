@@ -43,6 +43,22 @@ async function connectToWhatsApp() {
         ? path.join(process.env.HOME || process.env.USERPROFILE || '/home', 'site', 'auth_info_baileys')
         : path.join(__dirname, 'auth_info_baileys');
 
+    const fs = require('fs');
+    const credsPath = path.join(authFolder, 'creds.json');
+    if (fs.existsSync(credsPath)) {
+        try {
+            const credsStr = fs.readFileSync(credsPath, 'utf8');
+            const creds = JSON.parse(credsStr);
+            if (creds && creds.me && creds.account && creds.registered === false) {
+                console.log("Fixing corrupted creds.json (registered: false -> true)...");
+                creds.registered = true;
+                fs.writeFileSync(credsPath, JSON.stringify(creds, null, 2));
+            }
+        } catch (e) {
+            console.error("Failed to parse creds.json during startup check:", e.message);
+        }
+    }
+
     const { state, saveCreds } = await useMultiFileAuthState(authFolder);
     const { version, isLatest } = await fetchLatestBaileysVersion();
     console.log(`[Bridge] Using WhatsApp Web v${version.join('.')}, isLatest: ${isLatest}`);
@@ -52,10 +68,11 @@ async function connectToWhatsApp() {
         auth: state,
         printQRInTerminal: false,
         logger: pino({ level: 'silent' }),
-        browser: ['Jarvis OS', 'Chrome', '1.0.0'],
+        browser: ['Mac OS', 'Chrome', '121.0.0'],
         markOnlineOnConnect: false,
         syncFullHistory: false,
-        generateHighQualityLinkPreview: false
+        generateHighQualityLinkPreview: false,
+        qrTimeout: 60000
     });
 
     sock.ev.on('creds.update', saveCreds);
@@ -77,7 +94,13 @@ async function connectToWhatsApp() {
         if (connection === 'close') {
             const statusCode = lastDisconnect?.error?.output?.statusCode;
             const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-            console.log('Connection closed due to', lastDisconnect?.error, ', reconnecting:', shouldReconnect);
+            
+            if (statusCode === DisconnectReason.loggedOut) {
+                console.log('Connection closed: Logged out.');
+            } else {
+                console.log(`Connection closed due to ${lastDisconnect?.error?.message || lastDisconnect?.error}. Reconnecting: ${shouldReconnect}`);
+            }
+
             sendStatus('whatsapp.status', 'disconnected');
             
             if (statusCode === 401) {
@@ -87,6 +110,10 @@ async function connectToWhatsApp() {
                 if (fs.existsSync(authFolder)) {
                     fs.rmSync(authFolder, { recursive: true, force: true });
                 }
+                console.log("Restarting connection...");
+                connectToWhatsApp();
+            } else if (statusCode === 408) {
+                console.log("⚠️ 408 Request Timeout. QR code scanning timed out.");
                 console.log("Restarting connection...");
                 connectToWhatsApp();
             } else if (shouldReconnect) {

@@ -93,13 +93,8 @@ export function SettingsPage() {
       // Stop polling after 2 minutes
       setTimeout(() => clearInterval(pollInterval), 120000);
     } else {
-      // Open in a centered popup window (fallback for web)
-      const width = 500;
-      const height = 650;
-      const left = window.screenX + (window.outerWidth - width) / 2;
-      const top = window.screenY + (window.outerHeight - height) / 2;
-      
-      window.open(url, `${provider}_oauth`, `width=${width},height=${height},left=${left},top=${top},popup=yes`);
+      // Open in a new tab instead of a popup window
+      window.open(url, `${provider}_oauth`);
     }
   };
 
