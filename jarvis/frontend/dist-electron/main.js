@@ -19,6 +19,9 @@ function m() {
 			nodeIntegration: !1,
 			contextIsolation: !0
 		}
+	}), p.webContents.setWindowOpenHandler(({ url: e }) => {
+		let t = process.platform === "win32", n = process.platform === "darwin";
+		return o(t ? `start chrome "${e}"` : n ? `open -a "Google Chrome" "${e}"` : `google-chrome "${e}"`), { action: "deny" };
 	}), u ? p.loadURL(u) : p.loadURL("https://jarvisos-gdhfgnc4gscqecav.centralindia-01.azurewebsites.net");
 }
 t.on("window-all-closed", () => {

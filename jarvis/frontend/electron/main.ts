@@ -39,6 +39,22 @@ function createWindow() {
     },
   });
 
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    // Force open in Chrome based on OS
+    const isWindows = process.platform === 'win32';
+    const isMac = process.platform === 'darwin';
+    
+    if (isWindows) {
+      exec(`start chrome "${url}"`);
+    } else if (isMac) {
+      exec(`open -a "Google Chrome" "${url}"`);
+    } else {
+      exec(`google-chrome "${url}"`);
+    }
+    
+    return { action: 'deny' };
+  });
+
   if (VITE_DEV_SERVER_URL) {
     win.loadURL(VITE_DEV_SERVER_URL);
     // Open devtools by default in dev mode

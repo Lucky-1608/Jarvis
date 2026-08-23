@@ -52,7 +52,10 @@ async function connectToWhatsApp() {
         auth: state,
         printQRInTerminal: false,
         logger: pino({ level: 'silent' }),
-        browser: ['Jarvis OS', 'Chrome', '1.0.0']
+        browser: ['Jarvis OS', 'Chrome', '1.0.0'],
+        markOnlineOnConnect: false,
+        syncFullHistory: false,
+        generateHighQualityLinkPreview: false
     });
 
     sock.ev.on('creds.update', saveCreds);

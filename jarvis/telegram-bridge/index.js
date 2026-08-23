@@ -1,3 +1,5 @@
+process.env.NTBA_FIX_319 = 1;
+process.env.NTBA_FIX_350 = 1;
 require('dotenv').config({ path: '../../.env' });
 const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
@@ -20,7 +22,7 @@ if (!OWNER_ID || OWNER_ID === 'YOUR_OWNER_ID_HERE') {
 const JARVIS_BACKEND_URL = process.env.JARVIS_BACKEND_URL || 'http://127.0.0.1:8000';
 const JARVIS_EVENT_URL = `${JARVIS_BACKEND_URL}/api/telegram/event`;
 
-async function sendStatus(status, data = null, retries = 5) {
+async function sendStatus(status, data = null, retries = 15) {
     for (let i = 0; i < retries; i++) {
         try {
             await axios.post(JARVIS_EVENT_URL, {
@@ -59,7 +61,8 @@ async function connectToTelegram() {
     // Handle polling errors (network issues, etc.)
     bot.on('polling_error', async (error) => {
         console.error('[Polling Error]', error.message);
-        await sendStatus('telegram.status', 'polling_error');
+        // Do not send polling_error to Jarvis frontend as it causes permanent "Offline" state
+        // await sendStatus('telegram.status', 'polling_error');
     });
 
     // Handle incoming messages
