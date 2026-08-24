@@ -17,8 +17,7 @@
 
 </samp>
 
-*Not a chatbot. A 24/7 assistant that schedules real actions, executes on remote devices,*
-*protects you from fraud — and verifies its own claims against ground truth.*
+*Most AI assistants just talk; Jarvis acts and proves it. It operates not as a simple chatbot, but as a persistent, self-hosted digital secretary running continuously in the background. Driven by a resilient 5-provider LLM cascade, it manages your communications, routes critical alerts to your phone via native WhatsApp and Telegram bridges, and proactively filters out scams. Crucially, Jarvis features true autonomy—scheduling its own tasks and generating cryptographic Truth Seals to mathematically verify every real-world action it executes on your behalf.*
 
 </div>
 
@@ -92,9 +91,10 @@ Language models lie about their own actions — not maliciously, but because pat
 |---|---|
 | **Messaging secretary** | Native WhatsApp (Baileys) and Telegram Bot. Implements rate limiting, 5s debounce. Echo-loop-proof by design. |
 | **Verified missions** | A goal is decomposed into steps, each with an *objectively checkable* verification. It's done because evidence proved it. |
+| **Automated Briefings** | Scheduled daemon performs periodic email analysis and pushes intelligent summaries directly to WhatsApp and Telegram via local bridge endpoints. |
 | **Device hands** | Lightweight agents connect *outbound* from laptop and phone and register capabilities. The Android client drives arbitrary apps via a native Kotlin `AccessibilityService`. |
 | **Guardian fraud shield** | Rule-first scam detection on inbound mail and messages. Warn-only — never auto-deletes, auto-replies, or clicks. |
-| **Truth seals** | Every side-effecting tool call generates a cryptographic `seal_id`. Claims are auditable against seals; when words and seals disagree, **seals win**. |
+| **Truth seals** | Every side-effecting tool call generates a cryptographic `seal_id` (currently stored in-memory). Claims are auditable against seals; when words and seals disagree, **seals win**. |
 | **Vector memory** | Deep semantic recall on every message via `pgvector` or ChromaDB, allowing meaning-based retrieval across thousands of past interactions. |
 | **GraphRAG** | Uses Graphify to understand codebase architecture and concept relationships contextually, not just textually. |
 
@@ -154,11 +154,12 @@ Make sure PostgreSQL is running, then run migrations (or initialization scripts)
 python create_db.py
 ```
 
-**4. Start the Backend Server**
+**4. Start the Backend Server and Bridges**
+You can use the provided startup script which installs Node.js dependencies and starts the FastAPI backend:
 ```bash
-jarvis serve --reload
+bash startup.sh
 ```
-The FastAPI backend will run on `http://localhost:8000` (API Docs available at `/docs`).
+Alternatively, you can manually start the backend using `jarvis serve --reload` and start the WhatsApp/Telegram bridges using `node index.js` inside `jarvis/whatsapp-bridge` and `jarvis/telegram-bridge`.
 
 **5. Start the Frontend**
 Open a new terminal window:
@@ -171,19 +172,7 @@ The React frontend will be accessible via `http://localhost:5173`.
 
 ---
 
-## 🐳 Installation & Setup (Docker)
 
-If you prefer to run the entire stack (Backend, Frontend, and n8n) in isolated containers without installing dependencies locally:
-
-```bash
-docker-compose up --build
-```
-This automatically spins up:
-- **Backend API:** `http://localhost:8000`
-- **React Frontend:** `http://localhost:5173`
-- **n8n Automation Node:** `http://localhost:5678`
-
----
 
 ## ⚙️ Environment Configuration (`.env`)
 
@@ -219,7 +208,7 @@ The `jarvis` CLI acts as your control center for managing the OS.
 Jarvis/
 ├── jarvis/                     # 🐍 Core Python Backend
 │   ├── analytics/              # Performance and telemetry
-│   ├── automation/             # Desktop/browser automation scripts (Playwright, PyAutoGUI)
+│   ├── automation/             # Automated tasks (e.g., Email Briefings) and desktop/browser scripts
 │   ├── brain/                  # Core LLM processing and routing logic
 │   ├── cli/                    # CLI command definitions
 │   ├── database/               # SQLAlchemy models and migrations
@@ -234,7 +223,6 @@ Jarvis/
 │   └── telegram-bridge/        # Telegram Bot integration
 ├── data/                       # Local data storage (ChromaDB, local files)
 ├── docs/                       # Additional documentation
-├── docker-compose.yml          # Multi-container setup definition
 ├── Dockerfile.backend          # Backend container specification
 ├── pyproject.toml              # Python project metadata and dependencies
 └── README.md                   # This file
