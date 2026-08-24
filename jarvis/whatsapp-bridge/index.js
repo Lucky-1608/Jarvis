@@ -2,6 +2,7 @@ require('dotenv').config({ path: '../../.env' });
 const pino = require('pino');
 const qrcode = require('qrcode');
 const axios = require('axios');
+const http = require('http');
 
 const OWNER_NUMBER = process.env.WHATSAPP_OWNER_NUMBER;
 
@@ -16,6 +17,8 @@ const ownerJid = formatNumber(OWNER_NUMBER.replace(/[^0-9]/g, ''));
 
 const JARVIS_BACKEND_URL = process.env.JARVIS_BACKEND_URL || 'http://127.0.0.1:8000';
 const JARVIS_EVENT_URL = `${JARVIS_BACKEND_URL}/api/whatsapp/event`;
+
+let globalSock = null;
 
 // Debounce map: senderJid -> timestamp
 const userLastMessage = new Map();
@@ -74,6 +77,8 @@ async function connectToWhatsApp() {
         generateHighQualityLinkPreview: false,
         qrTimeout: 60000
     });
+    
+    globalSock = sock; // Expose to HTTP server
 
     sock.ev.on('creds.update', saveCreds);
 
@@ -231,5 +236,37 @@ async function connectToWhatsApp() {
         }
     });
 }
+
+// HTTP Server for Push Notifications
+const server = http.createServer((req, res) => {
+    if (req.method === 'POST' && req.url === '/send') {
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        req.on('end', async () => {
+            try {
+                const data = JSON.parse(body);
+                if (data.message && globalSock) {
+                    await globalSock.sendMessage(ownerJid, { text: data.message });
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ status: 'ok' }));
+                } else {
+                    res.writeHead(400);
+                    res.end(JSON.stringify({ error: 'Bad Request or not connected' }));
+                }
+            } catch (err) {
+                console.error("Push Notification Error:", err);
+                res.writeHead(500);
+                res.end('Error');
+            }
+        });
+    } else {
+        res.writeHead(404);
+        res.end('Not Found');
+    }
+});
+
+server.listen(3001, () => {
+    console.log('[Bridge] HTTP Server listening on port 3001 for push notifications');
+});
 
 connectToWhatsApp();

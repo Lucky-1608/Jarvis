@@ -63,7 +63,12 @@ oauth.register(
 
 async def get_google_auth_url(request: Request, redirect_uri: str):
     """Generates the Google OAuth authorization URL."""
-    return await oauth.google.authorize_redirect(request, redirect_uri)
+    return await oauth.google.authorize_redirect(
+        request, 
+        redirect_uri,
+        access_type='offline',
+        prompt='consent'
+    )
 
 async def get_notion_auth_url(request: Request, redirect_uri: str):
     """Generates the Notion OAuth authorization URL."""

@@ -13,7 +13,7 @@ import datetime
 logger = structlog.get_logger(__name__)
 
 from jarvis.automation.briefing import MorningBriefingTask
-
+from jarvis.automation.email_briefing import EmailBriefingTask
 class SystemMonitorDaemon:
     def __init__(self, interval_seconds: int = 60):
         self.interval = interval_seconds
@@ -21,6 +21,8 @@ class SystemMonitorDaemon:
         self._task = None
         self._briefing_task = MorningBriefingTask(target_hour=8, target_minute=0)
         self._last_briefing_date = None
+        self._email_briefing_task = EmailBriefingTask()
+        self._last_email_briefing_time = None
 
     async def start(self):
         """Starts the background monitoring daemon."""
@@ -61,6 +63,14 @@ class SystemMonitorDaemon:
                 ):
                     asyncio.create_task(self._briefing_task.execute())
                     self._last_briefing_date = current_date
+
+                # Check if it's time for Email Briefing (every 4 hours)
+                if (
+                    self._last_email_briefing_time is None or 
+                    (now - self._last_email_briefing_time).total_seconds() >= 4 * 3600
+                ):
+                    asyncio.create_task(self._email_briefing_task.execute())
+                    self._last_email_briefing_time = now
 
             except Exception as e:
                 logger.error("system_monitor.error", error=str(e))

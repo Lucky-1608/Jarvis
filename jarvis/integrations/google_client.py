@@ -250,7 +250,7 @@ async def get_google_account(
     query = query.order_by(OAuthAccount.created_at.asc())
 
     result = await db.execute(query)
-    return result.scalar_one_or_none()
+    return result.scalars().first()
 
 
 async def get_all_google_accounts(

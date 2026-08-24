@@ -64,6 +64,9 @@ async def lifespan(app: FastAPI):
     await brain.initialize()
     set_brain(brain)
 
+    from jarvis.notifications.router import setup_notifications
+    setup_notifications()
+
     # Start Node.js bridges automatically
     import subprocess
     

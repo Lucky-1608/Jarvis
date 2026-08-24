@@ -33,10 +33,19 @@ async def hud_websocket(websocket: WebSocket):
     logger.info("hud.websocket_connected", id=subscriber_id)
 
     # Replay the last known status for bridges so the UI isn't stuck on "Offline"
-    for event_type in ["telegram.status", "whatsapp.status", "whatsapp.qr"]:
+    for event_type in ["telegram.status", "whatsapp.status"]:
         history = bus.get_history(event_type=event_type, limit=1)
         if history:
             await queue.put(history[0])
+
+    # Only replay QR if WhatsApp is not already connected
+    wa_status = bus.get_history(event_type="whatsapp.status", limit=1)
+    is_wa_connected = wa_status and wa_status[0].data.get("payload") == "connected"
+    
+    if not is_wa_connected:
+        qr_history = bus.get_history(event_type="whatsapp.qr", limit=1)
+        if qr_history:
+            await queue.put(qr_history[0])
 
     try:
         while True:

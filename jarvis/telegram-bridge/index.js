@@ -3,6 +3,7 @@ process.env.NTBA_FIX_350 = 1;
 require('dotenv').config({ path: '../../.env' });
 const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
+const http = require('http');
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const OWNER_ID = process.env.TELEGRAM_OWNER_ID;
@@ -21,6 +22,8 @@ if (!OWNER_ID || OWNER_ID === 'YOUR_OWNER_ID_HERE') {
 
 const JARVIS_BACKEND_URL = process.env.JARVIS_BACKEND_URL || 'http://127.0.0.1:8000';
 const JARVIS_EVENT_URL = `${JARVIS_BACKEND_URL}/api/telegram/event`;
+
+let globalBot = null;
 
 async function sendStatus(status, data = null, retries = 15) {
     for (let i = 0; i < retries; i++) {
@@ -45,6 +48,7 @@ async function connectToTelegram() {
     console.log('[Bridge] Starting Jarvis Telegram Bridge...');
 
     const bot = new TelegramBot(BOT_TOKEN, { polling: true });
+    globalBot = bot;
 
     // Get bot info to confirm connection
     try {
@@ -139,5 +143,37 @@ async function connectToTelegram() {
         }
     });
 }
+
+// HTTP Server for Push Notifications
+const server = http.createServer((req, res) => {
+    if (req.method === 'POST' && req.url === '/send') {
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        req.on('end', async () => {
+            try {
+                const data = JSON.parse(body);
+                if (data.message && globalBot) {
+                    await globalBot.sendMessage(OWNER_ID, data.message);
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ status: 'ok' }));
+                } else {
+                    res.writeHead(400);
+                    res.end(JSON.stringify({ error: 'Bad Request or not connected' }));
+                }
+            } catch (err) {
+                console.error("Push Notification Error:", err);
+                res.writeHead(500);
+                res.end('Error');
+            }
+        });
+    } else {
+        res.writeHead(404);
+        res.end('Not Found');
+    }
+});
+
+server.listen(3002, () => {
+    console.log('[Bridge] HTTP Server listening on port 3002 for push notifications');
+});
 
 connectToTelegram();

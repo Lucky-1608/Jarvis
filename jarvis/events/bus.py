@@ -110,6 +110,9 @@ class EventTypes:
     WHATSAPP_STATUS = "whatsapp.status"
     TELEGRAM_STATUS = "telegram.status"
 
+    # Notifications
+    NOTIFICATION_SEND = "notification.send"
+
 
 # ---------------------------------------------------------------------------
 # Event Bus

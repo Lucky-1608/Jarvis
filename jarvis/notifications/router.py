@@ -4,6 +4,8 @@ Jarvis OS - Notification Router
 Centralized routing of alerts and notifications across channels.
 """
 from typing import Literal
+import asyncio
+import httpx
 
 import structlog
 
@@ -19,8 +21,18 @@ class NotificationRouter:
         """
         if priority == "critical":
             # Route to urgent channels (WhatsApp / Telegram)
-            logger.info("notification.routed", channel="whatsapp", priority=priority, message=message)
-            # await whatsapp_bridge.send_message(...)
+            logger.info("notification.routed", channel="whatsapp_and_telegram", priority=priority, message=message)
+            
+            async def send_to_bridge(url: str):
+                try:
+                    async with httpx.AsyncClient() as client:
+                        await client.post(url, json={"message": message}, timeout=10.0)
+                except Exception as e:
+                    logger.error("notification.bridge_push_failed", url=url, error=str(e))
+            
+            # Send to both WhatsApp and Telegram
+            asyncio.create_task(send_to_bridge("http://127.0.0.1:3001/send"))
+            asyncio.create_task(send_to_bridge("http://127.0.0.1:3002/send"))
         elif priority == "high":
             # Route to Web UI + Email
             logger.info("notification.routed", channel="email", priority=priority, message=message)
@@ -29,3 +41,14 @@ class NotificationRouter:
             logger.info("notification.routed", channel="web_ui", priority=priority, message=message)
 
 notification_router = NotificationRouter()
+
+def setup_notifications():
+    from jarvis.events.bus import get_event_bus, EventTypes, Event
+    
+    async def on_notification(event: Event):
+        content = event.data.get("content", "")
+        priority = event.data.get("priority", "low")
+        if content:
+            await notification_router.send(content, priority=priority)
+            
+    get_event_bus().subscribe(EventTypes.NOTIFICATION_SEND, on_notification)
