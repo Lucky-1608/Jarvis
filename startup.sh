@@ -55,7 +55,18 @@ rm -rf node_modules
 ln -s /home/site/telegram_bridge_cache/node_modules node_modules
 cd ../..
 
-# 4. Start the Python FastAPI backend
+# 4. Start the Node bridges in the background
+echo "Starting WhatsApp bridge..."
+cd jarvis/whatsapp-bridge
+node index.js &
+cd ../..
+
+echo "Starting Telegram bridge..."
+cd jarvis/telegram-bridge
+node index.js &
+cd ../..
+
+# 5. Start the Python FastAPI backend
 echo "Starting Jarvis Backend..."
 # Use $PORT environment variable if Azure provides it, otherwise default to 8000
 PORT="${PORT:-8000}"

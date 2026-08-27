@@ -27,25 +27,45 @@ class EmailBriefingTask:
         logger.info("email_briefing.execute.started")
         
         try:
+            from jarvis.integrations.google_client import get_all_google_accounts
+            from jarvis.database.core import AsyncSessionLocal
+
+            db = AsyncSessionLocal()
+            try:
+                accounts = await get_all_google_accounts(db)
+            finally:
+                await db.close()
+
+            if not accounts:
+                logger.warning("email_briefing.no_accounts")
+                return
+
             # Get unread emails
             query = "is:unread"
             if self._last_analysis_time:
                 epoch = int(self._last_analysis_time.timestamp())
                 query += f" after:{epoch}"
                 
-            list_result = await self._list_tool.execute(query=query)
             self._last_analysis_time = datetime.datetime.now()
-            
-            if not list_result.success:
-                logger.error("email_briefing.list_failed", error=list_result.error)
-                return
+
+            all_messages = []
+            for account in accounts:
+                list_result = await self._list_tool.execute(query=query, account_email=account.account_id)
+                if not list_result.success:
+                    logger.error("email_briefing.list_failed", account=account.account_id, error=list_result.error)
+                    continue
                 
-            messages_str = list_result.data.get("output", "")
-            
-            if "No matching emails" in messages_str or not messages_str.strip():
+                messages_str = list_result.data.get("output", "")
+                if "No messages found matching your query." not in messages_str and messages_str.strip():
+                    all_messages.append(f"=== {account.account_id} ===\n{messages_str}")
+
+            if not all_messages:
                 summary = "You have no new unread important emails."
+                message_count = 0
             else:
-                summary = f"📧 Email Briefing:\n\n{messages_str}\n\n(Generated autonomously by Jarvis)"
+                combined_messages = "\n\n".join(all_messages)
+                summary = f"📧 Email Briefing:\n\n{combined_messages}\n\n(Generated autonomously by Jarvis)"
+                message_count = combined_messages.count("ID:")
 
             await self._bus.publish(Event(
                 type=EventTypes.NOTIFICATION_SEND,
@@ -58,6 +78,6 @@ class EmailBriefingTask:
                 source="email_briefing"
             ))
 
-            logger.info("email_briefing.execute.completed", message_count=messages_str.count("ID:"))
+            logger.info("email_briefing.execute.completed", message_count=message_count)
         except Exception as e:
             logger.error("email_briefing.execute.failed", error=str(e))
