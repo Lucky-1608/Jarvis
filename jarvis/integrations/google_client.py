@@ -151,6 +151,9 @@ class GoogleClient:
         Updates the DB and in-memory account object.
         """
         import os
+        from dotenv import load_dotenv
+        
+        load_dotenv()
 
         if not self._account.refresh_token:
             logger.error(

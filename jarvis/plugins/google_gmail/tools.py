@@ -108,7 +108,7 @@ class GmailListMessagesTool(Tool):
             parameters=[
                 ToolParameter(name="query", type="string", description="Gmail search query (e.g., 'is:unread', 'from:boss@company.com')", required=False, default="is:inbox"),
                 ToolParameter(name="max_results", type="integer", description="Maximum number of messages to return (1-50)", required=False, default=10),
-                ToolParameter(name="account_email", type="string", description="Specific Google account email to use (optional, uses default if not provided)", required=False),
+                ToolParameter(name="account_email", type="string", description="Specific Google account email to use, or 'all' to search across all connected accounts. (optional, uses default if not provided)", required=False),
             ],
         )
 
@@ -117,6 +117,36 @@ class GmailListMessagesTool(Tool):
         max_results = min(int(kwargs.get("max_results", 10)), 50)
         account_email = kwargs.get("account_email")
 
+        if account_email == "all":
+            from jarvis.integrations.google_client import get_all_google_accounts
+            db = AsyncSessionLocal()
+            try:
+                accounts = await get_all_google_accounts(db)
+            finally:
+                await db.close()
+                
+            if not accounts:
+                return ToolResult(success=False, error="No Google account connected. Please connect one in Settings → Integrations.")
+                
+            all_summaries = []
+            all_result_texts = []
+            
+            for acc in accounts:
+                res = await self._execute_for_account(acc.account_id, query, max_results)
+                if res.success:
+                    if "No messages found" not in res.output:
+                        all_result_texts.append(f"=== {acc.account_id} ===\n{res.output}")
+                        if "messages" in res.metadata:
+                            all_summaries.extend(res.metadata["messages"])
+                            
+            if not all_summaries:
+                return ToolResult(success=True, output="No messages found matching your query across any account.")
+                
+            return ToolResult(success=True, output="\n\n".join(all_result_texts), metadata={"messages": all_summaries})
+        else:
+            return await self._execute_for_account(account_email, query, max_results)
+
+    async def _execute_for_account(self, account_email: str | None, query: str, max_results: int) -> ToolResult:
         db, account, client = await _get_client_and_account(account_email)
         if not client:
             return ToolResult(success=False, error="No Google account connected. Please connect one in Settings → Integrations.")
