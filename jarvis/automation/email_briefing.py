@@ -8,6 +8,7 @@ import datetime
 import structlog
 from jarvis.events.bus import Event, EventTypes, get_event_bus
 from jarvis.plugins.google_gmail.tools import GmailListMessagesTool, GmailReadMessageTool
+from jarvis.plugins.messenger_bridge.tools import TelegramSendMessageTool, WhatsAppSendMessageTool
 
 logger = structlog.get_logger(__name__)
 
@@ -20,6 +21,8 @@ class EmailBriefingTask:
         self._bus = get_event_bus()
         self._list_tool = GmailListMessagesTool()
         self._read_tool = GmailReadMessageTool()
+        self._telegram_tool = TelegramSendMessageTool()
+        self._whatsapp_tool = WhatsAppSendMessageTool()
         self._last_analysis_time = None
 
     async def execute(self):
@@ -77,6 +80,10 @@ class EmailBriefingTask:
                 },
                 source="email_briefing"
             ))
+
+            # Forward directly to Telegram and WhatsApp bridges
+            await self._telegram_tool.execute(message=summary)
+            await self._whatsapp_tool.execute(message=summary)
 
             logger.info("email_briefing.execute.completed", message_count=message_count)
         except Exception as e:

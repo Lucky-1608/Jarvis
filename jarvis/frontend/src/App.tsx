@@ -13,6 +13,8 @@ import { ToolsPage } from './pages/ToolsPage';
 import { AgentsPage } from './pages/AgentsPage';
 import { WorkflowsPage } from './pages/WorkflowsPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { PrivacyPolicy } from './pages/PrivacyPolicy';
+import { TermsOfService } from './pages/TermsOfService';
 
 import { CompanionService } from './services/CompanionService';
 import { getBaseUrl } from './lib/api';
@@ -30,6 +32,8 @@ function Router() {
       <Route path="/agents" component={AgentsPage} />
       <Route path="/workflows" component={WorkflowsPage} />
       <Route path="/settings" component={SettingsPage} />
+      <Route path="/privacy" component={PrivacyPolicy} />
+      <Route path="/terms" component={TermsOfService} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -68,7 +72,9 @@ function App() {
     }
   };
 
-  if (!hasKey) {
+  const isPublicRoute = window.location.hash === '#/privacy' || window.location.hash === '#/terms';
+
+  if (!hasKey && !isPublicRoute) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#060c18', color: 'white', fontFamily: 'sans-serif', gap: '1rem' }}>
         <div style={{ padding: '2rem', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '1rem', border: '1px solid rgba(255,255,255,0.1)', textAlign: 'center' }}>
