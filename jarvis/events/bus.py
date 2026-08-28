@@ -130,6 +130,7 @@ class EventBus:
     def __init__(self, history_size: int = 200) -> None:
         self._handlers: dict[str, list[EventHandler]] = defaultdict(list)
         self._history: list[Event] = []
+        self._sticky: dict[str, Event] = {}
         self._history_size = history_size
         self._lock = asyncio.Lock()
 
@@ -157,6 +158,7 @@ class EventBus:
         """
         async with self._lock:
             self._history.append(event)
+            self._sticky[event.type] = event
             if len(self._history) > self._history_size:
                 self._history = self._history[-self._history_size :]
 
@@ -211,6 +213,8 @@ class EventBus:
         events = self._history
         if event_type:
             events = [e for e in events if e.type == event_type]
+            if not events and hasattr(self, "_sticky") and event_type in self._sticky:
+                events = [self._sticky[event_type]]
         return events[-limit:]
 
     def clear_history(self) -> None:
