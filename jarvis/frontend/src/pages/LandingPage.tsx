@@ -51,9 +51,15 @@ export function LandingPage() {
             The AI Operating System <br /> of the Future
           </h1>
           
-          <p className="text-lg md:text-xl text-zinc-400 max-w-2xl mb-10 leading-relaxed">
-            Jarvis OS is an advanced, centralized artificial intelligence interface designed to automate tasks, manage workflows, and act as your ultimate digital companion.
-          </p>
+          <div className="max-w-2xl mb-10 space-y-4">
+            <p className="text-lg md:text-xl text-zinc-300 leading-relaxed font-medium">
+              Jarvis OS is an advanced, centralized artificial intelligence interface designed to automate tasks, manage workflows, and act as your ultimate digital companion.
+            </p>
+            <div className="p-4 rounded-xl border border-white/10 bg-white/5 text-left text-zinc-400 text-sm leading-relaxed">
+              <strong className="text-[var(--accent-cyan)] uppercase tracking-wider text-xs block mb-1">Purpose of Application</strong>
+              This application serves as a personal AI assistant that integrates with various tools (including Google Services like Gmail and Calendar) to help users manage their daily tasks, draft emails, query their calendar, and automate routine workflows through a conversational interface.
+            </div>
+          </div>
 
           <div className="flex flex-col sm:flex-row gap-4">
             <button 
