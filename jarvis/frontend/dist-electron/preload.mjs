@@ -1,9 +1,1 @@
-let electron = require("electron");
-//#region electron/preload.ts
-electron.contextBridge.exposeInMainWorld("electronAPI", {
-	runCommand: (command, cwd) => electron.ipcRenderer.invoke("run-command", command, cwd),
-	openApp: (appName, url) => electron.ipcRenderer.invoke("open-app", appName, url),
-	closeApp: (appName) => electron.ipcRenderer.invoke("close-app", appName),
-	openExternal: (url) => electron.ipcRenderer.invoke("open-external", url)
-});
-//#endregion
+let e=require("electron");e.contextBridge.exposeInMainWorld(`electronAPI`,{runCommand:(t,n)=>e.ipcRenderer.invoke(`run-command`,t,n),openApp:(t,n)=>e.ipcRenderer.invoke(`open-app`,t,n),closeApp:t=>e.ipcRenderer.invoke(`close-app`,t),openExternal:t=>e.ipcRenderer.invoke(`open-external`,t)});
