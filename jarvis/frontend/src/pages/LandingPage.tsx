@@ -25,12 +25,12 @@ export function LandingPage() {
         <div className="flex items-center gap-6 text-sm font-medium text-zinc-400">
           <a href="#/privacy" className="hover:text-white transition-colors">Privacy</a>
           <a href="#/terms" className="hover:text-white transition-colors">Terms</a>
-          <button 
-            onClick={handleLaunch}
+          <a 
+            href="/api/oauth/login/google"
             className="px-4 py-2 rounded-md bg-white/10 hover:bg-white/20 border border-white/10 transition-colors text-white"
           >
-            Sign In
-          </button>
+            Sign In with Google
+          </a>
         </div>
       </nav>
 

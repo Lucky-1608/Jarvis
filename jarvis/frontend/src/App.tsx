@@ -62,7 +62,13 @@ function Router() {
 
 function App() {
   const [location] = useHashLocation();
-  const [hasKey, setHasKey] = useState(!!localStorage.getItem('JARVIS_API_KEY'));
+  const [hasKey, setHasKey] = useState(() => {
+    try {
+      return !!localStorage.getItem('JARVIS_API_KEY');
+    } catch (e) {
+      return false;
+    }
+  });
   const [inputValue, setInputValue] = useState('');
 
   // Handle direct URL access (e.g., from Google OAuth) by redirecting to hash route
