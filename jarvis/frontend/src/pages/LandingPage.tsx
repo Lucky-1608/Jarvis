@@ -69,6 +69,12 @@ export function LandingPage() {
               Launch System
               <Zap size={18} />
             </button>
+            <a 
+              href="/api/oauth/login/google"
+              className="px-8 py-4 rounded-xl bg-[rgba(255,255,255,0.1)] border border-[rgba(255,255,255,0.2)] text-white font-semibold hover:bg-[rgba(255,255,255,0.15)] transition-colors flex items-center justify-center gap-2"
+            >
+              Sign in with Google
+            </a>
           </div>
         </motion.div>
 
