@@ -1,78 +1,112 @@
-import { BrowserWindow as e, app as t, ipcMain as n, shell as r } from "electron";
-import i from "node:path";
-import { fileURLToPath as a } from "node:url";
-import { exec as o } from "node:child_process";
-import s from "node:util";
+import { BrowserWindow, app, ipcMain, shell } from "electron";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { exec } from "node:child_process";
+import util from "node:util";
 //#region electron/main.ts
-var c = s.promisify(o), l = i.dirname(a(import.meta.url));
-process.env.APP_ROOT = i.join(l, "..");
-var u = process.env.VITE_DEV_SERVER_URL, d = i.join(process.env.APP_ROOT, "dist-electron"), f = i.join(process.env.APP_ROOT, "dist");
-process.env.VITE_PUBLIC = u ? i.join(process.env.APP_ROOT, "public") : f;
-var p;
-function m() {
-	p = new e({
+var execAsync = util.promisify(exec);
+var __dirname = path.dirname(fileURLToPath(import.meta.url));
+process.env.APP_ROOT = path.join(__dirname, "..");
+var VITE_DEV_SERVER_URL = process.env["VITE_DEV_SERVER_URL"];
+var MAIN_DIST = path.join(process.env.APP_ROOT, "dist-electron");
+var RENDERER_DIST = path.join(process.env.APP_ROOT, "dist");
+process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, "public") : RENDERER_DIST;
+var win;
+function createWindow() {
+	win = new BrowserWindow({
 		width: 1200,
 		height: 800,
-		icon: i.join(process.env.VITE_PUBLIC || "", "arc_reactor.png"),
+		icon: path.join(process.env.VITE_PUBLIC || "", "arc_reactor.png"),
 		webPreferences: {
-			preload: i.join(l, "preload.mjs"),
-			nodeIntegration: !1,
-			contextIsolation: !0
+			preload: path.join(__dirname, "preload.mjs"),
+			nodeIntegration: false,
+			contextIsolation: true
 		}
-	}), p.webContents.setWindowOpenHandler(({ url: e }) => {
-		let t = process.platform === "win32", n = process.platform === "darwin";
-		return o(t ? `start chrome "${e}"` : n ? `open -a "Google Chrome" "${e}"` : `google-chrome "${e}"`), { action: "deny" };
-	}), u ? p.loadURL(u) : p.loadURL("https://jarvisos-gdhfgnc4gscqecav.centralindia-01.azurewebsites.net");
+	});
+	win.webContents.setWindowOpenHandler(({ url }) => {
+		const isWindows = process.platform === "win32";
+		const isMac = process.platform === "darwin";
+		if (isWindows) exec(`start chrome "${url}"`);
+		else if (isMac) exec(`open -a "Google Chrome" "${url}"`);
+		else exec(`google-chrome "${url}"`);
+		return { action: "deny" };
+	});
+	if (VITE_DEV_SERVER_URL) win.loadURL(VITE_DEV_SERVER_URL);
+	else win.loadURL("https://jarvisos-gdhfgnc4gscqecav.centralindia-01.azurewebsites.net");
 }
-t.on("window-all-closed", () => {
-	process.platform !== "darwin" && (t.quit(), p = null);
-}), t.on("activate", () => {
-	e.getAllWindows().length === 0 && m();
-}), n.handle("run-command", async (e, t, n) => {
+app.on("window-all-closed", () => {
+	if (process.platform !== "darwin") {
+		app.quit();
+		win = null;
+	}
+});
+app.on("activate", () => {
+	if (BrowserWindow.getAllWindows().length === 0) createWindow();
+});
+ipcMain.handle("run-command", async (_, command, cwd) => {
 	try {
-		let { stdout: e, stderr: r } = await c(t, { cwd: n });
+		const { stdout, stderr } = await execAsync(command, { cwd });
 		return {
 			status: "success",
 			output: {
-				stdout: e,
-				stderr: r
+				stdout,
+				stderr
 			}
 		};
-	} catch (e) {
+	} catch (error) {
 		return {
 			status: "error",
-			error: e.message
+			error: error.message
 		};
 	}
-}), n.handle("open-app", async (e, t, n) => {
+});
+ipcMain.handle("open-app", async (_, appName, url) => {
 	try {
-		let e = process.platform === "win32", r = process.platform === "darwin", i = "";
-		return e ? (i = `start "" "${t}"`, n && (i += ` "${n}"`)) : i = r ? n ? `open -a "${t}" "${n}"` : `open -a "${t}"` : n ? `${t} "${n}" &` : `${t} &`, await c(i), { status: "success" };
-	} catch (e) {
+		const isWindows = process.platform === "win32";
+		const isMac = process.platform === "darwin";
+		let command = "";
+		if (isWindows) {
+			command = `start "" "${appName}"`;
+			if (url) command += ` "${url}"`;
+		} else if (isMac) command = url ? `open -a "${appName}" "${url}"` : `open -a "${appName}"`;
+		else command = url ? `${appName} "${url}" &` : `${appName} &`;
+		await execAsync(command);
+		return { status: "success" };
+	} catch (error) {
 		return {
 			status: "error",
-			error: e.message
+			error: error.message
 		};
 	}
-}), n.handle("close-app", async (e, t) => {
+});
+ipcMain.handle("close-app", async (_, appName) => {
 	try {
-		let e = process.platform === "win32", n = process.platform === "darwin", r = "";
-		return r = e ? `taskkill /IM "${t.toLowerCase().endsWith(".exe") ? t : `${t}.exe`}" /F` : n ? `killall "${t}"` : `pkill -f "${t}"`, await c(r), { status: "success" };
-	} catch (e) {
+		const isWindows = process.platform === "win32";
+		const isMac = process.platform === "darwin";
+		let command = "";
+		if (isWindows) command = `taskkill /IM "${appName.toLowerCase().endsWith(".exe") ? appName : `${appName}.exe`}" /F`;
+		else if (isMac) command = `killall "${appName}"`;
+		else command = `pkill -f "${appName}"`;
+		await execAsync(command);
+		return { status: "success" };
+	} catch (error) {
 		return {
 			status: "error",
-			error: e.message
+			error: error.message
 		};
 	}
-}), n.handle("open-external", async (e, t) => {
+});
+ipcMain.handle("open-external", async (_, url) => {
 	try {
-		return await r.openExternal(t), { status: "success" };
-	} catch (e) {
+		await shell.openExternal(url);
+		return { status: "success" };
+	} catch (error) {
 		return {
 			status: "error",
-			error: e.message
+			error: error.message
 		};
 	}
-}), t.whenReady().then(m);
+});
+app.whenReady().then(createWindow);
 //#endregion
-export { d as MAIN_DIST, f as RENDERER_DIST, u as VITE_DEV_SERVER_URL };
+export { MAIN_DIST, RENDERER_DIST, VITE_DEV_SERVER_URL };
