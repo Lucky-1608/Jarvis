@@ -81,7 +81,17 @@ export function SettingsPage() {
 
   const handleOAuthLogin = async (provider: string) => {
     const baseUrl = await getBaseUrl();
-    const url = `${baseUrl}/api/oauth/login/${provider}`;
+    let url = `${baseUrl}/api/oauth/login/${provider}`;
+    
+    // Electron's openExternal requires an absolute URL.
+    // If the base URL is relative, convert it to absolute.
+    if (url.startsWith('/')) {
+      if (window.location.protocol === 'file:') {
+        url = `http://localhost:8000${url}`;
+      } else {
+        url = `${window.location.origin}${url}`;
+      }
+    }
     
     const electronAPI = (window as any).electronAPI;
     
