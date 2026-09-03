@@ -149,8 +149,8 @@ class VisionAnalyzer:
                 messages,
                 temperature=0.2,
                 max_tokens=2048,
-                provider="gemini",
-                model="gemini-3.6-flash",
+                provider="ollama",
+                model="qwen3.5:397b-cloud",
                 response_format={"type": "json_object"},
             )
 

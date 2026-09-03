@@ -4,7 +4,6 @@ import { Toaster } from './components/ui/toaster';
 import { TooltipProvider } from './components/ui/tooltip';
 import NotFound from './pages/not-found';
 import { Route, Switch, Router as WouterRouter } from 'wouter';
-import { LandingPage } from './pages/LandingPage';
 import { Home } from './pages/Home';
 import { MemoryPage } from './pages/MemoryPage';
 import { VisionPage } from './pages/VisionPage';
@@ -13,8 +12,6 @@ import { ToolsPage } from './pages/ToolsPage';
 import { AgentsPage } from './pages/AgentsPage';
 import { WorkflowsPage } from './pages/WorkflowsPage';
 import { SettingsPage } from './pages/SettingsPage';
-import { PrivacyPolicy } from './pages/PrivacyPolicy';
-import { TermsOfService } from './pages/TermsOfService';
 
 import { CompanionService } from './services/CompanionService';
 import { getBaseUrl } from './lib/api';
@@ -44,8 +41,7 @@ function useHashLocation() {
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={LandingPage} />
-      <Route path="/app" component={Home} />
+      <Route path="/" component={Home} />
       <Route path="/memory" component={MemoryPage} />
       <Route path="/vision" component={VisionPage} />
       <Route path="/voice" component={VoicePage} />
@@ -53,8 +49,6 @@ function Router() {
       <Route path="/agents" component={AgentsPage} />
       <Route path="/workflows" component={WorkflowsPage} />
       <Route path="/settings" component={SettingsPage} />
-      <Route path="/privacy" component={PrivacyPolicy} />
-      <Route path="/terms" component={TermsOfService} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -71,13 +65,7 @@ function App() {
   });
   const [inputValue, setInputValue] = useState('');
 
-  // Handle direct URL access (e.g., from Google OAuth) by redirecting to hash route
-  useEffect(() => {
-    const path = window.location.pathname;
-    if (path === '/privacy' || path === '/terms') {
-      window.location.replace('/#' + path + window.location.search);
-    }
-  }, []);
+
 
   useEffect(() => {
     let companion: CompanionService | null = null;
@@ -108,9 +96,7 @@ function App() {
     }
   };
 
-  const isPublicRoute = location === '/' || location === '/privacy' || location === '/terms';
-
-  if (!hasKey && !isPublicRoute) {
+  if (!hasKey) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#060c18', color: 'white', fontFamily: 'sans-serif', gap: '1rem' }}>
         <div style={{ padding: '2rem', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '1rem', border: '1px solid rgba(255,255,255,0.1)', textAlign: 'center' }}>
