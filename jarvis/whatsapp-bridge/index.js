@@ -42,9 +42,11 @@ async function connectToWhatsApp() {
     const { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = baileys;
 
     const path = require('path');
-    const authFolder = process.env.WEBSITE_SITE_NAME 
-        ? path.join(process.env.HOME || process.env.USERPROFILE || '/home', 'site', 'auth_info_baileys')
-        : path.join(__dirname, 'auth_info_baileys');
+    const authFolder = process.env.WHATSAPP_AUTH_DIR
+        ? process.env.WHATSAPP_AUTH_DIR
+        : process.env.WEBSITE_SITE_NAME 
+            ? path.join(process.env.HOME || process.env.USERPROFILE || '/home', 'site', 'auth_info_baileys')
+            : path.join(__dirname, 'auth_info_baileys');
 
     const fs = require('fs');
     const credsPath = path.join(authFolder, 'creds.json');

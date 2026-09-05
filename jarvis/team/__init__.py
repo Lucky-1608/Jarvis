@@ -24,6 +24,7 @@ from .specialists import (
     ProductivityAgent,
     UiUxAgent,
     WritingAgent,
+    DistillationAgent,
 )
 
 # Register Core Agents
@@ -53,3 +54,4 @@ team_registry.register(LearningAgent)
 team_registry.register(KnowledgeAgent)
 team_registry.register(PluginAgent)
 team_registry.register(MaintenanceAgent)
+team_registry.register(DistillationAgent)
