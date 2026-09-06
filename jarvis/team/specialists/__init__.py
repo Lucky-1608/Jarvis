@@ -15,6 +15,7 @@ from .plugin_agent import PluginAgent
 from .productivity_agent import ProductivityAgent
 from .ui_ux_agent import UiUxAgent
 from .writing_agent import WritingAgent
+from .distillation_agent import DistillationAgent
 
 __all__ = [
     "UiUxAgent",
@@ -33,5 +34,6 @@ __all__ = [
     "PluginAgent",
     "MaintenanceAgent",
     "FrontendAgent",
-    "DatabaseAgent"
+    "DatabaseAgent",
+    "DistillationAgent"
 ]
