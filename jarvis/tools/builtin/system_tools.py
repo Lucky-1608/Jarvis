@@ -1270,6 +1270,131 @@ class PlayMusicTool(Tool):
         yt_music_url = f"https://music.youtube.com/search?q={song.replace(' ', '+')}"
         return ToolResult(success=True, output=f"Sent command to play '{song}' via {browser} at {yt_music_url}")
 
+class StageSkillForReviewTool(Tool):
+    """Stage a newly learned skill for human review via a Pull Request."""
+
+    @property
+    def metadata(self) -> ToolMetadata:
+        return ToolMetadata(
+            name="stage_skill_for_review",
+            description="Creates a new git branch, commits the file, pushes it, and opens a Pull Request using a GitHub Token.",
+            category=ToolCategory.SYSTEM,
+            parameters=[
+                ToolParameter(
+                    name="file_path",
+                    type="string",
+                    description="Path to the newly learned skill file.",
+                ),
+                ToolParameter(
+                    name="skill_name",
+                    type="string",
+                    description="Name of the skill.",
+                ),
+                ToolParameter(
+                    name="description",
+                    type="string",
+                    description="Description of what the skill does.",
+                ),
+            ],
+            dangerous=True,
+        )
+
+    async def execute(self, **params: Any) -> ToolResult:
+        file_path = params.get("file_path", "").strip()
+        skill_name = params.get("skill_name", "").strip()
+        description = params.get("description", "").strip()
+        
+        token = os.environ.get("GITHUB_TOKEN")
+        if not token:
+            return ToolResult(success=False, error="GITHUB_TOKEN environment variable is not set. Required to create PRs.")
+
+        if not file_path or not skill_name:
+            return ToolResult(success=False, error="file_path and skill_name are required.")
+
+        import time
+        branch_name = f"learned-skill/{skill_name.replace(' ', '-')}-{int(time.time())}"
+        
+        try:
+            # 1. Get repo owner/name from git remote
+            proc = await asyncio.create_subprocess_shell(
+                "git config --get remote.origin.url",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, _ = await proc.communicate()
+            remote_url = stdout.decode('utf-8').strip()
+            
+            if not remote_url:
+                return ToolResult(success=False, error="Could not determine git remote origin url.")
+            
+            repo_path = ""
+            if remote_url.startswith("https://github.com/"):
+                repo_path = remote_url.replace("https://github.com/", "")
+            elif remote_url.startswith("git@github.com:"):
+                repo_path = remote_url.replace("git@github.com:", "")
+            else:
+                return ToolResult(success=False, error=f"Unsupported remote URL format: {remote_url}")
+                
+            if repo_path.endswith(".git"):
+                repo_path = repo_path[:-4]
+
+            # 2. Git operations
+            await self._run_cmd(f"git checkout -b {branch_name}")
+            await self._run_cmd(f"git add {file_path}")
+            await self._run_cmd(f'git commit -m "feat(skills): Jarvis learned {skill_name}"')
+            
+            # Push using the token in the URL so the server doesn\'t prompt for credentials
+            push_url = f"https://x-access-token:{token}@github.com/{repo_path}.git"
+            await self._run_cmd(f"git push -u {push_url} {branch_name}")
+
+            # 3. Create PR via GitHub API
+            import urllib.request
+            import json
+            
+            api_url = f"https://api.github.com/repos/{repo_path}/pulls"
+            pr_data = {
+                "title": f"🧠 New Skill Learned: {skill_name}",
+                "body": f"Jarvis generated this skill.\\n\\n**Description:** {description}\\n\\nPlease review the code before merging.",
+                "head": branch_name,
+                "base": "main"
+            }
+            
+            req = urllib.request.Request(api_url, data=json.dumps(pr_data).encode('utf-8'), headers={
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/vnd.github.v3+json",
+                "Content-Type": "application/json"
+            }, method="POST")
+            
+            try:
+                with urllib.request.urlopen(req) as response:
+                    res_data = json.loads(response.read().decode('utf-8'))
+                    pr_url = res_data.get("html_url", "Unknown URL")
+            except urllib.error.HTTPError as e:
+                error_body = e.read().decode('utf-8')
+                await self._run_cmd("git checkout main", check=False)
+                return ToolResult(success=False, error=f"Failed to create PR via API: {e.code} - {error_body}")
+
+            # 4. Return to main
+            await self._run_cmd("git checkout main", check=False)
+            
+            return ToolResult(success=True, output=f"Successfully staged '{skill_name}' for review. PR created: {pr_url}")
+
+        except Exception as e:
+            # Attempt recovery
+            await self._run_cmd("git checkout main", check=False)
+            return ToolResult(success=False, error=f"Failed to stage skill: {e}")
+
+    async def _run_cmd(self, cmd: str, check: bool = True):
+        proc = await asyncio.create_subprocess_shell(
+            cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await proc.communicate()
+        if check and proc.returncode != 0:
+            raise RuntimeError(f"Command '{cmd}' failed: {stderr.decode('utf-8')}")
+
+
 class ClaudeCodeTool(Tool):
     """Trigger a Claude Code session on the master laptop."""
 
@@ -1343,4 +1468,5 @@ def get_system_tools() -> list[Tool]:
         GetDateTimeTool(),
         PlayMusicTool(),
         ClaudeCodeTool(),
+        StageSkillForReviewTool(),
     ]
