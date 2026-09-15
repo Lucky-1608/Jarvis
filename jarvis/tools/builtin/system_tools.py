@@ -1421,6 +1421,67 @@ class ClaudeCodeTool(Tool):
         return ToolResult(success=True, output=f"Triggered Claude Code session with task: {task}")
 
 # ---------------------------------------------------------------------------
+# Test Internal APIs
+# ---------------------------------------------------------------------------
+class TestInternalAPIsTool(Tool):
+    """Discover and test all internal APIs of JARVIS."""
+
+    @property
+    def metadata(self) -> ToolMetadata:
+        return ToolMetadata(
+            name="test_internal_apis",
+            description="Discover and test all local backend APIs of JARVIS.",
+            category=ToolCategory.SYSTEM,
+        )
+
+    async def execute(self, **params: Any) -> ToolResult:
+        try:
+            from jarvis.server.app import app
+            from jarvis.config.settings import get_settings
+            
+            settings = get_settings()
+            api_key = settings.server.secret_key
+            
+            routes = []
+            from fastapi.routing import APIRoute
+            for route in app.routes:
+                if isinstance(route, APIRoute):
+                    routes.append({
+                        "path": route.path,
+                        "methods": list(route.methods)
+                    })
+            
+            results = []
+            
+            # Use FastAPI's TestClient to test routes locally
+            from fastapi.testclient import TestClient
+            client = TestClient(app)
+            
+            for r in routes:
+                path = r["path"]
+                methods = r["methods"]
+                # For simplicity, we just test GET endpoints since POST may require specific payloads
+                if "GET" in methods:
+                    response = client.get(path, headers={"X-API-Key": api_key})
+                    results.append({
+                        "path": path,
+                        "method": "GET",
+                        "status_code": response.status_code
+                    })
+            
+            return ToolResult(
+                success=True,
+                output={
+                    "total_routes_discovered": len(routes),
+                    "tested_get_routes": len(results),
+                    "results": results
+                }
+            )
+        except Exception as exc:
+            return ToolResult(success=False, error=str(exc))
+
+
+# ---------------------------------------------------------------------------
 # Get Date/Time
 # ---------------------------------------------------------------------------
 class GetDateTimeTool(Tool):
@@ -1469,4 +1530,5 @@ def get_system_tools() -> list[Tool]:
         PlayMusicTool(),
         ClaudeCodeTool(),
         StageSkillForReviewTool(),
+        TestInternalAPIsTool(),
     ]
