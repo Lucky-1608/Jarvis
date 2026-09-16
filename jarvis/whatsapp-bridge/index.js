@@ -39,7 +39,7 @@ async function sendStatus(status, data = null) {
 async function connectToWhatsApp() {
     const baileys = await import('@whiskeysockets/baileys');
     const makeWASocket = baileys.default || baileys.makeWASocket;
-    const { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = baileys;
+    const { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, downloadMediaMessage } = baileys;
 
     const path = require('path');
     const authFolder = process.env.WHATSAPP_AUTH_DIR
@@ -160,11 +160,17 @@ async function connectToWhatsApp() {
             }
 
             // Extract text message
-            const text = msg.message.conversation || 
+            let text = msg.message.conversation || 
                          msg.message.extendedTextMessage?.text || 
-                         msg.message.imageMessage?.caption;
+                         msg.message.imageMessage?.caption || '';
 
-            if (!text) continue;
+            const hasMedia = !!(msg.message.imageMessage || msg.message.videoMessage || msg.message.documentMessage || msg.message.audioMessage);
+
+            if (!text && hasMedia) {
+                text = "jarvis, analyze this media";
+            } else if (!text) {
+                continue;
+            }
 
             // Check if the trigger word "jarvis" is present
             if (!text.toLowerCase().includes('jarvis')) {
@@ -190,10 +196,37 @@ async function connectToWhatsApp() {
             // Send typing indicator
             await sock.sendPresenceUpdate('composing', rawSender);
 
+            let finalMessage = text;
+            
+            if (hasMedia) {
+                try {
+                    const buffer = await downloadMediaMessage(
+                        msg,
+                        'buffer',
+                        { },
+                        { 
+                            logger: pino({ level: 'silent' }),
+                            reuploadRequest: sock.updateMediaMessage
+                        }
+                    );
+                    
+                    const mimeType = msg.message.imageMessage?.mimetype || 
+                                     msg.message.videoMessage?.mimetype || 
+                                     msg.message.audioMessage?.mimetype || 
+                                     msg.message.documentMessage?.mimetype || 
+                                     'application/octet-stream';
+                                     
+                    const base64Data = buffer.toString('base64');
+                    finalMessage += `\n\n--- File: whatsapp_media ---\ndata:${mimeType};base64,${base64Data}\n--- End of whatsapp_media ---`;
+                } catch (err) {
+                    console.error("Failed to download media:", err.message);
+                }
+            }
+
             try {
                 // Forward to Jarvis API
                 const response = await axios.post(`${JARVIS_BACKEND_URL}/api/chat`, {
-                    message: text,
+                    message: finalMessage,
                     stream: false
                 }, {
                     headers: { 'X-API-Key': process.env.JARVIS_SECRET_KEY || 'JARVIS_DEV_KEY' }

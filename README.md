@@ -95,6 +95,7 @@ Language models lie about their own actions — not maliciously, but because pat
 | **Device hands** | Lightweight agents connect *outbound* from laptop and phone and register capabilities. The Android client drives arbitrary apps via a native Kotlin `AccessibilityService`. |
 | **Guardian fraud shield** | Rule-first scam detection on inbound mail and messages. Warn-only — never auto-deletes, auto-replies, or clicks. |
 | **Truth seals** | Every side-effecting tool call generates a cryptographic `seal_id` (currently stored in-memory). Claims are auditable against seals; when words and seals disagree, **seals win**. |
+| **Multimodal Intel** | Instantly parses images, PDFs, Word docs, Excel, PowerPoint, and text files attached via bridges or UI. Extracts text via local `markitdown` and uses native vision routing, while keeping memory DBs clean. |
 | **Vector memory** | Deep semantic recall on every message via `pgvector` or ChromaDB, allowing meaning-based retrieval across thousands of past interactions. |
 | **GraphRAG** | Uses Graphify to understand codebase architecture and concept relationships contextually, not just textually. |
 
@@ -116,7 +117,8 @@ Jarvis remembers you across sessions using an advanced two-tier memory system:
 - **Episodic Memory:** Short-term conversational context.
 - **Semantic Vector Recall:** Powered by `pgvector` (PostgreSQL) or ChromaDB, utilizing local embeddings (`BAAI/bge-small-en-v1.5`) or Jina API to retrieve context from thousands of past interactions.
 
-### Voice Integrations
+### Voice & Multimodal Integrations
+- **Multimodal Intelligence:** Seamlessly handles images, PDFs, DOCX, XLSX, and plain text files uploaded via the Companion App, WhatsApp, or Telegram. Images are intelligently routed to vision models (OpenCode, Gemini, etc.), while rich documents are parsed entirely locally via Microsoft's `markitdown` library and injected into the prompt, without bloating the semantic vector store with base64 data.
 - **Voice Capabilities:** Supports Wake-word, Push-to-Talk, and Continuous listening modes using Azure Cognitive Services (STT) and ElevenLabs (TTS).
 
 ---

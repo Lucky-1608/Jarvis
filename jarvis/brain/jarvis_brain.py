@@ -218,6 +218,105 @@ class JarvisBrain:
             except Exception as e:
                 logger.error("brain.failed_to_load_learned_tool", file=py_file.name, error=str(e))
 
+    # -- Preprocessing ------------------------------------------------------
+    def _preprocess_multimodal_input(self, user_input: str) -> tuple[str | list[dict[str, Any]], str]:
+        """
+        Extract base64 files from user input.
+        Returns:
+            (user_input_llm, user_input_db)
+            user_input_llm: A string or list of message parts (for vision)
+            user_input_db: A pure string with base64 data stripped or converted to text
+        """
+        import re
+        import base64
+        import tempfile
+        import os
+        from markitdown import MarkItDown
+
+        # Match: --- File: filename --- \n data:mime/type;base64,data \n --- End ... ---
+        pattern = re.compile(
+            r"---\s*File:\s*(.*?)\s*---\s*\n?data:(.*?);base64,(.*?)\s*\n?---\s*End[^\n]*\s*---",
+            re.DOTALL
+        )
+        
+        parts_llm = []
+        parts_db = []
+        last_idx = 0
+        
+        for match in pattern.finditer(user_input):
+            filename = match.group(1).strip()
+            mime_type = match.group(2).strip()
+            b64_data = match.group(3).strip()
+            
+            text_before = user_input[last_idx:match.start()].strip()
+            if text_before:
+                parts_llm.append({"type": "text", "text": text_before})
+                parts_db.append(text_before)
+                
+            try:
+                if mime_type.startswith("image/"):
+                    parts_llm.append({
+                        "type": "image_url",
+                        "image_url": {"url": f"data:{mime_type};base64,{b64_data}"}
+                    })
+                    parts_db.append(f"\n[Attached Image: {filename}]\n")
+                elif mime_type.startswith("video/") or mime_type.startswith("audio/"):
+                    # For video/audio, we might not have a parser yet, just log it.
+                    msg = f"\n[Attached Media: {filename} (Unsupported for direct AI ingest)]\n"
+                    parts_llm.append({"type": "text", "text": msg})
+                    parts_db.append(msg)
+                else:
+                    # Document
+                    file_bytes = base64.b64decode(b64_data)
+                    ext = os.path.splitext(filename)[1] or ".tmp"
+                        
+                    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+                        tmp.write(file_bytes)
+                        tmp_path = tmp.name
+                        
+                    try:
+                        md = MarkItDown()
+                        result = md.convert(tmp_path)
+                        extracted_text = result.text_content
+                        
+                        prompt_injection = (
+                            f"\n[Attached Document: {filename}]\n"
+                            f"--- BEGIN DOCUMENT CONTENT ---\n{extracted_text}\n--- END DOCUMENT CONTENT ---\n"
+                        )
+                        parts_llm.append({"type": "text", "text": prompt_injection})
+                        parts_db.append(prompt_injection)
+                    except Exception as e:
+                        logger.warning("brain.document_extract_failed", file=filename, error=str(e))
+                        msg = f"\n[Attached Document: {filename} - Failed to read: {e}]\n"
+                        parts_llm.append({"type": "text", "text": msg})
+                        parts_db.append(msg)
+                    finally:
+                        try:
+                            os.remove(tmp_path)
+                        except OSError:
+                            pass
+            except Exception as e:
+                logger.error("brain.multimodal_parse_error", error=str(e))
+                
+            last_idx = match.end()
+            
+        remaining_text = user_input[last_idx:].strip()
+        if remaining_text:
+            parts_llm.append({"type": "text", "text": remaining_text})
+            parts_db.append(remaining_text)
+            
+        if not parts_llm:
+            return user_input, user_input
+            
+        db_str = "\n".join(parts_db)
+        
+        if all(p["type"] == "text" for p in parts_llm):
+            llm_val = "\n".join(p["text"] for p in parts_llm)
+        else:
+            llm_val = parts_llm
+            
+        return llm_val, db_str
+
     # -- Main Processing Pipeline -------------------------------------------
 
     @observe(name="jarvis_process")
@@ -241,12 +340,20 @@ class JarvisBrain:
 
         start = time.perf_counter()
 
+        # 0. Preprocess multimodal input (files, images)
+        user_input_llm, user_input_db = self._preprocess_multimodal_input(user_input)
+
         # 1. Add to conversation buffer
-        self._memory.add_to_conversation("user", user_input)
+        self._memory.add_to_conversation("user", user_input_db)
 
 
-        # 2. Build context
-        messages = await self._context.build_messages(user_input)
+        # 2. Build context (using the DB-safe string version for semantic search)
+        messages = await self._context.build_messages(user_input_db)
+        
+        # Override the last message's content to use the rich LLM-ready format (for vision)
+        if messages and messages[-1].role == "user":
+            messages[-1].content = user_input_llm
+
 
         # 3. Get AI response with tools (multi-step loop)
         openai_tools = None
@@ -452,9 +559,15 @@ class JarvisBrain:
             )
             return
 
-        self._memory.add_to_conversation("user", user_input)
+        user_input_llm, user_input_db = self._preprocess_multimodal_input(user_input)
+        
+        self._memory.add_to_conversation("user", user_input_db)
 
-        messages = await self._context.build_messages(user_input)
+        messages = await self._context.build_messages(user_input_db)
+        
+        # Override the last message's content to use the rich LLM-ready format (for vision)
+        if messages and messages[-1].role == "user":
+            messages[-1].content = user_input_llm
 
         full_response = ""
         async for chunk in self._router.chat_stream(messages):

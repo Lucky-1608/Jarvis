@@ -177,6 +177,7 @@ export function ConversationInput() {
             ref={fileInputRef}
             onChange={handleFileChange}
             multiple 
+            accept="*/*"
             className="hidden" 
           />
           <button 

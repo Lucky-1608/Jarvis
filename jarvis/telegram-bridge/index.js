@@ -73,7 +73,9 @@ async function connectToTelegram() {
     bot.on('message', async (msg) => {
         const chatId = msg.chat.id;
         const senderId = msg.from.id.toString();
-        const text = msg.text;
+        let text = msg.text || msg.caption || '';
+        
+        const hasMedia = !!(msg.photo || msg.document || msg.video || msg.audio || msg.voice);
 
         console.log(`\n[DEBUG] Message received from: ${senderId} (chat: ${chatId})`);
 
@@ -83,19 +85,52 @@ async function connectToTelegram() {
             return;
         }
 
-        // Must have text content
-        if (!text) return;
-
+        if (!text && hasMedia) {
+            text = "analyze this media";
+        } else if (!text) {
+            return;
+        }
 
         console.log(`\n[Owner] ${text}`);
 
         // Send typing indicator
         await bot.sendChatAction(chatId, 'typing');
 
+        let finalMessage = text;
+
+        if (hasMedia) {
+            try {
+                let fileId;
+                if (msg.photo && msg.photo.length > 0) {
+                    fileId = msg.photo[msg.photo.length - 1].file_id;
+                } else if (msg.document) {
+                    fileId = msg.document.file_id;
+                } else if (msg.video) {
+                    fileId = msg.video.file_id;
+                } else if (msg.audio) {
+                    fileId = msg.audio.file_id;
+                } else if (msg.voice) {
+                    fileId = msg.voice.file_id;
+                }
+
+                if (fileId) {
+                    const fileLink = await bot.getFileLink(fileId);
+                    const response = await axios.get(fileLink, { responseType: 'arraybuffer' });
+                    const buffer = Buffer.from(response.data, 'binary');
+                    const base64Data = buffer.toString('base64');
+                    const mimeType = response.headers['content-type'] || 'application/octet-stream';
+
+                    finalMessage += `\n\n--- File: telegram_media ---\ndata:${mimeType};base64,${base64Data}\n--- End of telegram_media ---`;
+                }
+            } catch (err) {
+                console.error("Failed to download media:", err.message);
+            }
+        }
+
         try {
             // Forward to Jarvis API
             const response = await axios.post(`${JARVIS_BACKEND_URL}/api/chat`, {
-                message: text,
+                message: finalMessage,
                 stream: false
             }, {
                 headers: { 'X-API-Key': process.env.JARVIS_SECRET_KEY || 'JARVIS_DEV_KEY' }
