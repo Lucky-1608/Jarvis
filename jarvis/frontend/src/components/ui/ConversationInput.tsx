@@ -200,7 +200,7 @@ export function ConversationInput() {
           <div className="flex items-center gap-2 pr-1">
             <button 
               onClick={toggleRecording}
-              disabled={isGenerating}
+              disabled={isGenerating && !isRecording}
               className={`p-3 transition-colors rounded-xl ${isRecording ? 'text-red-500 bg-red-500/10 hover:bg-red-500/20 shadow-[0_0_15px_rgba(239,68,68,0.4)] animate-pulse' : 'text-zinc-400 hover:text-[var(--accent-cyan)] hover:bg-[rgba(255,255,255,0.05)]'} disabled:opacity-50`}
             >
               {isRecording ? <Square size={20} className="fill-current" /> : <Mic size={20} />}
