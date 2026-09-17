@@ -63,6 +63,12 @@ export function useVoiceRecorder(onTranscription: (text: string) => void) {
   const stopRecording = useCallback(() => {
     return new Promise<void>((resolve) => {
       if (mediaRecorder.current && isRecording) {
+        if (mediaRecorder.current.state === 'inactive') {
+          setIsRecording(false);
+          resolve();
+          return;
+        }
+        
         mediaRecorder.current.onstop = () => {
           mediaRecorder.current?.stream.getTracks().forEach(track => track.stop());
           
@@ -77,8 +83,14 @@ export function useVoiceRecorder(onTranscription: (text: string) => void) {
             resolve();
           }, 500); // 500ms should be enough for the final local STT result
         };
-        mediaRecorder.current.stop();
+        try {
+          mediaRecorder.current.stop();
+        } catch (e) {
+          setIsRecording(false);
+          resolve();
+        }
       } else {
+        setIsRecording(false);
         resolve();
       }
     });
