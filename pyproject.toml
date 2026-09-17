@@ -53,6 +53,7 @@ dependencies = [
     # --- Utilities ---
     "psutil>=5.9",
     "pillow>=10.0",
+    "azure-cognitiveservices-speech>=1.37.0",
 ]
 
 [project.optional-dependencies]
@@ -70,7 +71,6 @@ voice = [
     "pyttsx3>=2.90",
     "numpy>=1.24",
     "webrtcvad>=2.0.10",
-    "azure-cognitiveservices-speech>=1.37.0",
 ]
 
 vision = [
