@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
+import { useJarvisStore } from '../store/jarvisStore';
 
 export function useVoiceRecorder(onTranscription: (text: string) => void) {
   const [isRecording, setIsRecording] = useState(false);
@@ -7,11 +8,42 @@ export function useVoiceRecorder(onTranscription: (text: string) => void) {
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const ws = useRef<WebSocket | null>(null);
   const chunks = useRef<Blob[]>([]);
+  
+  // Audio analysis refs
+  const audioContext = useRef<AudioContext | null>(null);
+  const animationFrameId = useRef<number | null>(null);
 
   const startRecording = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaRecorder.current = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      
+      // Set up audio analysis for the UI bubble
+      try {
+        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        audioContext.current = new AudioContextClass();
+        const analyser = audioContext.current.createAnalyser();
+        const source = audioContext.current.createMediaStreamSource(stream);
+        source.connect(analyser);
+        analyser.fftSize = 256;
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        
+        const updateAmplitude = () => {
+          analyser.getByteFrequencyData(dataArray);
+          let sum = 0;
+          for (let i = 0; i < dataArray.length; i++) {
+            sum += dataArray[i];
+          }
+          const average = sum / dataArray.length;
+          // Normalize (roughly) 0-255 to 0-1
+          useJarvisStore.getState().setAudioAmplitude(Math.min(1, average / 128));
+          animationFrameId.current = requestAnimationFrame(updateAmplitude);
+        };
+        
+        updateAmplitude();
+      } catch (err) {
+        console.warn("Could not set up audio context for visualization:", err);
+      }
       
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const host = import.meta.env.VITE_API_BASE_URL 
@@ -49,8 +81,8 @@ export function useVoiceRecorder(onTranscription: (text: string) => void) {
         }
       };
 
-      // Request data every 1 second to update the cumulative chunks
-      mediaRecorder.current.start(1500);
+      // Request data every 250ms to make real-time transcription faster
+      mediaRecorder.current.start(250);
       setIsRecording(true);
       setError(null);
       
@@ -62,6 +94,17 @@ export function useVoiceRecorder(onTranscription: (text: string) => void) {
 
   const stopRecording = useCallback(() => {
     return new Promise<void>((resolve) => {
+      // Clean up audio context and animation frame
+      if (animationFrameId.current) {
+        cancelAnimationFrame(animationFrameId.current);
+        animationFrameId.current = null;
+      }
+      if (audioContext.current) {
+        audioContext.current.close().catch(console.error);
+        audioContext.current = null;
+      }
+      useJarvisStore.getState().setAudioAmplitude(0);
+
       if (mediaRecorder.current && isRecording) {
         if (mediaRecorder.current.state === 'inactive') {
           setIsRecording(false);
@@ -69,25 +112,32 @@ export function useVoiceRecorder(onTranscription: (text: string) => void) {
           return;
         }
         
-        mediaRecorder.current.onstop = () => {
-          mediaRecorder.current?.stream.getTracks().forEach(track => track.stop());
+        let resolved = false;
+        const completeStop = () => {
+          if (resolved) return;
+          resolved = true;
           
-          // Wait a short bit to allow the final websocket message (the transcription of the last chunk) to arrive
-          setTimeout(() => {
-            if (ws.current) {
-              ws.current.close();
-              ws.current = null;
-            }
-            chunks.current = [];
-            setIsRecording(false);
-            resolve();
-          }, 500); // 500ms should be enough for the final local STT result
-        };
-        try {
-          mediaRecorder.current.stop();
-        } catch (e) {
+          if (ws.current) {
+            ws.current.close();
+            ws.current = null;
+          }
+          chunks.current = [];
           setIsRecording(false);
           resolve();
+        };
+        
+        mediaRecorder.current.onstop = () => {
+          mediaRecorder.current?.stream.getTracks().forEach(track => track.stop());
+          // Wait a short bit to allow the final websocket message to arrive
+          setTimeout(completeStop, 250); 
+        };
+        
+        try {
+          mediaRecorder.current.stop();
+          // Safety fallback: if onstop doesn't fire, force complete stop after 1s
+          setTimeout(completeStop, 1000);
+        } catch (e) {
+          completeStop();
         }
       } else {
         setIsRecording(false);

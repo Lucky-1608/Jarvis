@@ -65,6 +65,15 @@ async function connectToTelegram() {
     // Handle polling errors (network issues, etc.)
     bot.on('polling_error', async (error) => {
         console.error('[Polling Error]', error.message);
+        
+        // If there's a 409 Conflict, another bot instance is running (e.g. during deployment overlapping).
+        // Exit this process gracefully so it doesn't aggressively spam Telegram and logs.
+        if (error.message.includes('409 Conflict')) {
+            console.error('[Bridge] Exiting to avoid 409 Conflict spam. The process will be restarted by the supervisor.');
+            await bot.stopPolling();
+            setTimeout(() => process.exit(1), 5000);
+        }
+        
         // Do not send polling_error to Jarvis frontend as it causes permanent "Offline" state
         // await sendStatus('telegram.status', 'polling_error');
     });

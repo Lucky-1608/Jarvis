@@ -114,10 +114,10 @@ class SpeechToText:
                     result = response.json()
                     return result.get("text", "")
             except httpx.HTTPStatusError as e:
-                if e.response.status_code == 429 and attempt < self._settings.elevenlabs.max_retries - 1:
-                    logger.debug("stt.elevenlabs.ratelimited", msg="Rotating key due to 429")
+                if e.response.status_code in (401, 429) and attempt < self._settings.elevenlabs.max_retries - 1:
+                    logger.debug("stt.elevenlabs.ratelimited", msg=f"Rotating key due to {e.response.status_code}")
                     continue
-                raise
+                raise e
         
         return ""
 

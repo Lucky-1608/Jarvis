@@ -124,10 +124,10 @@ class TextToSpeech:
                             f.write(response.content)
                         break  # Success, exit retry loop
                 except httpx.HTTPStatusError as e:
-                    if e.response.status_code == 429 and attempt < self._settings.elevenlabs.max_retries - 1:
-                        logger.debug("tts.elevenlabs.ratelimited", msg="Rotating key due to 429")
+                    if e.response.status_code in (401, 429) and attempt < self._settings.elevenlabs.max_retries - 1:
+                        logger.debug("tts.elevenlabs.ratelimited", msg=f"Rotating key due to {e.response.status_code}")
                         continue
-                    raise
+                    raise e
 
             if self._stop_requested:
                 return

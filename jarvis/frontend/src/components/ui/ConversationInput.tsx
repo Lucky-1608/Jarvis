@@ -86,8 +86,10 @@ export function ConversationInput() {
     }
   }, [value, selectedFiles, setAIState]);
 
+  const initialTextRef = useRef('');
+
   const { isRecording, startRecording, stopRecording, error } = useVoiceRecorder((text: string) => {
-    setValue(text);
+    setValue((initialTextRef.current ? initialTextRef.current + ' ' : '') + text);
   });
 
   useEffect(() => {
@@ -116,7 +118,7 @@ export function ConversationInput() {
       await stopRecording();
     } else {
       shouldAutoSend.current = false;
-      setValue('');
+      initialTextRef.current = value;
       await startRecording();
     }
   };
