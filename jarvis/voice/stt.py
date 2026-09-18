@@ -114,9 +114,18 @@ class SpeechToText:
                     result = response.json()
                     return result.get("text", "")
             except httpx.HTTPStatusError as e:
+                error_msg = e.response.text
+                try:
+                    error_data = e.response.json()
+                    error_msg = error_data.get("detail", {}).get("message", error_msg) if isinstance(error_data.get("detail"), dict) else str(error_data)
+                except Exception:
+                    pass
+
                 if e.response.status_code in (401, 429) and attempt < self._settings.elevenlabs.max_retries - 1:
-                    logger.debug("stt.elevenlabs.ratelimited", msg=f"Rotating key due to {e.response.status_code}")
+                    logger.debug("stt.elevenlabs.rotator", status=e.response.status_code, error=error_msg, msg="Rotating key")
                     continue
+                
+                logger.error("stt.elevenlabs.error", status=e.response.status_code, error=error_msg)
                 raise e
         
         return ""
@@ -141,7 +150,7 @@ class SpeechToText:
                 logger.error("stt.azure_failed", error=str(e))
                 return ""
 
-            logger.warning("stt.primary_failed", provider=provider, error=str(e), msg="Falling back to Azure STT.")
+            logger.warning("stt.elevenlabs_failed_using_azure", provider=provider, error=str(e), msg="ElevenLabs failed, falling back to Azure STT.")
             try:
                 return await self._transcribe_azure_bytes(audio_bytes, language)
             except Exception as e2:

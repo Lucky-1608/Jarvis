@@ -65,7 +65,7 @@ class TextToSpeech:
         try:
             await self._speak_primary(text)
         except Exception as exc:
-            logger.warning("tts.primary_failed", error=str(exc))
+            logger.warning("tts.elevenlabs_failed_using_edge", error=str(exc), msg="ElevenLabs failed, falling back to Edge TTS")
             try:
                 await self._speak_edge_tts(text)
             except Exception as fallback_exc:
@@ -124,9 +124,18 @@ class TextToSpeech:
                             f.write(response.content)
                         break  # Success, exit retry loop
                 except httpx.HTTPStatusError as e:
+                    error_msg = e.response.text
+                    try:
+                        error_data = e.response.json()
+                        error_msg = error_data.get("detail", {}).get("message", error_msg) if isinstance(error_data.get("detail"), dict) else str(error_data)
+                    except Exception:
+                        pass
+                        
                     if e.response.status_code in (401, 429) and attempt < self._settings.elevenlabs.max_retries - 1:
-                        logger.debug("tts.elevenlabs.ratelimited", msg=f"Rotating key due to {e.response.status_code}")
+                        logger.debug("tts.elevenlabs.rotator", status=e.response.status_code, error=error_msg, msg="Rotating key")
                         continue
+                        
+                    logger.error("tts.elevenlabs.error", status=e.response.status_code, error=error_msg)
                     raise e
 
             if self._stop_requested:
@@ -193,10 +202,10 @@ class TextToSpeech:
             else:
                 raise ValueError(f"Unknown TTS provider: {provider}")
         except httpx.HTTPStatusError as exc:
-            logger.warning("tts.synthesize_primary_failed", error=str(exc), response=exc.response.text)
+            logger.warning("tts.elevenlabs_failed_using_edge", error=str(exc), response=exc.response.text, msg="ElevenLabs failed, falling back to Edge TTS")
             return await self._synthesize_edge_tts_to_file(text, output_path)
         except Exception as exc:
-            logger.warning("tts.synthesize_primary_failed", error=str(exc))
+            logger.warning("tts.elevenlabs_failed_using_edge", error=str(exc), msg="ElevenLabs failed, falling back to Edge TTS")
             return await self._synthesize_edge_tts_to_file(text, output_path)
 
     async def _synthesize_elevenlabs_to_file(self, text: str, output_path: Path) -> Path:
@@ -231,10 +240,19 @@ class TextToSpeech:
                         f.write(response.content)
                     break
             except httpx.HTTPStatusError as e:
-                if e.response.status_code == 429 and attempt < self._settings.elevenlabs.max_retries - 1:
-                    logger.debug("tts.elevenlabs.ratelimited", msg="Rotating key due to 429")
+                error_msg = e.response.text
+                try:
+                    error_data = e.response.json()
+                    error_msg = error_data.get("detail", {}).get("message", error_msg) if isinstance(error_data.get("detail"), dict) else str(error_data)
+                except Exception:
+                    pass
+                    
+                if e.response.status_code in (401, 429) and attempt < self._settings.elevenlabs.max_retries - 1:
+                    logger.debug("tts.elevenlabs.rotator", status=e.response.status_code, error=error_msg, msg="Rotating key")
                     continue
-                raise
+                    
+                logger.error("tts.elevenlabs.error", status=e.response.status_code, error=error_msg)
+                raise e
 
         logger.info("tts.synthesized_elevenlabs_to_file", path=str(output_path))
         return output_path

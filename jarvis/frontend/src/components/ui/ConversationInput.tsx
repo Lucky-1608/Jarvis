@@ -30,7 +30,7 @@ export function ConversationInput() {
     setSelectedFiles(prev => prev.filter((_, i) => i !== idx));
   };
 
-  const handleSend = useCallback(async (textToSend: string = value) => {
+  const handleSend = useCallback(async (textToSend: string = value, isVoiceInteraction: boolean = false) => {
     let finalMessage = textToSend.trim();
     if (!finalMessage && selectedFiles.length === 0) return;
 
@@ -76,6 +76,23 @@ export function ConversationInput() {
       setAIState('idle');
       store.addMessage(result.data.content, false);
       store.addLog({ message: 'Command executed successfully.' });
+      
+      if (isVoiceInteraction) {
+        store.addLog({ message: 'Synthesizing voice response...' });
+        try {
+          const ttsResult = await apiFetch<{ audio_base64: string; format: string }>('/api/voice/speak', {
+            method: 'POST',
+            body: JSON.stringify({ text: result.data.content, voice: 'en-US-GuyNeural' })
+          });
+          if (ttsResult.ok && ttsResult.data.audio_base64) {
+            const audio = new Audio(`data:audio/${ttsResult.data.format};base64,${ttsResult.data.audio_base64}`);
+            audio.play().catch(e => console.error("Audio play failed:", e));
+          }
+        } catch (e) {
+          console.error("TTS fetch failed:", e);
+        }
+      }
+
       if (store.aiState === 'error') {
         setAIState('idle');
       }
@@ -128,7 +145,7 @@ export function ConversationInput() {
     if (!isRecording && shouldAutoSend.current) {
       shouldAutoSend.current = false;
       if (value.trim() || selectedFiles.length > 0) {
-        handleSend(value);
+        handleSend(value, true);
       }
     }
   }, [isRecording, value, selectedFiles.length, handleSend]);
