@@ -95,12 +95,13 @@ class TextToSpeech:
 
         payload = {
             "text": text,
-            "model_id": self._settings.elevenlabs.model,
             "voice_settings": {
                 "stability": 0.5,
                 "similarity_boost": 0.75
             }
         }
+        if self._settings.elevenlabs.model:
+            payload["model_id"] = self._settings.elevenlabs.model
 
         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
             tmp_path = tmp.name
@@ -133,6 +134,7 @@ class TextToSpeech:
                         
                     if e.response.status_code in (401, 429) and attempt < self._settings.elevenlabs.max_retries - 1:
                         logger.debug("tts.elevenlabs.rotator", status=e.response.status_code, error=error_msg, msg="Rotating key")
+                        self._elevenlabs_rotator.rotate()
                         continue
                         
                     logger.error("tts.elevenlabs.error", status=e.response.status_code, error=error_msg)
@@ -215,12 +217,13 @@ class TextToSpeech:
 
         payload = {
             "text": text,
-            "model_id": self._settings.elevenlabs.model,
             "voice_settings": {
                 "stability": 0.5,
                 "similarity_boost": 0.75
             }
         }
+        if self._settings.elevenlabs.model:
+            payload["model_id"] = self._settings.elevenlabs.model
 
         for attempt in range(self._settings.elevenlabs.max_retries):
             api_key = self._elevenlabs_rotator.get_key()
@@ -249,6 +252,7 @@ class TextToSpeech:
                     
                 if e.response.status_code in (401, 429) and attempt < self._settings.elevenlabs.max_retries - 1:
                     logger.debug("tts.elevenlabs.rotator", status=e.response.status_code, error=error_msg, msg="Rotating key")
+                    self._elevenlabs_rotator.rotate()
                     continue
                     
                 logger.error("tts.elevenlabs.error", status=e.response.status_code, error=error_msg)

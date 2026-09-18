@@ -106,7 +106,15 @@ export function ConversationInput() {
   const initialTextRef = useRef('');
 
   const { isRecording, startRecording, stopRecording, error } = useVoiceRecorder((text: string) => {
-    setValue((initialTextRef.current ? initialTextRef.current + ' ' : '') + text);
+    const finalVal = (initialTextRef.current ? initialTextRef.current + ' ' : '') + text;
+    setValue(finalVal);
+    
+    if (shouldAutoSend.current) {
+      shouldAutoSend.current = false;
+      if (finalVal.trim() || selectedFiles.length > 0) {
+        handleSend(finalVal, true);
+      }
+    }
   });
 
   useEffect(() => {
@@ -140,15 +148,7 @@ export function ConversationInput() {
     }
   };
 
-  useEffect(() => {
-    // If we just stopped recording and we are supposed to auto-send, send the latest value
-    if (!isRecording && shouldAutoSend.current) {
-      shouldAutoSend.current = false;
-      if (value.trim() || selectedFiles.length > 0) {
-        handleSend(value, true);
-      }
-    }
-  }, [isRecording, value, selectedFiles.length, handleSend]);
+  // (Removed old auto-send useEffect)
 
   const isGenerating = aiState === 'thinking' || aiState === 'executing' || aiState === 'listening';
 

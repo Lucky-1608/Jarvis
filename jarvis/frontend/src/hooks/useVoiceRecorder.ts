@@ -81,8 +81,9 @@ export function useVoiceRecorder(onTranscription: (text: string) => void) {
         }
       };
 
-      // Request data every 250ms to make real-time transcription faster
-      mediaRecorder.current.start(250);
+      // Only fire ondataavailable when the recording is explicitly stopped
+      // This prevents spamming the backend/ElevenLabs with full cumulative audio every 250ms
+      mediaRecorder.current.start();
       setIsRecording(true);
       setError(null);
       

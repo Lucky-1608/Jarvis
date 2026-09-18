@@ -123,6 +123,7 @@ class SpeechToText:
 
                 if e.response.status_code in (401, 429) and attempt < self._settings.elevenlabs.max_retries - 1:
                     logger.debug("stt.elevenlabs.rotator", status=e.response.status_code, error=error_msg, msg="Rotating key")
+                    self._elevenlabs_rotator.rotate()
                     continue
                 
                 logger.error("stt.elevenlabs.error", status=e.response.status_code, error=error_msg)

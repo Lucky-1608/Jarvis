@@ -72,12 +72,14 @@ class APIKeyRotator:
         self._index = 0
 
     def get_key(self) -> str:
-        """Returns the next key in the rotation."""
+        """Returns the current key."""
         if not self.keys:
             return ""
-        key = self.keys[self._index % len(self.keys)]
+        return self.keys[self._index % len(self.keys)]
+
+    def rotate(self) -> None:
+        """Move to the next key in the rotation."""
         self._index += 1
-        return key
 
 
 class AIProvider(ABC):

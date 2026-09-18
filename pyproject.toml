@@ -54,6 +54,7 @@ dependencies = [
     "psutil>=5.9",
     "pillow>=10.0",
     "azure-cognitiveservices-speech>=1.37.0",
+    "edge-tts>=6.1",
 ]
 
 [project.optional-dependencies]
