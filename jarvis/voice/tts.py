@@ -43,8 +43,23 @@ class TextToSpeech:
         self._is_speaking = False
         self._stop_requested = False
         self._settings = get_settings()
+        
+        # Gather all ElevenLabs API keys
+        api_keys = []
+        if self._settings.elevenlabs.api_keys:
+            api_keys.extend([k.strip() for k in self._settings.elevenlabs.api_keys.split(",") if k.strip()])
+        
+        for key in [
+            self._settings.elevenlabs.api_key_1,
+            self._settings.elevenlabs.api_key_2,
+            self._settings.elevenlabs.api_key_3,
+            self._settings.elevenlabs.api_key_4,
+        ]:
+            if key and key.strip():
+                api_keys.append(key.strip())
+
         self._elevenlabs_rotator = APIKeyRotator(
-            self._settings.elevenlabs.api_keys,
+            api_keys,
             self._settings.elevenlabs.api_key
         )
 

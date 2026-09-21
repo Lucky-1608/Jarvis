@@ -96,6 +96,10 @@ class ElevenLabsSettings(BaseSettings):
 
     api_key: str = ""
     api_keys: str = ""
+    api_key_1: str = ""
+    api_key_2: str = ""
+    api_key_3: str = ""
+    api_key_4: str = ""
     base_url: str = "https://api.elevenlabs.io"
     voice_id: str = ""
     model: str = ""

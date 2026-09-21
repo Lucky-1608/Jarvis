@@ -63,9 +63,11 @@ class ProviderHealth:
 class APIKeyRotator:
     """Rotates through a list of API keys in a round-robin fashion."""
 
-    def __init__(self, api_keys_str: str, api_key: str = ""):
+    def __init__(self, api_keys_str: str | list[str], api_key: str = ""):
         self.keys = []
-        if api_keys_str:
+        if isinstance(api_keys_str, list):
+            self.keys = [k.strip() for k in api_keys_str if k.strip()]
+        elif api_keys_str:
             self.keys = [k.strip() for k in api_keys_str.split(",") if k.strip()]
         if not self.keys and api_key:
             self.keys = [api_key.strip()]
