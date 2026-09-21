@@ -124,18 +124,23 @@ export function ConversationInput() {
         description: error,
         variant: "destructive"
       });
-      if (aiState === 'listening') setAIState('idle');
+      if (useJarvisStore.getState().aiState === 'listening') {
+        setAIState('idle');
+      }
+      if (isRecording) {
+        stopRecording();
+      }
     }
-  }, [error, toast, aiState, setAIState]);
+  }, [error, toast, isRecording, stopRecording, setAIState]);
 
   useEffect(() => {
-    if (isRecording && aiState !== 'listening') {
+    if (isRecording && !error && aiState !== 'listening') {
       setAIState('listening');
     } else if (!isRecording && aiState === 'listening') {
       // It will quickly transition to 'thinking' if auto-sending, otherwise idle
       setAIState('idle');
     }
-  }, [isRecording, aiState, setAIState]);
+  }, [isRecording, error, aiState, setAIState]);
 
   const toggleRecording = async () => {
     if (isRecording) {
