@@ -81,9 +81,9 @@ export function useVoiceRecorder(onTranscription: (text: string) => void) {
         }
       };
 
-      // Only fire ondataavailable when the recording is explicitly stopped
-      // This prevents spamming the backend/ElevenLabs with full cumulative audio every 250ms
-      mediaRecorder.current.start();
+      // Fire ondataavailable periodically (every 1 second) for real-time transcription.
+      // This sends cumulative audio to the backend/ElevenLabs.
+      mediaRecorder.current.start(1000);
       setIsRecording(true);
       setError(null);
       
@@ -129,14 +129,14 @@ export function useVoiceRecorder(onTranscription: (text: string) => void) {
         
         mediaRecorder.current.onstop = () => {
           mediaRecorder.current?.stream.getTracks().forEach(track => track.stop());
-          // Wait a short bit to allow the final websocket message to arrive
-          setTimeout(completeStop, 250); 
+          // Wait to allow the final websocket message to arrive
+          setTimeout(completeStop, 1500); 
         };
         
         try {
           mediaRecorder.current.stop();
-          // Safety fallback: if onstop doesn't fire, force complete stop after 1s
-          setTimeout(completeStop, 1000);
+          // Safety fallback: if onstop doesn't fire, force complete stop after 2s
+          setTimeout(completeStop, 2000);
         } catch (e) {
           completeStop();
         }

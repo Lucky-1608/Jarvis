@@ -148,8 +148,14 @@ export function ConversationInput() {
     }
   };
 
-  // (Removed old auto-send useEffect)
-
+  useEffect(() => {
+    if (!isRecording && shouldAutoSend.current) {
+      shouldAutoSend.current = false;
+      if (value.trim() || selectedFiles.length > 0) {
+        handleSend(value, true);
+      }
+    }
+  }, [isRecording, value, selectedFiles.length, handleSend]);
   const isGenerating = aiState === 'thinking' || aiState === 'executing' || aiState === 'listening';
 
   return (

@@ -83,12 +83,13 @@ class SpeechToText:
             raise
 
 
-    async def _transcribe_elevenlabs(self, audio_bytes: bytes, language: str | None = None) -> str:
+    async def _transcribe_elevenlabs(self, audio_bytes: bytes, language: str | None = None, filename: str = "audio.wav") -> str:
         """Transcribe audio bytes using ElevenLabs STT."""
         url = f"{self._settings.elevenlabs.base_url.rstrip('/')}/v1/speech-to-text"
         
+        mime_type = "audio/webm" if filename.endswith(".webm") else "audio/wav"
         files = {
-            "file": ("audio.wav", audio_bytes, "audio/wav")
+            "file": (filename, audio_bytes, mime_type)
         }
 
         data = {
@@ -135,13 +136,14 @@ class SpeechToText:
         self,
         audio_bytes: bytes,
         language: str | None = None,
+        filename: str = "audio.wav",
     ) -> str:
         """Transcribe audio bytes using configured STT provider, falling back to Azure."""
         provider = self._settings.stt_provider
 
         try:
             if provider == "elevenlabs":
-                return await self._transcribe_elevenlabs(audio_bytes, language)
+                return await self._transcribe_elevenlabs(audio_bytes, language, filename)
             elif provider == "azure":
                 return await self._transcribe_azure_bytes(audio_bytes, language)
             else:
@@ -164,9 +166,10 @@ class SpeechToText:
         language: str | None = None,
     ) -> str:
         """Transcribe an audio file."""
+        filepath = Path(filepath)
         with open(filepath, "rb") as f:
             audio_bytes = f.read()
-        return await self.transcribe_bytes(audio_bytes, language)
+        return await self.transcribe_bytes(audio_bytes, language, filename=filepath.name)
 
 
     async def transcribe_stream(
