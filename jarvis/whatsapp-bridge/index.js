@@ -23,16 +23,22 @@ let globalSock = null;
 // Debounce map: senderJid -> timestamp
 const userLastMessage = new Map();
 
-async function sendStatus(status, data = null) {
-    try {
-        await axios.post(JARVIS_EVENT_URL, {
-            type: status,
-            data: data
-        }, {
-            headers: { 'X-API-Key': process.env.JARVIS_SECRET_KEY || 'JARVIS_DEV_KEY' }
-        });
-    } catch (err) {
-        console.error("Could not send status to Jarvis:", err.message);
+async function sendStatus(status, data = null, retries = 15) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            await axios.post(JARVIS_EVENT_URL, {
+                type: status,
+                data: data
+            }, {
+                headers: { 'X-API-Key': process.env.JARVIS_SECRET_KEY || 'JARVIS_DEV_KEY' }
+            });
+            return;
+        } catch (err) {
+            console.error(`Could not send status to Jarvis (attempt ${i + 1}/${retries}):`, err.message);
+            if (i < retries - 1) {
+                await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+        }
     }
 }
 
