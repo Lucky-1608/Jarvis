@@ -41,8 +41,29 @@ logger = structlog.get_logger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# System Info
+# System Info & Health
 # ---------------------------------------------------------------------------
+class CheckSystemHealthTool(Tool):
+    """Check the health of Jarvis subsystems and API providers."""
+
+    @property
+    def metadata(self) -> ToolMetadata:
+        return ToolMetadata(
+            name="check_system_health",
+            description="Check the health of Jarvis subsystems, including external AI provider API keys (OpenAI, Gemini, Groq, etc.), memory stats, and router metrics. Use this tool when the user asks if API keys are working or if the system is healthy.",
+            category=ToolCategory.SYSTEM,
+        )
+
+    async def execute(self, **params: Any) -> ToolResult:
+        try:
+            from jarvis.server.dependencies import get_brain
+            brain = get_brain()
+            health = await brain.get_health()
+            return ToolResult(success=True, output=health)
+        except Exception as exc:
+            return ToolResult(success=False, error=str(exc))
+
+
 class SystemInfoTool(Tool):
     """Retrieve system information (CPU, RAM, disk, OS)."""
 
@@ -1517,6 +1538,7 @@ class GetDateTimeTool(Tool):
 def get_system_tools() -> list[Tool]:
     """Return instances of all built-in system tools."""
     return [
+        CheckSystemHealthTool(),
         SystemInfoTool(),
         OpenAppTool(),
         CloseAppTool(),

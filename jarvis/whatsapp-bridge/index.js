@@ -172,9 +172,7 @@ async function connectToWhatsApp() {
 
             const hasMedia = !!(msg.message.imageMessage || msg.message.videoMessage || msg.message.documentMessage || msg.message.audioMessage);
 
-            if (!text && hasMedia) {
-                text = "jarvis, analyze this media";
-            } else if (!text) {
+            if (!text) {
                 continue;
             }
 
