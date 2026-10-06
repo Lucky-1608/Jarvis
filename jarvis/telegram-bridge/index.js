@@ -216,8 +216,9 @@ const server = http.createServer((req, res) => {
     }
 });
 
-server.listen(3002, () => {
-    console.log('[Bridge] HTTP Server listening on port 3002 for push notifications');
+const port = process.env.TELEGRAM_BRIDGE_PORT || 3003;
+server.listen(port, () => {
+    console.log(`[Bridge] HTTP Server listening on port ${port} for push notifications`);
 });
 
 connectToTelegram();
