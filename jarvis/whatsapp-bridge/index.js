@@ -198,7 +198,9 @@ async function connectToWhatsApp() {
             console.log(`\n[Owner] ${text}`);
             
             // Send typing indicator
-            await sock.sendPresenceUpdate('composing', rawSender);
+            if (globalSock) {
+                await globalSock.sendPresenceUpdate('composing', rawSender);
+            }
 
             let finalMessage = text;
             
@@ -210,7 +212,7 @@ async function connectToWhatsApp() {
                         { },
                         { 
                             logger: pino({ level: 'silent' }),
-                            reuploadRequest: sock.updateMediaMessage
+                            reuploadRequest: globalSock.updateMediaMessage
                         }
                     );
                     
@@ -263,14 +265,20 @@ async function connectToWhatsApp() {
                 }
 
                 // Send reply back via WhatsApp
-                await sock.sendMessage(rawSender, { text: reply }, { quoted: msg });
+                if (globalSock) {
+                    await globalSock.sendMessage(rawSender, { text: reply }, { quoted: msg });
+                }
                 console.log(`[Jarvis] ${reply}`);
 
             } catch (error) {
                 console.error("Error communicating with Jarvis API:", error.message);
-                await sock.sendMessage(rawSender, { text: "⚠️ Jarvis Backend is unreachable." }, { quoted: msg });
+                if (globalSock) {
+                    await globalSock.sendMessage(rawSender, { text: "⚠️ Jarvis Backend is unreachable." }, { quoted: msg });
+                }
             } finally {
-                await sock.sendPresenceUpdate('paused', rawSender);
+                if (globalSock) {
+                    await globalSock.sendPresenceUpdate('paused', rawSender);
+                }
             }
         }
     });
