@@ -14,6 +14,7 @@ Never injects unnecessary history — every token counts (spec Vol 4).
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from datetime import datetime
 
 if TYPE_CHECKING:
     from jarvis.memory.graphify_registry import GraphifyRegistry
@@ -98,6 +99,11 @@ class ContextManager:
         """Override the default system prompt."""
         self._system_prompt = prompt
 
+    def _get_dynamic_system_prompt(self, base_prompt: str) -> str:
+        """Inject dynamic system state like current date and time."""
+        current_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        return f"{base_prompt}\n\n## System State\nCurrent Date and Time: {current_datetime}\nIMPORTANT: If asked for 'latest', 'upcoming', or 'recent' info, always prioritize {current_datetime} or later."
+
     # -- Build messages for the AI ------------------------------------------
 
     async def build_messages(
@@ -161,7 +167,7 @@ class ContextManager:
             context_parts.append(f"## Additional Context\n{extra_context}")
 
         # Assemble system prompt with context
-        system_content = self._system_prompt
+        system_content = self._get_dynamic_system_prompt(self._system_prompt)
         if context_parts:
             system_content += "\n\n---\n\n" + "\n\n".join(context_parts)
 
@@ -198,8 +204,9 @@ class ContextManager:
         system_prompt: str | None = None,
     ) -> list[Message]:
         """Build a minimal message list (no memory, no history)."""
+        base_prompt = system_prompt or self._system_prompt
         return [
-            Message(role="system", content=system_prompt or self._system_prompt),
+            Message(role="system", content=self._get_dynamic_system_prompt(base_prompt)),
             Message(role="user", content=user_input),
         ]
 

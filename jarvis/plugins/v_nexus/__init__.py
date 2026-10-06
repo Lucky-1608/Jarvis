@@ -1,3 +1,6 @@
-from .plugin import create_plugin
+from jarvis.events.bus import EventBus
+from jarvis.tools.registry import ToolRegistry
+from .plugin import VNexusApiCallTool
 
-__all__ = ["create_plugin"]
+def setup(registry: ToolRegistry, bus: EventBus) -> None:
+    registry.register(VNexusApiCallTool())

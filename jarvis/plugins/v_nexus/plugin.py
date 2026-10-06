@@ -28,13 +28,13 @@ class VNexusApiCallTool(Tool):
                 ToolParameter(
                     name="method",
                     type="string",
-                    description="The HTTP method (GET to read, POST to create/write).",
-                    enum=["GET", "POST"]
+                    description="The HTTP method (GET to read, POST to create, PATCH to edit, DELETE to delete).",
+                    enum=["GET", "POST", "PATCH", "DELETE"]
                 ),
                 ToolParameter(
                     name="payload",
                     type="object",
-                    description="The data payload for POST requests (e.g., {'title': 'Buy groceries', 'status': 'Todo'}). Omit for GET.",
+                    description="The payload for POST/PATCH (e.g., {'title': 'Buy groceries'}). For DELETE, pass {'id': '...'} or pass id in query. Omit for GET.",
                     required=False
                 )
             ]
@@ -62,6 +62,13 @@ class VNexusApiCallTool(Tool):
                     response = await client.get(url, headers=headers)
                 elif method.upper() == "POST":
                     response = await client.post(url, headers=headers, json=payload or {})
+                elif method.upper() == "PATCH":
+                    response = await client.patch(url, headers=headers, json=payload or {})
+                elif method.upper() == "DELETE":
+                    # DELETE might pass id in query params if provided in payload
+                    if payload and "id" in payload:
+                        url = f"{url}?id={payload['id']}"
+                    response = await client.delete(url, headers=headers)
                 else:
                     return ToolResult(success=False, error=f"Unsupported method: {method}")
 
