@@ -312,8 +312,9 @@ const server = http.createServer((req, res) => {
     }
 });
 
-server.listen(3001, () => {
-    console.log('[Bridge] HTTP Server listening on port 3001 for push notifications');
+const port = process.env.WHATSAPP_BRIDGE_PORT || 3001;
+server.listen(port, () => {
+    console.log(`[Bridge] HTTP Server listening on port ${port} for push notifications`);
 });
 
 connectToWhatsApp();
