@@ -35,6 +35,7 @@ from jarvis.providers.base import Message, StreamChunk
 from jarvis.router.ai_router import AIRouter
 from jarvis.tools.builtin.social_tools import get_social_tools
 from jarvis.tools.builtin.system_tools import get_system_tools
+from jarvis.tools.builtin.mobile_tools import get_mobile_tools
 from jarvis.tools.builtin.obsidian_tools import get_obsidian_tools
 from jarvis.tools.builtin.web_tools import get_web_tools
 from jarvis.tools.registry import ToolRegistry
@@ -130,6 +131,7 @@ class JarvisBrain:
         # 3. Tools
         self._tools = ToolRegistry()
         self._tools.register_many(get_system_tools())
+        self._tools.register_many(get_mobile_tools())
         self._tools.register_many(get_web_tools())
         self._tools.register_many(get_social_tools())
         self._tools.register_many(get_obsidian_tools())

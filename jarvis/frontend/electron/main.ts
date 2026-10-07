@@ -1,4 +1,15 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  shell,
+  Tray,
+  Menu,
+  nativeImage,
+  globalShortcut,
+  Notification,
+  desktopCapturer,
+} from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { exec } from 'node:child_process';
@@ -25,7 +36,69 @@ export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist');
 
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 'public') : RENDERER_DIST;
 
-let win: BrowserWindow | null;
+let win: BrowserWindow | null = null;
+let tray: Tray | null = null;
+let isQuitting = false;
+
+function createTray() {
+  const iconPath = path.join(process.env.VITE_PUBLIC || '', 'arc_reactor.png');
+  let icon: nativeImage;
+  try {
+    icon = nativeImage.createFromPath(iconPath);
+    if (icon.isEmpty()) {
+      icon = nativeImage.createEmpty();
+    }
+  } catch {
+    icon = nativeImage.createEmpty();
+  }
+
+  tray = new Tray(icon);
+  tray.setToolTip('Jarvis Companion OS');
+
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: 'Open Jarvis',
+      click: () => {
+        if (win) {
+          win.show();
+          win.focus();
+        }
+      },
+    },
+    {
+      label: 'Minimize to Tray',
+      click: () => {
+        win?.hide();
+      },
+    },
+    { type: 'separator' },
+    {
+      label: 'Shortcut: Ctrl+Shift+J / Cmd+Shift+J',
+      enabled: false,
+    },
+    { type: 'separator' },
+    {
+      label: 'Quit Jarvis',
+      click: () => {
+        isQuitting = true;
+        app.quit();
+      },
+    },
+  ]);
+
+  tray.setContextMenu(contextMenu);
+
+  tray.on('click', () => {
+    if (win) {
+      if (win.isVisible() && !win.isMinimized()) {
+        win.hide();
+      } else {
+        win.show();
+        win.focus();
+      }
+    }
+  });
+}
 
 function createWindow() {
   win = new BrowserWindow({
@@ -39,11 +112,20 @@ function createWindow() {
     },
   });
 
+  // Minimize to tray on close instead of exiting
+  win.on('close', (event) => {
+    if (!isQuitting) {
+      event.preventDefault();
+      win?.hide();
+      return false;
+    }
+  });
+
   win.webContents.setWindowOpenHandler(({ url }) => {
     // Force open in Chrome based on OS
     const isWindows = process.platform === 'win32';
     const isMac = process.platform === 'darwin';
-    
+
     if (isWindows) {
       exec(`start chrome "${url}"`);
     } else if (isMac) {
@@ -51,22 +133,28 @@ function createWindow() {
     } else {
       exec(`google-chrome "${url}"`);
     }
-    
+
     return { action: 'deny' };
   });
 
   if (VITE_DEV_SERVER_URL) {
     win.loadURL(VITE_DEV_SERVER_URL);
-    // Open devtools by default in dev mode
-    // win.webContents.openDevTools();
   } else {
     // Load the live cloud version so it always stays up-to-date
     win.loadURL('https://jarvisos-gdhfgnc4gscqecav.centralindia-01.azurewebsites.net');
   }
 }
 
+app.on('before-quit', () => {
+  isQuitting = true;
+});
+
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
+});
+
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
+  if (process.platform !== 'darwin' && isQuitting) {
     app.quit();
     win = null;
   }
@@ -75,6 +163,9 @@ app.on('window-all-closed', () => {
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();
+  } else if (win) {
+    win.show();
+    win.focus();
   }
 });
 
@@ -141,4 +232,66 @@ ipcMain.handle('open-external', async (_, url: string) => {
   }
 });
 
-app.whenReady().then(createWindow);
+// Native OS Notifications
+ipcMain.handle('show-notification', async (_, title: string, body: string) => {
+  try {
+    if (Notification.isSupported()) {
+      const iconPath = path.join(process.env.VITE_PUBLIC || '', 'arc_reactor.png');
+      const notif = new Notification({
+        title: title || 'Jarvis Notification',
+        body: body || '',
+        icon: iconPath,
+      });
+      notif.show();
+      notif.on('click', () => {
+        if (win) {
+          win.show();
+          win.focus();
+        }
+      });
+      return { status: 'success' };
+    }
+    return { status: 'error', error: 'OS notifications not supported' };
+  } catch (error: any) {
+    return { status: 'error', error: error.message };
+  }
+});
+
+// Local Desktop Screen Capture
+ipcMain.handle('capture-screen', async () => {
+  try {
+    const sources = await desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize: { width: 1920, height: 1080 },
+    });
+    if (sources.length === 0) {
+      return { status: 'error', error: 'No display screen source detected' };
+    }
+    const primarySource = sources[0];
+    const imageBase64 = primarySource.thumbnail.toDataURL(); // data:image/png;base64,...
+    return { status: 'success', image_base64: imageBase64 };
+  } catch (error: any) {
+    return { status: 'error', error: error.message };
+  }
+});
+
+app.whenReady().then(() => {
+  createWindow();
+  createTray();
+
+  // Register global hotkey (CommandOrControl+Shift+J) to toggle Jarvis visibility
+  try {
+    globalShortcut.register('CommandOrControl+Shift+J', () => {
+      if (win) {
+        if (win.isVisible() && win.isFocused()) {
+          win.hide();
+        } else {
+          win.show();
+          win.focus();
+        }
+      }
+    });
+  } catch (err) {
+    console.error('Failed to register global shortcut:', err);
+  }
+});

@@ -9,6 +9,8 @@ class JarvisTTS(context: Context) : TextToSpeech.OnInitListener {
     private var tts: TextToSpeech? = null
     private var isInitialized = false
 
+    private val pendingQueue = mutableListOf<String>()
+
     init {
         tts = TextToSpeech(context, this)
     }
@@ -21,6 +23,10 @@ class JarvisTTS(context: Context) : TextToSpeech.OnInitListener {
             } else {
                 isInitialized = true
                 Log.d("JarvisTTS", "TTS Initialized Successfully")
+                for (queuedText in pendingQueue) {
+                    tts?.speak(queuedText, TextToSpeech.QUEUE_ADD, null, "jarvis_tts_id")
+                }
+                pendingQueue.clear()
             }
         } else {
             Log.e("JarvisTTS", "Initialization failed")
@@ -31,7 +37,8 @@ class JarvisTTS(context: Context) : TextToSpeech.OnInitListener {
         if (isInitialized) {
             tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "jarvis_tts_id")
         } else {
-            Log.e("JarvisTTS", "TTS not initialized yet")
+            Log.d("JarvisTTS", "TTS not initialized yet, queueing text: $text")
+            pendingQueue.add(text)
         }
     }
 

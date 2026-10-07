@@ -19,6 +19,20 @@ class NotificationRouter:
         Sends a notification. 
         In production, this checks user preferences (e.g., 'Only SMS for critical, otherwise push notification').
         """
+        # Try to send a native push notification to Companion Apps (Desktop & Mobile) for high or critical alerts
+        if priority in ("high", "critical"):
+            try:
+                from jarvis.server.companion_manager import companion_manager
+                if companion_manager.has_companions():
+                    asyncio.create_task(
+                        companion_manager.broadcast_command(
+                            action="show_notification",
+                            params={"title": f"Jarvis Alert ({priority.upper()})", "message": message},
+                        )
+                    )
+            except Exception as e:
+                logger.error("notification.companion_push_failed", error=str(e))
+
         if priority == "critical":
             # Route to urgent channels (WhatsApp / Telegram)
             logger.info("notification.routed", channel="whatsapp_and_telegram", priority=priority, message=message)

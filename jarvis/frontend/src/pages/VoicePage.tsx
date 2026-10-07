@@ -140,8 +140,17 @@ export function VoicePage() {
       voice: selectedVoice,
     });
     if (speech.ok && speech.data.audio_base64) {
-      const audio = new Audio(`data:audio/mp3;base64,${speech.data.audio_base64}`);
-      await audio.play();
+      try {
+        const audio = new Audio(`data:audio/mpeg;base64,${speech.data.audio_base64}`);
+        await audio.play();
+      } catch (err) {
+        console.warn('Audio play blocked, using SpeechSynthesis fallback:', err);
+        if ('speechSynthesis' in window) {
+          window.speechSynthesis.speak(new SpeechSynthesisUtterance(reply));
+        }
+      }
+    } else if ('speechSynthesis' in window) {
+      window.speechSynthesis.speak(new SpeechSynthesisUtterance(reply));
     }
   };
 
@@ -155,8 +164,15 @@ export function VoicePage() {
       voice: selectedVoice,
     });
     if (res.ok && res.data.audio_base64) {
-      const audio = new Audio(`data:audio/mp3;base64,${res.data.audio_base64}`);
-      await audio.play();
+      try {
+        const audio = new Audio(`data:audio/mpeg;base64,${res.data.audio_base64}`);
+        await audio.play();
+      } catch (err) {
+        console.warn('Audio play blocked, using SpeechSynthesis fallback:', err);
+        if ('speechSynthesis' in window) {
+          window.speechSynthesis.speak(new SpeechSynthesisUtterance(ttsText));
+        }
+      }
       setTranscripts(prev => [...prev, {
         id: Math.random().toString(36).slice(2, 8),
         speaker: 'JARVIS',

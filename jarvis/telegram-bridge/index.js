@@ -20,7 +20,8 @@ if (!OWNER_ID || OWNER_ID === 'YOUR_OWNER_ID_HERE') {
     process.exit(1);
 }
 
-const JARVIS_BACKEND_URL = process.env.JARVIS_BACKEND_URL || 'http://127.0.0.1:8000';
+const localPort = process.env.PORT || 8000;
+const JARVIS_BACKEND_URL = process.env.JARVIS_BACKEND_URL || `http://127.0.0.1:${localPort}`;
 const JARVIS_EVENT_URL = `${JARVIS_BACKEND_URL}/api/telegram/event`;
 
 let globalBot = null;

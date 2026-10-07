@@ -110,13 +110,29 @@ class JarvisBackgroundService : Service() {
     
     private fun handleBackendCommand(command: JSONObject) {
         val type = command.optString("type")
-        when (type) {
-            "tts" -> {
-                val text = command.optString("text")
-                if (text.isNotEmpty()) {
-                    ttsEngine.speak(text)
-                }
+        val action = command.optString("action")
+
+        val speechText = when {
+            command.has("text") -> command.optString("text")
+            command.has("data") -> {
+                val dataObj = command.optJSONObject("data")
+                dataObj?.optString("text") ?: ""
             }
+            command.has("params") -> {
+                val paramsObj = command.optJSONObject("params")
+                paramsObj?.optString("text") ?: ""
+            }
+            else -> ""
+        }
+
+        if (type == "tts" || type == "tts.started" || action == "speak" || action == "play_audio") {
+            if (speechText.isNotEmpty()) {
+                ttsEngine.speak(speechText)
+                return
+            }
+        }
+
+        when (type) {
             "perform_action" -> {
                 val action = command.optString("action")
                 val target = command.optString("target")

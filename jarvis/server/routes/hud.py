@@ -26,6 +26,7 @@ async def hud_websocket(websocket: WebSocket):
     bus.subscribe(EventTypes.SYSTEM_READY, _queue_event)
     bus.subscribe(EventTypes.VISION_STARTED, _queue_event)
     bus.subscribe(EventTypes.VISION_COMPLETED, _queue_event)
+    bus.subscribe(EventTypes.TTS_STARTED, _queue_event)
     bus.subscribe("whatsapp.qr", _queue_event)
     bus.subscribe("whatsapp.status", _queue_event)
     bus.subscribe("telegram.status", _queue_event)
@@ -53,11 +54,16 @@ async def hud_websocket(websocket: WebSocket):
             event = await queue.get()
 
             # Send the event data as JSON to the HUD frontend
-            await websocket.send_json({
+            payload = {
                 "type": event.type,
                 "data": event.data,
                 "source": event.source
-            })
+            }
+            if event.type == EventTypes.TTS_STARTED:
+                payload["type"] = "tts"
+                payload["text"] = event.data.get("text", "")
+
+            await websocket.send_json(payload)
             queue.task_done()
     except WebSocketDisconnect:
         logger.info("hud.websocket_disconnected", id=subscriber_id)
@@ -70,6 +76,7 @@ async def hud_websocket(websocket: WebSocket):
         bus.unsubscribe(EventTypes.SYSTEM_READY, _queue_event)
         bus.unsubscribe(EventTypes.VISION_STARTED, _queue_event)
         bus.unsubscribe(EventTypes.VISION_COMPLETED, _queue_event)
+        bus.unsubscribe(EventTypes.TTS_STARTED, _queue_event)
         bus.unsubscribe("whatsapp.qr", _queue_event)
         bus.unsubscribe("whatsapp.status", _queue_event)
         bus.unsubscribe("telegram.status", _queue_event)

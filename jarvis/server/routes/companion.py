@@ -18,6 +18,12 @@ async def companion_websocket(websocket: WebSocket):
             data = await websocket.receive_json()
             
             # Expecting response payload: {"task_id": "...", "status": "success/error", "output": "..."}
+            # Or registration payload: {"type": "register", "device": "pc"}
+            if data.get("type") == "register":
+                device = data.get("device", "unknown")
+                companion_manager.register_device(connection_id, device)
+                continue
+
             task_id = data.get("task_id")
             if task_id:
                 await companion_manager.handle_response(task_id, data)

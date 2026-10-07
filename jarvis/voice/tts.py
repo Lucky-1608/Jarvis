@@ -73,7 +73,7 @@ class TextToSpeech:
 
         await self._bus.publish(Event(
             type=EventTypes.TTS_STARTED,
-            data={"text": text[:100], "voice": self._voice},
+            data={"text": text, "preview": text[:100], "voice": self._voice},
             source="tts",
         ))
 

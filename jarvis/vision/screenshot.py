@@ -39,6 +39,31 @@ class ScreenCapture:
 
         Returns a dict with the image as base64 PNG and metadata.
         """
+        # 1. Forward to connected desktop companion (prioritized for cloud or remote setups)
+        try:
+            from jarvis.server.companion_manager import companion_manager
+            if companion_manager.has_companions():
+                res = await companion_manager.send_command_and_wait(
+                    action="capture_screen",
+                    params={},
+                    target_device="pc",
+                    timeout=10,
+                )
+                if res.get("status") == "success" and res.get("image_base64"):
+                    img_data = res["image_base64"]
+                    raw_b64 = img_data.split(",", 1)[1] if "," in img_data else img_data
+                    return {
+                        "type": "full_screen",
+                        "width": 1920,
+                        "height": 1080,
+                        "format": "png",
+                        "size_bytes": len(raw_b64),
+                        "base64": raw_b64,
+                        "timestamp": time.time(),
+                    }
+        except Exception as e:
+            logger.debug("companion.screenshot_delegation_skipped", error=str(e))
+
         try:
             from PIL import ImageGrab
         except ImportError:

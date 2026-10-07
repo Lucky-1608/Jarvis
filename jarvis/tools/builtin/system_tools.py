@@ -397,7 +397,8 @@ class OpenAppTool(Tool):
                 # Forward to connected companion
                 result = await companion_manager.send_command_and_wait(
                     action="open_app", 
-                    params={"app_name": app_name, "target_url": target_url}
+                    params={"app_name": app_name, "target_url": target_url},
+                    target_device=device
                 )
                 if result.get("status") == "success":
                     results.append(result.get("output", f"Opened {app_name} on companion device."))
@@ -501,6 +502,11 @@ class CloseAppTool(Tool):
                     type="string",
                     description="Name of the application to close, or 'current'/'active'/'this app' to close the foreground window.",
                 ),
+                ToolParameter(
+                    name="device",
+                    type="string",
+                    description="The device to close the app on. Must be one of: 'pc', 'mobile', or 'both'. Defaults to 'pc'.",
+                ),
             ],
         )
 
@@ -571,12 +577,18 @@ class CloseAppTool(Tool):
         if not app_name:
             return ToolResult(success=False, error="No application name provided.")
 
+        device_raw = params.get("device", "pc")
+        device = str(device_raw).strip().lower() if isinstance(device_raw, str) else "pc"
+        if device not in ("pc", "mobile", "both"):
+            device = "pc"
+
         # 1. Forward to Companion if connected
         if companion_manager.has_companions():
             try:
                 result = await companion_manager.send_command_and_wait(
                     action="close_app", 
-                    params={"app_name": raw_app_name}
+                    params={"app_name": raw_app_name},
+                    target_device=device
                 )
                 if result.get("status") == "success":
                     return ToolResult(success=True, output=result.get("output", f"Closed {raw_app_name} on companion device."))
@@ -1533,6 +1545,56 @@ class GetDateTimeTool(Tool):
 
 
 # ---------------------------------------------------------------------------
+# Desktop Notification Tool
+# ---------------------------------------------------------------------------
+class DesktopNotificationTool(Tool):
+    """Tool to show a native OS notification toast on the desktop companion app."""
+
+    @property
+    def metadata(self) -> ToolMetadata:
+        return ToolMetadata(
+            name="desktop_show_notification",
+            description="Display a native operating system notification toast on the connected PC / desktop companion app.",
+            category=ToolCategory.SYSTEM,
+            parameters=[
+                ToolParameter(
+                    name="title",
+                    type="string",
+                    description="The notification title.",
+                    required=True,
+                ),
+                ToolParameter(
+                    name="message",
+                    type="string",
+                    description="The notification message body.",
+                    required=True,
+                ),
+            ],
+        )
+
+    async def execute(self, **params: Any) -> ToolResult:
+        title = params.get("title", "Jarvis Alert")
+        message = params.get("message", "")
+
+        if not companion_manager.has_companions():
+            return ToolResult(success=False, error="No desktop companion is currently connected.")
+
+        try:
+            res = await companion_manager.send_command_and_wait(
+                action="show_notification",
+                params={"title": title, "message": message},
+                target_device="pc",
+                timeout=5,
+            )
+            if res.get("status") == "success":
+                return ToolResult(success=True, output=f"Notification shown on desktop: '{title} - {message}'")
+            return ToolResult(success=False, error=res.get("error", "Failed to show notification on desktop."))
+        except Exception as e:
+            logger.error("desktop_tools.notification_failed", error=str(e))
+            return ToolResult(success=False, error=f"Desktop notification failed: {str(e)}")
+
+
+# ---------------------------------------------------------------------------
 # Factory — register all built-in system tools
 # ---------------------------------------------------------------------------
 def get_system_tools() -> list[Tool]:
@@ -1553,4 +1615,5 @@ def get_system_tools() -> list[Tool]:
         ClaudeCodeTool(),
         StageSkillForReviewTool(),
         TestInternalAPIsTool(),
+        DesktopNotificationTool(),
     ]

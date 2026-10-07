@@ -55,16 +55,8 @@ rm -rf node_modules
 ln -s /home/site/telegram_bridge_cache/node_modules node_modules
 cd ../..
 
-# 4. Start the Node.js bridges in the background with auto-restart
-echo "Starting WhatsApp bridge..."
-cd jarvis/whatsapp-bridge
-(while true; do node index.js; echo "WhatsApp bridge crashed, restarting in 5s..."; sleep 5; done) &
-cd ../..
-
-echo "Starting Telegram bridge..."
-cd jarvis/telegram-bridge
-(while true; do node index.js; echo "Telegram bridge crashed, restarting in 5s..."; sleep 5; done) &
-cd ../..
+# Note: Bridges are now started by jarvis/server/app.py during the lifespan event
+# to ensure they start only after the FastAPI backend is ready to receive events.
 
 # 5. Start the Python FastAPI backend
 echo "Starting Jarvis Backend..."

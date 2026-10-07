@@ -15,7 +15,8 @@ if (!OWNER_NUMBER || OWNER_NUMBER === 'YOUR_NUMBER_HERE') {
 const formatNumber = (num) => `${num}@s.whatsapp.net`;
 const ownerJid = formatNumber(OWNER_NUMBER.replace(/[^0-9]/g, ''));
 
-const JARVIS_BACKEND_URL = process.env.JARVIS_BACKEND_URL || 'http://127.0.0.1:8000';
+const localPort = process.env.PORT || 8000;
+const JARVIS_BACKEND_URL = process.env.JARVIS_BACKEND_URL || `http://127.0.0.1:${localPort}`;
 const JARVIS_EVENT_URL = `${JARVIS_BACKEND_URL}/api/whatsapp/event`;
 
 let globalSock = null;

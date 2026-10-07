@@ -134,48 +134,78 @@ class AudioPlayer:
         if not filepath.exists():
             raise FileNotFoundError(f"Audio file not found: {filepath}")
 
+        # 1. Forward audio to connected Companion apps (PC / Mobile)
         try:
-            import numpy as np
-            import sounddevice as sd
-
-            # Read WAV file
-            with wave.open(str(filepath), "rb") as wf:
-                frames = wf.readframes(wf.getnframes())
-                sample_rate = wf.getframerate()
-                channels = wf.getnchannels()
-                sample_width = wf.getsampwidth()
-
-            dtype = {1: "int8", 2: "int16", 4: "int32"}.get(sample_width, "int16")
-            audio = np.frombuffer(frames, dtype=dtype)
-            if channels > 1:
-                audio = audio.reshape(-1, channels)
-
-            # Play asynchronously
-            event = asyncio.Event()
-
-            def finished_callback(*args):
-                event.set()
-
-            sd.play(audio, samplerate=sample_rate, blocking=False)
-            sd.wait()
-
-        except ImportError:
-            # Fallback: use system command
-            import platform
-            import subprocess
-
-            system = platform.system()
-            if system == "Windows":
-                # Use PowerShell to play audio
-                subprocess.Popen(
-                    ["powershell", "-c", f"(New-Object Media.SoundPlayer '{filepath}').PlaySync()"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
+            from jarvis.server.companion_manager import companion_manager
+            import base64
+            if companion_manager.has_companions():
+                with open(str(filepath), "rb") as f:
+                    audio_b64 = base64.b64encode(f.read()).decode("utf-8")
+                fmt = filepath.suffix.lstrip(".").lower() or "mp3"
+                asyncio.create_task(
+                    companion_manager.broadcast_command(
+                        action="play_audio",
+                        params={"audio_base64": audio_b64, "format": fmt}
+                    )
                 )
+        except Exception as e:
+            logger.debug("audio_player.companion_broadcast_skipped", error=str(e))
+
+        # 2. Local soundcard playback fallback
+        suffix = filepath.suffix.lower()
+        if suffix == ".wav":
+            try:
+                import numpy as np
+                import sounddevice as sd
+
+                with wave.open(str(filepath), "rb") as wf:
+                    frames = wf.readframes(wf.getnframes())
+                    sample_rate = wf.getframerate()
+                    channels = wf.getnchannels()
+                    sample_width = wf.getsampwidth()
+
+                dtype = {1: "int8", 2: "int16", 4: "int32"}.get(sample_width, "int16")
+                audio = np.frombuffer(frames, dtype=dtype)
+                if channels > 1:
+                    audio = audio.reshape(-1, channels)
+
+                sd.play(audio, samplerate=sample_rate, blocking=False)
+                sd.wait()
+                return
+            except Exception as exc:
+                logger.debug("audio.wav_local_play_fallback", error=str(exc))
+
+        # System command playback fallback
+        import platform
+        import subprocess
+
+        system = platform.system()
+        try:
+            if system == "Windows":
+                if suffix == ".wav":
+                    subprocess.Popen(
+                        ["powershell", "-c", f"(New-Object Media.SoundPlayer '{filepath}').PlaySync()"],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                else:
+                    cmd = (
+                        f"$wmp = New-Object -ComObject WMPlayer.OCX; "
+                        f"$wmp.URL = '{filepath}'; "
+                        f"$wmp.controls.play(); "
+                        f"Start-Sleep -Seconds 2"
+                    )
+                    subprocess.Popen(
+                        ["powershell", "-c", cmd],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
             elif system == "Darwin":
-                subprocess.Popen(["afplay", str(filepath)])
+                subprocess.Popen(["afplay", str(filepath)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             else:
-                subprocess.Popen(["aplay", str(filepath)])
+                subprocess.Popen(["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", str(filepath)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception as e:
+            logger.debug("audio.system_playback_failed", error=str(e))
 
     @staticmethod
     async def play_bytes(audio_bytes: bytes, sample_rate: int = 24000) -> None:

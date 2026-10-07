@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mic, Paperclip, Send, Square, X, File as FileIcon } from 'lucide-react';
+import { Mic, Paperclip, Send, Square, X, File as FileIcon, Volume2, VolumeX } from 'lucide-react';
 import { useJarvisStore } from '../../store/jarvisStore';
 import { apiFetch } from '../../lib/api';
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
@@ -9,6 +9,13 @@ import { useToast } from '../../hooks/use-toast';
 export function ConversationInput() {
   const [value, setValue] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [voiceOutput, setVoiceOutput] = useState(() => {
+    try {
+      return localStorage.getItem('JARVIS_VOICE_OUTPUT') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const setAIState = useJarvisStore((s) => s.setAIState);
@@ -77,7 +84,8 @@ export function ConversationInput() {
       store.addMessage(result.data.content, false);
       store.addLog({ message: 'Command executed successfully.' });
       
-      if (isVoiceInteraction) {
+      // Voice output strictly when the input is voice (or override enabled)
+      if (isVoiceInteraction || voiceOutput) {
         store.addLog({ message: 'Synthesizing voice response...' });
         try {
           const ttsResult = await apiFetch<{ audio_base64: string; format: string }>('/api/voice/speak', {
@@ -85,11 +93,26 @@ export function ConversationInput() {
             body: JSON.stringify({ text: result.data.content, voice: 'en-US-GuyNeural' })
           });
           if (ttsResult.ok && ttsResult.data.audio_base64) {
-            const audio = new Audio(`data:audio/${ttsResult.data.format};base64,${ttsResult.data.audio_base64}`);
-            audio.play().catch(e => console.error("Audio play failed:", e));
+            const format = ttsResult.data.format || 'mp3';
+            const mime = (format === 'mp3' || format === 'mpeg') ? 'audio/mpeg' : `audio/${format}`;
+            const audio = new Audio(`data:${mime};base64,${ttsResult.data.audio_base64}`);
+            audio.play().catch(e => {
+              console.warn("Audio play blocked, using SpeechSynthesis fallback:", e);
+              if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(result.data.content);
+                window.speechSynthesis.speak(utterance);
+              }
+            });
+          } else if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+            const utterance = new SpeechSynthesisUtterance(result.data.content);
+            window.speechSynthesis.speak(utterance);
           }
         } catch (e) {
-          console.error("TTS fetch failed:", e);
+          console.warn("TTS fetch failed, using SpeechSynthesis fallback:", e);
+          if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+            const utterance = new SpeechSynthesisUtterance(result.data.content);
+            window.speechSynthesis.speak(utterance);
+          }
         }
       }
 
@@ -101,18 +124,21 @@ export function ConversationInput() {
       store.addMessage('I am JARVIS. I am currently running in offline demo mode. Please start the backend server to enable AI capabilities.', false);
       store.addLog({ message: 'Backend not reachable — running in offline mode.', type: 'warning' });
     }
-  }, [value, selectedFiles, setAIState]);
+  }, [value, selectedFiles, setAIState, voiceOutput]);
 
   const initialTextRef = useRef('');
+  const wasVoiceInputRef = useRef(false);
 
   const { isRecording, startRecording, stopRecording, error } = useVoiceRecorder((text: string) => {
     const finalVal = (initialTextRef.current ? initialTextRef.current + ' ' : '') + text;
     setValue(finalVal);
+    wasVoiceInputRef.current = true;
     
     if (shouldAutoSend.current) {
       shouldAutoSend.current = false;
       if (finalVal.trim() || selectedFiles.length > 0) {
         handleSend(finalVal, true);
+        wasVoiceInputRef.current = false;
       }
     }
   });
@@ -145,6 +171,7 @@ export function ConversationInput() {
   const toggleRecording = async () => {
     if (isRecording) {
       shouldAutoSend.current = true;
+      wasVoiceInputRef.current = true;
       await stopRecording();
     } else {
       shouldAutoSend.current = false;
@@ -158,6 +185,7 @@ export function ConversationInput() {
       shouldAutoSend.current = false;
       if (value.trim() || selectedFiles.length > 0) {
         handleSend(value, true);
+        wasVoiceInputRef.current = false;
       }
     }
   }, [isRecording, value, selectedFiles.length, handleSend]);
@@ -221,13 +249,36 @@ export function ConversationInput() {
             type="text"
             value={value}
             onChange={(e) => setValue(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                handleSend(value, wasVoiceInputRef.current);
+                wasVoiceInputRef.current = false;
+              }
+            }}
             placeholder={isRecording ? "Listening..." : (isGenerating ? "Processing instruction..." : "Ask Jarvis anything...")}
             disabled={isGenerating || isRecording}
             className="flex-1 bg-transparent border-none outline-none text-white placeholder-zinc-500 px-2 font-medium tracking-wide disabled:opacity-50"
           />
           
-          <div className="flex items-center gap-2 pr-1">
+          <div className="flex items-center gap-1.5 pr-1">
+            <button 
+              type="button"
+              onClick={() => {
+                const next = !voiceOutput;
+                setVoiceOutput(next);
+                try {
+                  localStorage.setItem('JARVIS_VOICE_OUTPUT', String(next));
+                } catch {}
+                toast({
+                  title: next ? 'Voice Output Always ON' : 'Voice Output Dynamic',
+                  description: next ? 'Jarvis will speak responses for all inputs.' : 'Jarvis will only speak when input is voice.',
+                });
+              }}
+              title={voiceOutput ? "Voice output active for all inputs (click for voice-only)" : "Voice output active when input is voice"}
+              className={`p-3 transition-colors rounded-xl ${voiceOutput ? 'text-[var(--accent-cyan)] hover:bg-[rgba(0,212,255,0.1)]' : 'text-zinc-500 hover:text-zinc-300 hover:bg-[rgba(255,255,255,0.05)]'}`}
+            >
+              {voiceOutput ? <Volume2 size={20} /> : <VolumeX size={20} />}
+            </button>
             <button 
               onClick={toggleRecording}
               disabled={isGenerating && !isRecording}
@@ -236,7 +287,10 @@ export function ConversationInput() {
               {isRecording ? <Square size={20} className="fill-current" /> : <Mic size={20} />}
             </button>
             <button 
-              onClick={() => handleSend(value)}
+              onClick={() => {
+                handleSend(value, wasVoiceInputRef.current);
+                wasVoiceInputRef.current = false;
+              }}
               disabled={isGenerating || (!value.trim() && !isRecording && selectedFiles.length === 0)}
               className={`p-3 rounded-xl transition-all duration-300 ${(value.trim() || isRecording || selectedFiles.length > 0) && !isGenerating ? 'bg-[var(--accent-cyan)] text-black shadow-[0_0_15px_rgba(0,212,255,0.4)]' : 'bg-[rgba(255,255,255,0.05)] text-zinc-500'}`}
             >
