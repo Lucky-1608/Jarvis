@@ -150,13 +150,18 @@ async function connectToWhatsApp() {
             const rawSender = msg.key.remoteJid;
             const senderId = rawSender.includes(':') ? rawSender.split(':')[0] + '@s.whatsapp.net' : rawSender;
             const isOwner = (jid) => jid.replace(/\D/g, '').endsWith(OWNER_NUMBER.replace(/\D/g, ''));
+            
             const userLid = sock.user?.lid ? sock.user.lid.split(':')[0] + '@lid' : null;
-            const isSelfChat = isOwner(senderId) || senderId === userLid;
+            const userId = sock.user?.id ? sock.user.id.split(':')[0] + '@s.whatsapp.net' : null;
+            
+            // A message is a self-chat if it's sent to the owner's number, or the user's lid, or the user's own JID.
+            const isSelfChat = isOwner(senderId) || senderId === userLid || senderId === userId;
 
-            console.log(`\n[DEBUG] Message received from: ${rawSender} | fromMe: ${msg.key.fromMe}`);
+            console.log(`\n[DEBUG] Message received from: ${rawSender} | fromMe: ${msg.key.fromMe} | isSelfChat: ${isSelfChat} (userLid: ${userLid}, userId: ${userId})`);
 
             // If the message is outgoing to someone else, ignore it.
             if (msg.key.fromMe && !isSelfChat) {
+                console.log(`[DEBUG] Ignoring outgoing message to someone else (${rawSender})`);
                 continue;
             }
             

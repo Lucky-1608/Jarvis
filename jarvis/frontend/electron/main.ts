@@ -6,6 +6,7 @@ import {
   Tray,
   Menu,
   nativeImage,
+  type NativeImage,
   globalShortcut,
   Notification,
   desktopCapturer,
@@ -42,7 +43,7 @@ let isQuitting = false;
 
 function createTray() {
   const iconPath = path.join(process.env.VITE_PUBLIC || '', 'arc_reactor.png');
-  let icon: nativeImage;
+  let icon: NativeImage;
   try {
     icon = nativeImage.createFromPath(iconPath);
     if (icon.isEmpty()) {
@@ -140,8 +141,8 @@ function createWindow() {
   if (VITE_DEV_SERVER_URL) {
     win.loadURL(VITE_DEV_SERVER_URL);
   } else {
-    // Load the live cloud version so it always stays up-to-date
-    win.loadURL('https://jarvisos-gdhfgnc4gscqecav.centralindia-01.azurewebsites.net');
+    // Load the local bundled files instead of the remote Azure version
+    win.loadFile(path.join(RENDERER_DIST, 'index.html'));
   }
 }
 
