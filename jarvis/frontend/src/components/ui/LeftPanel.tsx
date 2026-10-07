@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { 
+import {
   Folder, Brain, Wrench, Users, Network,
-  Eye, Mic, Settings, Activity 
+  Eye, Mic, Settings, Activity
 } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
 
@@ -43,7 +43,7 @@ export function LeftPanelContent({ className = '', onNavigate }: { className?: s
         {navItems.map((item) => {
           const isActive = location === item.path;
           const isHovered = hovered === item.id;
-          
+
           return (
             <Link key={item.id} href={item.path} className="block w-full" onClick={onNavigate}>
               <motion.div
@@ -56,7 +56,7 @@ export function LeftPanelContent({ className = '', onNavigate }: { className?: s
                 whileHover={{ x: 4 }}
               >
                 {isActive && (
-                  <motion.div 
+                  <motion.div
                     layoutId="activeNav"
                     className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-[var(--accent-cyan)] rounded-r-full shadow-[0_0_10px_rgba(0,212,255,0.8)]"
                     transition={{ type: "spring", stiffness: 300, damping: 30 }}
@@ -75,7 +75,7 @@ export function LeftPanelContent({ className = '', onNavigate }: { className?: s
 
 export function LeftPanel() {
   return (
-    <motion.div 
+    <motion.div
       initial={{ x: -100, opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
       transition={{ type: 'spring', stiffness: 100, damping: 20, delay: 0.1 }}

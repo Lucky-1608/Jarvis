@@ -1,175 +1,252 @@
-import { BrowserWindow as e, Menu as t, Notification as n, Tray as r, app as i, desktopCapturer as a, globalShortcut as o, ipcMain as s, nativeImage as c, shell as l } from "electron";
-import u from "node:path";
-import { fileURLToPath as d } from "node:url";
-import { exec as f } from "node:child_process";
-import p from "node:util";
+import { BrowserWindow, Menu, Notification, Tray, app, desktopCapturer, globalShortcut, ipcMain, nativeImage, shell } from "electron";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { exec } from "node:child_process";
+import util from "node:util";
 //#region electron/main.ts
-var m = p.promisify(f), h = u.dirname(d(import.meta.url));
-process.env.APP_ROOT = u.join(h, "..");
-var g = process.env.VITE_DEV_SERVER_URL, _ = u.join(process.env.APP_ROOT, "dist-electron"), v = u.join(process.env.APP_ROOT, "dist");
-process.env.VITE_PUBLIC = g ? u.join(process.env.APP_ROOT, "public") : v;
-var y = null, b = null, x = !1;
-function S() {
-	let e = u.join(process.env.VITE_PUBLIC || "", "arc_reactor.png"), n;
+var execAsync = util.promisify(exec);
+var __dirname = path.dirname(fileURLToPath(import.meta.url));
+process.env.APP_ROOT = path.join(__dirname, "..");
+var VITE_DEV_SERVER_URL = process.env["VITE_DEV_SERVER_URL"];
+var MAIN_DIST = path.join(process.env.APP_ROOT, "dist-electron");
+var RENDERER_DIST = path.join(process.env.APP_ROOT, "dist");
+process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, "public") : RENDERER_DIST;
+var win = null;
+var tray = null;
+var isQuitting = false;
+function createTray() {
+	const iconPath = path.join(process.env.VITE_PUBLIC || "", "arc_reactor.png");
+	let icon;
 	try {
-		n = c.createFromPath(e), n.isEmpty() && (n = c.createEmpty());
+		icon = nativeImage.createFromPath(iconPath);
+		if (icon.isEmpty()) icon = nativeImage.createEmpty();
 	} catch {
-		n = c.createEmpty();
+		icon = nativeImage.createEmpty();
 	}
-	b = new r(n), b.setToolTip("Jarvis Companion OS");
-	let a = t.buildFromTemplate([
+	tray = new Tray(icon);
+	tray.setToolTip("Jarvis Companion OS");
+	const contextMenu = Menu.buildFromTemplate([
 		{
 			label: "Open Jarvis",
 			click: () => {
-				y && (y.show(), y.focus());
+				if (win) {
+					win.show();
+					win.focus();
+				}
 			}
 		},
 		{
 			label: "Minimize to Tray",
 			click: () => {
-				y?.hide();
+				win?.hide();
 			}
 		},
 		{ type: "separator" },
 		{
 			label: "Shortcut: Ctrl+Shift+J / Cmd+Shift+J",
-			enabled: !1
+			enabled: false
 		},
 		{ type: "separator" },
 		{
 			label: "Quit Jarvis",
 			click: () => {
-				x = !0, i.quit();
+				isQuitting = true;
+				app.quit();
 			}
 		}
 	]);
-	b.setContextMenu(a), b.on("click", () => {
-		y && (y.isVisible() && !y.isMinimized() ? y.hide() : (y.show(), y.focus()));
+	tray.setContextMenu(contextMenu);
+	tray.on("click", () => {
+		if (win) {
+			if (win.isVisible() && !win.isMinimized()) win.hide();
+			else {
+				win.show();
+				win.focus();
+			}
+		}
 	});
 }
-function C() {
-	y = new e({
+function createWindow() {
+	win = new BrowserWindow({
 		width: 1200,
 		height: 800,
-		icon: u.join(process.env.VITE_PUBLIC || "", "arc_reactor.png"),
+		icon: path.join(process.env.VITE_PUBLIC || "", "arc_reactor.png"),
 		webPreferences: {
-			preload: u.join(h, "preload.mjs"),
-			nodeIntegration: !1,
-			contextIsolation: !0
+			preload: path.join(__dirname, "preload.mjs"),
+			nodeIntegration: false,
+			contextIsolation: true
 		}
-	}), y.on("close", (e) => {
-		if (!x) return e.preventDefault(), y?.hide(), !1;
-	}), y.webContents.setWindowOpenHandler(({ url: e }) => {
-		let t = process.platform === "win32", n = process.platform === "darwin";
-		return f(t ? `start chrome "${e}"` : n ? `open -a "Google Chrome" "${e}"` : `google-chrome "${e}"`), { action: "deny" };
-	}), g ? y.loadURL(g) : y.loadFile(u.join(v, "index.html"));
+	});
+	win.on("close", (event) => {
+		if (!isQuitting) {
+			event.preventDefault();
+			win?.hide();
+			return false;
+		}
+	});
+	win.webContents.setWindowOpenHandler(({ url }) => {
+		const isWindows = process.platform === "win32";
+		const isMac = process.platform === "darwin";
+		if (isWindows) exec(`start chrome "${url}"`);
+		else if (isMac) exec(`open -a "Google Chrome" "${url}"`);
+		else exec(`google-chrome "${url}"`);
+		return { action: "deny" };
+	});
+	if (VITE_DEV_SERVER_URL) win.loadURL(VITE_DEV_SERVER_URL);
+	else win.loadFile(path.join(RENDERER_DIST, "index.html"));
 }
-i.on("before-quit", () => {
-	x = !0;
-}), i.on("will-quit", () => {
-	o.unregisterAll();
-}), i.on("window-all-closed", () => {
-	process.platform !== "darwin" && x && (i.quit(), y = null);
-}), i.on("activate", () => {
-	e.getAllWindows().length === 0 ? C() : y && (y.show(), y.focus());
-}), s.handle("run-command", async (e, t, n) => {
+app.on("before-quit", () => {
+	isQuitting = true;
+});
+app.on("will-quit", () => {
+	globalShortcut.unregisterAll();
+});
+app.on("window-all-closed", () => {
+	if (process.platform !== "darwin" && isQuitting) {
+		app.quit();
+		win = null;
+	}
+});
+app.on("activate", () => {
+	if (BrowserWindow.getAllWindows().length === 0) createWindow();
+	else if (win) {
+		win.show();
+		win.focus();
+	}
+});
+ipcMain.handle("run-command", async (_, command, cwd) => {
 	try {
-		let { stdout: e, stderr: r } = await m(t, { cwd: n });
+		const { stdout, stderr } = await execAsync(command, { cwd });
 		return {
 			status: "success",
 			output: {
-				stdout: e,
-				stderr: r
+				stdout,
+				stderr
 			}
 		};
-	} catch (e) {
+	} catch (error) {
 		return {
 			status: "error",
-			error: e.message
+			error: error.message
 		};
 	}
-}), s.handle("open-app", async (e, t, n) => {
+});
+ipcMain.handle("open-app", async (_, appName, url) => {
 	try {
-		let e = process.platform === "win32", r = process.platform === "darwin", i = "";
-		return e ? (i = `start "" "${t}"`, n && (i += ` "${n}"`)) : i = r ? n ? `open -a "${t}" "${n}"` : `open -a "${t}"` : n ? `${t} "${n}" &` : `${t} &`, await m(i), { status: "success" };
-	} catch (e) {
+		const isWindows = process.platform === "win32";
+		const isMac = process.platform === "darwin";
+		let command = "";
+		if (isWindows) {
+			command = `start "" "${appName}"`;
+			if (url) command += ` "${url}"`;
+		} else if (isMac) command = url ? `open -a "${appName}" "${url}"` : `open -a "${appName}"`;
+		else command = url ? `${appName} "${url}" &` : `${appName} &`;
+		await execAsync(command);
+		return { status: "success" };
+	} catch (error) {
 		return {
 			status: "error",
-			error: e.message
+			error: error.message
 		};
 	}
-}), s.handle("close-app", async (e, t) => {
+});
+ipcMain.handle("close-app", async (_, appName) => {
 	try {
-		let e = process.platform === "win32", n = process.platform === "darwin", r = "";
-		return r = e ? `taskkill /IM "${t.toLowerCase().endsWith(".exe") ? t : `${t}.exe`}" /F` : n ? `killall "${t}"` : `pkill -f "${t}"`, await m(r), { status: "success" };
-	} catch (e) {
+		const isWindows = process.platform === "win32";
+		const isMac = process.platform === "darwin";
+		let command = "";
+		if (isWindows) command = `taskkill /IM "${appName.toLowerCase().endsWith(".exe") ? appName : `${appName}.exe`}" /F`;
+		else if (isMac) command = `killall "${appName}"`;
+		else command = `pkill -f "${appName}"`;
+		await execAsync(command);
+		return { status: "success" };
+	} catch (error) {
 		return {
 			status: "error",
-			error: e.message
+			error: error.message
 		};
 	}
-}), s.handle("open-external", async (e, t) => {
+});
+ipcMain.handle("open-external", async (_, url) => {
 	try {
-		return await l.openExternal(t), { status: "success" };
-	} catch (e) {
+		await shell.openExternal(url);
+		return { status: "success" };
+	} catch (error) {
 		return {
 			status: "error",
-			error: e.message
+			error: error.message
 		};
 	}
-}), s.handle("show-notification", async (e, t, r) => {
+});
+ipcMain.handle("show-notification", async (_, title, body) => {
 	try {
-		if (n.isSupported()) {
-			let e = u.join(process.env.VITE_PUBLIC || "", "arc_reactor.png"), i = new n({
-				title: t || "Jarvis Notification",
-				body: r || "",
-				icon: e
+		if (Notification.isSupported()) {
+			const iconPath = path.join(process.env.VITE_PUBLIC || "", "arc_reactor.png");
+			const notif = new Notification({
+				title: title || "Jarvis Notification",
+				body: body || "",
+				icon: iconPath
 			});
-			return i.show(), i.on("click", () => {
-				y && (y.show(), y.focus());
-			}), { status: "success" };
+			notif.show();
+			notif.on("click", () => {
+				if (win) {
+					win.show();
+					win.focus();
+				}
+			});
+			return { status: "success" };
 		}
 		return {
 			status: "error",
 			error: "OS notifications not supported"
 		};
-	} catch (e) {
+	} catch (error) {
 		return {
 			status: "error",
-			error: e.message
+			error: error.message
 		};
 	}
-}), s.handle("capture-screen", async () => {
+});
+ipcMain.handle("capture-screen", async () => {
 	try {
-		let e = await a.getSources({
+		const sources = await desktopCapturer.getSources({
 			types: ["screen"],
 			thumbnailSize: {
 				width: 1920,
 				height: 1080
 			}
 		});
-		return e.length === 0 ? {
+		if (sources.length === 0) return {
 			status: "error",
 			error: "No display screen source detected"
-		} : {
-			status: "success",
-			image_base64: e[0].thumbnail.toDataURL()
 		};
-	} catch (e) {
+		return {
+			status: "success",
+			image_base64: sources[0].thumbnail.toDataURL()
+		};
+	} catch (error) {
 		return {
 			status: "error",
-			error: e.message
+			error: error.message
 		};
 	}
-}), i.whenReady().then(() => {
-	C(), S();
+});
+app.whenReady().then(() => {
+	createWindow();
+	createTray();
 	try {
-		o.register("CommandOrControl+Shift+J", () => {
-			y && (y.isVisible() && y.isFocused() ? y.hide() : (y.show(), y.focus()));
+		globalShortcut.register("CommandOrControl+Shift+J", () => {
+			if (win) {
+				if (win.isVisible() && win.isFocused()) win.hide();
+				else {
+					win.show();
+					win.focus();
+				}
+			}
 		});
-	} catch (e) {
-		console.error("Failed to register global shortcut:", e);
+	} catch (err) {
+		console.error("Failed to register global shortcut:", err);
 	}
 });
 //#endregion
-export { _ as MAIN_DIST, v as RENDERER_DIST, g as VITE_DEV_SERVER_URL };
+export { MAIN_DIST, RENDERER_DIST, VITE_DEV_SERVER_URL };
