@@ -171,19 +171,42 @@ async function connectToWhatsApp() {
                 continue;
             }
 
-            // Extract text message
-            let text = msg.message.conversation || 
-                         msg.message.extendedTextMessage?.text || 
-                         msg.message.imageMessage?.caption || '';
+            // Helper to recursively extract text from potentially nested messages
+            const extractText = (message) => {
+                if (!message) return '';
+                if (message.conversation) return message.conversation;
+                if (message.extendedTextMessage?.text) return message.extendedTextMessage.text;
+                if (message.imageMessage?.caption) return message.imageMessage.caption;
+                if (message.videoMessage?.caption) return message.videoMessage.caption;
+                if (message.ephemeralMessage?.message) return extractText(message.ephemeralMessage.message);
+                if (message.viewOnceMessage?.message) return extractText(message.viewOnceMessage.message);
+                if (message.viewOnceMessageV2?.message) return extractText(message.viewOnceMessageV2.message);
+                if (message.documentWithCaptionMessage?.message?.documentMessage?.caption) return message.documentWithCaptionMessage.message.documentMessage.caption;
+                return '';
+            };
+            
+            // Helper to recursively check for media
+            const checkHasMedia = (message) => {
+                if (!message) return false;
+                if (message.imageMessage || message.videoMessage || message.documentMessage || message.audioMessage) return true;
+                if (message.ephemeralMessage?.message) return checkHasMedia(message.ephemeralMessage.message);
+                if (message.viewOnceMessage?.message) return checkHasMedia(message.viewOnceMessage.message);
+                if (message.viewOnceMessageV2?.message) return checkHasMedia(message.viewOnceMessageV2.message);
+                if (message.documentWithCaptionMessage?.message?.documentMessage) return true;
+                return false;
+            };
 
-            const hasMedia = !!(msg.message.imageMessage || msg.message.videoMessage || msg.message.documentMessage || msg.message.audioMessage);
+            // Extract text message
+            let text = extractText(msg.message);
+
+            const hasMedia = checkHasMedia(msg.message);
 
             if (!text) {
                 continue;
             }
 
-            // Check if the trigger word "jarvis" is present
-            if (!text.toLowerCase().includes('jarvis')) {
+            // Check if the trigger word "jarvis" is at the start of the message
+            if (!text.trim().toLowerCase().startsWith('jarvis')) {
                 continue;
             }
 
