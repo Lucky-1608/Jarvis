@@ -62,8 +62,8 @@ export function MemoryPage() {
           const data = res.data;
           setMemories(data.results.map((r: any) => ({
             id: r.id,
-            title: r.content.substring(0, 60) + (r.content.length > 60 ? '...' : ''),
-            content: r.content,
+            title: (r.content || '').substring(0, 60) + ((r.content || '').length > 60 ? '...' : ''),
+            content: r.content || '',
             type: r.memory_type === 'conversations' ? 'episodic' : r.memory_type === 'knowledge' ? 'semantic' : 'procedural',
             timestamp: new Date(r.timestamp * 1000).toLocaleDateString(),
             relevance: Math.round(r.score * 100),
@@ -95,8 +95,8 @@ export function MemoryPage() {
           const data = res.data;
           setMemories(data.results.map((r: any) => ({
             id: r.id,
-            title: r.content.substring(0, 60) + (r.content.length > 60 ? '...' : ''),
-            content: r.content,
+            title: (r.content || '').substring(0, 60) + ((r.content || '').length > 60 ? '...' : ''),
+            content: r.content || '',
             type: r.memory_type === 'conversations' ? 'episodic' : r.memory_type === 'knowledge' ? 'semantic' : 'procedural',
             timestamp: new Date(r.timestamp * 1000).toLocaleDateString(),
             relevance: Math.round(r.score * 100),
