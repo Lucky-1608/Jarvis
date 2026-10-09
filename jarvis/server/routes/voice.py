@@ -131,9 +131,22 @@ async def transcribe_stream(ws: WebSocket):
                 # Transcribe the cumulative audio file
                 text = await stt.transcribe_file(tmp_path)
                 await ws.send_json({"text": text, "done": False})
+            except WebSocketDisconnect:
+                raise
+            except RuntimeError as e:
+                if "close message has been sent" in str(e):
+                    raise WebSocketDisconnect()
+                logger.error("voice.stream.error", error=str(e))
+                try:
+                    await ws.send_json({"error": str(e)})
+                except Exception:
+                    pass
             except Exception as e:
                 logger.error("voice.stream.error", error=str(e))
-                await ws.send_json({"error": str(e)})
+                try:
+                    await ws.send_json({"error": str(e)})
+                except Exception:
+                    pass
             finally:
                 Path(tmp_path).unlink(missing_ok=True)
 
@@ -181,9 +194,22 @@ async def tts_stream(ws: WebSocket):
 
                 audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
                 await ws.send_json({"audio_base64": audio_b64, "text": text})
+            except WebSocketDisconnect:
+                raise
+            except RuntimeError as e:
+                if "close message has been sent" in str(e):
+                    raise WebSocketDisconnect()
+                logger.error("voice.tts_stream.error", error=str(e))
+                try:
+                    await ws.send_json({"error": str(e)})
+                except Exception:
+                    pass
             except Exception as e:
                 logger.error("voice.tts_stream.error", error=str(e))
-                await ws.send_json({"error": str(e)})
+                try:
+                    await ws.send_json({"error": str(e)})
+                except Exception:
+                    pass
             finally:
                 Path(tmp_path).unlink(missing_ok=True)
 
