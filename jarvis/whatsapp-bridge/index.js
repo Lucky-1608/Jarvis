@@ -352,4 +352,20 @@ server.listen(port, () => {
     console.log(`[Bridge] HTTP Server listening on port ${port} for push notifications`);
 });
 
+// Keep-alive / Connection check every 2 minutes
+setInterval(async () => {
+    if (globalSock) {
+        try {
+            // Verify connection is alive by sending a presence update
+            await globalSock.sendPresenceUpdate('available');
+            console.log("[Bridge] Connection check (2 min): OK");
+        } catch (error) {
+            console.error("[Bridge] Connection check failed, connection might be stale:", error.message);
+            try { 
+                globalSock.ws.close(); 
+            } catch (e) {} // Force disconnect to trigger reconnect
+        }
+    }
+}, 120000);
+
 connectToWhatsApp();
