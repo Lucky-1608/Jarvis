@@ -148,10 +148,16 @@ async function connectToWhatsApp() {
 
             // Normalize JIDs (remove device suffix like :12)
             const rawSender = msg.key.remoteJid;
-            const senderId = rawSender.includes(':') ? rawSender.split(':')[0] + '@s.whatsapp.net' : rawSender;
+            let senderId = rawSender;
+            if (rawSender.includes(':')) {
+                const base = rawSender.split(':')[0];
+                const domain = rawSender.split('@')[1];
+                senderId = `${base}@${domain}`;
+            }
             const isOwner = (jid) => jid.replace(/\D/g, '').endsWith(OWNER_NUMBER.replace(/\D/g, ''));
             
-            const userLid = sock.user?.lid ? sock.user.lid.split(':')[0] + '@lid' : null;
+            const authLid = state.creds?.me?.lid ? state.creds.me.lid.split(':')[0] + '@lid' : null;
+            const userLid = sock.user?.lid ? sock.user.lid.split(':')[0] + '@lid' : authLid;
             const userId = sock.user?.id ? sock.user.id.split(':')[0] + '@s.whatsapp.net' : null;
             
             // A message is a self-chat if it's sent to the owner's number, or the user's lid, or the user's own JID.
