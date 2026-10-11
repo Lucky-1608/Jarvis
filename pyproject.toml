@@ -16,7 +16,6 @@ dependencies = [
     # --- AI / LLM ---
     "httpx>=0.27",
     "openai>=1.30",
-    "traceroot>=0.1.0",
 
     # --- Memory / Vector DB ---
     "pgvector>=0.2.5",

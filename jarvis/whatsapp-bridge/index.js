@@ -20,6 +20,7 @@ const JARVIS_BACKEND_URL = process.env.JARVIS_BACKEND_URL || `http://127.0.0.1:$
 const JARVIS_EVENT_URL = `${JARVIS_BACKEND_URL}/api/whatsapp/event`;
 
 let globalSock = null;
+let isConnected = false;
 
 // Debounce map: senderJid -> timestamp
 const userLastMessage = new Map();
@@ -146,6 +147,7 @@ async function connectToWhatsApp() {
         }
         
         if (connection === 'close') {
+            isConnected = false;
             const statusCode = lastDisconnect?.error?.output?.statusCode;
             const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
             
@@ -174,6 +176,7 @@ async function connectToWhatsApp() {
                 connectToWhatsApp();
             }
         } else if (connection === 'open') {
+            isConnected = true;
             console.log('✅ Jarvis WhatsApp Bridge connected!');
             console.log(`🔒 Listening for commands exclusively from: ${ownerJid}`);
             sendStatus('whatsapp.status', 'connected');
@@ -447,7 +450,8 @@ server.listen(port, () => {
 
 // Keep-alive / Connection check every 2 minutes
 setInterval(async () => {
-    if (globalSock) {
+    // Only check presence if the socket is actively connected and authenticated
+    if (globalSock && isConnected && globalSock.user) {
         try {
             // Verify connection is alive by sending a presence update
             await globalSock.sendPresenceUpdate('available');

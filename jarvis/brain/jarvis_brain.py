@@ -21,7 +21,6 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import structlog
-from traceroot import observe
 
 from jarvis.automation.browser.tools import get_browser_tools
 from jarvis.automation.desktop.tools import get_desktop_tools
@@ -321,7 +320,6 @@ class JarvisBrain:
 
     # -- Main Processing Pipeline -------------------------------------------
 
-    @observe(name="jarvis_process")
     async def process(self, user_input: str) -> JarvisResponse:
         """
         Process a user request through the full pipeline.
@@ -530,7 +528,6 @@ class JarvisBrain:
 
     # -- Streaming ----------------------------------------------------------
 
-    @observe(name="jarvis_process_stream")
     async def process_stream(self, user_input: str) -> AsyncIterator[StreamChunk]:
         """
         Stream a response token-by-token.
