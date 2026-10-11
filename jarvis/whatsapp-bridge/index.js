@@ -25,6 +25,8 @@ let globalSock = null;
 const userLastMessage = new Map();
 // Message ID deduplication set
 const processedMessageIds = new Set();
+// LRU message cache for Signal retry requests
+const messageStore = new Map();
 
 /**
  * Recursively unwraps nested Baileys message containers
@@ -119,7 +121,10 @@ async function connectToWhatsApp() {
         markOnlineOnConnect: false,
         syncFullHistory: false,
         generateHighQualityLinkPreview: false,
-        qrTimeout: 60000
+        qrTimeout: 60000,
+        getMessage: async (key) => {
+            return messageStore.get(key.id) || undefined;
+        }
     });
     
     globalSock = sock; // Expose to HTTP server
@@ -180,6 +185,15 @@ async function connectToWhatsApp() {
         
         for (const msg of m.messages) {
             if (!msg.message) continue;
+
+            // Cache message for Signal protocol retry receipts
+            if (msg.key?.id) {
+                messageStore.set(msg.key.id, msg.message);
+                if (messageStore.size > 200) {
+                    const oldest = messageStore.keys().next().value;
+                    messageStore.delete(oldest);
+                }
+            }
 
             // Normalize JIDs (remove device suffix like :12)
             const rawSender = msg.key.remoteJid;
