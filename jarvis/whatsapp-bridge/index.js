@@ -23,6 +23,41 @@ let globalSock = null;
 
 // Debounce map: senderJid -> timestamp
 const userLastMessage = new Map();
+// Message ID deduplication set
+const processedMessageIds = new Set();
+
+/**
+ * Recursively unwraps nested Baileys message containers
+ * (deviceSentMessage, ephemeralMessage, viewOnceMessage, documentWithCaptionMessage, etc.)
+ */
+function unwrapMessage(msgObj) {
+    if (!msgObj) return null;
+    let current = msgObj;
+    let depth = 0;
+    while (current && depth < 10) {
+        if (current.deviceSentMessage?.message) {
+            current = current.deviceSentMessage.message;
+        } else if (current.ephemeralMessage?.message) {
+            current = current.ephemeralMessage.message;
+        } else if (current.viewOnceMessage?.message) {
+            current = current.viewOnceMessage.message;
+        } else if (current.viewOnceMessageV2?.message) {
+            current = current.viewOnceMessageV2.message;
+        } else if (current.viewOnceMessageV2Extension?.message) {
+            current = current.viewOnceMessageV2Extension.message;
+        } else if (current.documentWithCaptionMessage?.message) {
+            current = current.documentWithCaptionMessage.message;
+        } else if (current.editedMessage?.message) {
+            current = current.editedMessage.message;
+        } else if (current.protocolMessage?.editedMessage) {
+            current = current.protocolMessage.editedMessage;
+        } else {
+            break;
+        }
+        depth++;
+    }
+    return current;
+}
 
 async function sendStatus(status, data = null, retries = 15) {
     for (let i = 0; i < retries; i++) {
@@ -177,72 +212,108 @@ async function connectToWhatsApp() {
                 continue;
             }
 
-            // Helper to recursively extract text from potentially nested messages
+            // Unwrap Baileys wrappers (critical for deviceSentMessage when messaging from phone/self-chat)
+            const unwrappedMessage = unwrapMessage(msg.message);
+
+            // Extract plain text from message
             const extractText = (message) => {
                 if (!message) return '';
-                if (message.conversation) return message.conversation;
-                if (message.extendedTextMessage?.text) return message.extendedTextMessage.text;
-                if (message.imageMessage?.caption) return message.imageMessage.caption;
-                if (message.videoMessage?.caption) return message.videoMessage.caption;
-                if (message.ephemeralMessage?.message) return extractText(message.ephemeralMessage.message);
-                if (message.viewOnceMessage?.message) return extractText(message.viewOnceMessage.message);
-                if (message.viewOnceMessageV2?.message) return extractText(message.viewOnceMessageV2.message);
-                if (message.documentWithCaptionMessage?.message?.documentMessage?.caption) return message.documentWithCaptionMessage.message.documentMessage.caption;
+                if (typeof message.conversation === 'string') return message.conversation;
+                if (typeof message.extendedTextMessage?.text === 'string') return message.extendedTextMessage.text;
+                if (typeof message.imageMessage?.caption === 'string') return message.imageMessage.caption;
+                if (typeof message.videoMessage?.caption === 'string') return message.videoMessage.caption;
+                if (typeof message.documentMessage?.caption === 'string') return message.documentMessage.caption;
+                if (typeof message.buttonsResponseMessage?.selectedDisplayText === 'string') return message.buttonsResponseMessage.selectedDisplayText;
+                if (typeof message.templateButtonReplyMessage?.selectedDisplayText === 'string') return message.templateButtonReplyMessage.selectedDisplayText;
+                if (typeof message.listResponseMessage?.title === 'string') return message.listResponseMessage.title;
                 return '';
             };
             
-            // Helper to recursively check for media
+            // Check for media
             const checkHasMedia = (message) => {
                 if (!message) return false;
-                if (message.imageMessage || message.videoMessage || message.documentMessage || message.audioMessage) return true;
-                if (message.ephemeralMessage?.message) return checkHasMedia(message.ephemeralMessage.message);
-                if (message.viewOnceMessage?.message) return checkHasMedia(message.viewOnceMessage.message);
-                if (message.viewOnceMessageV2?.message) return checkHasMedia(message.viewOnceMessageV2.message);
-                if (message.documentWithCaptionMessage?.message?.documentMessage) return true;
-                return false;
+                return !!(message.imageMessage || message.videoMessage || message.documentMessage || message.audioMessage);
             };
 
-            // Extract text message
-            let text = extractText(msg.message);
+            let text = extractText(unwrappedMessage);
+            const hasMedia = checkHasMedia(unwrappedMessage);
 
-            const hasMedia = checkHasMedia(msg.message);
-
-            if (!text) {
-                continue;
-            }
-
-            // Check if the trigger word "jarvis" is at the start of the message
-            if (!text.trim().toLowerCase().startsWith('jarvis')) {
+            if (!text && hasMedia) {
+                text = "analyze this media";
+            } else if (!text) {
+                const keys = msg.message ? Object.keys(msg.message).join(', ') : 'none';
+                console.log(`[DEBUG] No text/media in message (keys: [${keys}]), skipping.`);
                 continue;
             }
 
             // Loop-proofing: Prevent Jarvis from responding to its own replies
             if (text.startsWith('[Jarvis]:')) {
+                console.log('[DEBUG] Skipping Jarvis bot reply to prevent echo loop');
                 continue;
             }
 
-            // Debounce: Ignore messages if sent within 5 seconds of the last one
+            // Check if trigger prefix is present.
+            // Recognizes "jarvis", "hey jarvis", "hi jarvis", "ok jarvis", "/jarvis" (case-insensitive)
+            // If WHATSAPP_REQUIRE_PREFIX is explicitly set to "false", responds to all messages.
+            const requirePrefix = process.env.WHATSAPP_REQUIRE_PREFIX !== 'false';
+            const triggerRegex = /^(jarvis|hey jarvis|hi jarvis|ok jarvis|\/jarvis)[,\s:]*/i;
+            const hasTrigger = triggerRegex.test(text.trim());
+
+            if (requirePrefix && !hasTrigger) {
+                console.log(`[DEBUG] Ignored message without trigger prefix: "${text.length > 50 ? text.substring(0, 50) + '...' : text}"`);
+                continue;
+            }
+
+            // Deduplication by message ID
+            if (msg.key.id) {
+                if (processedMessageIds.has(msg.key.id)) {
+                    console.log(`[DEBUG] Dropping duplicate message event: ${msg.key.id}`);
+                    continue;
+                }
+                processedMessageIds.add(msg.key.id);
+                if (processedMessageIds.size > 500) {
+                    const oldest = processedMessageIds.values().next().value;
+                    processedMessageIds.delete(oldest);
+                }
+            }
+
+            // Debounce rapid-fire messages (default 1500ms)
             const now = Date.now();
+            const debounceMs = parseInt(process.env.WHATSAPP_DEBOUNCE_MS || '1500', 10);
             const lastMsgTime = userLastMessage.get(rawSender) || 0;
-            if (now - lastMsgTime < 5000) {
-                console.log(`[Debounce] Dropped rapid-fire message from ${rawSender}`);
+            if (now - lastMsgTime < debounceMs) {
+                console.log(`[Debounce] Dropped rapid-fire message from ${rawSender} (${now - lastMsgTime}ms < ${debounceMs}ms)`);
                 continue;
             }
             userLastMessage.set(rawSender, now);
 
             console.log(`\n[Owner] ${text}`);
-            
+
+            // Strip the trigger prefix before forwarding to AI (or keep whole text if only trigger word was sent)
+            let finalMessage = hasTrigger
+                ? text.trim().replace(triggerRegex, '').trim() || text.trim()
+                : text.trim();
+
+            // Resolve target JID for sending reply:
+            // In self-chat, sending back to ownerJid (@s.whatsapp.net) ensures the message
+            // arrives in the user's primary chat rather than getting lost on an unroutable @lid.
+            const replyTarget = isSelfChat ? ownerJid : (rawSender.endsWith('@lid') && userId ? userId : rawSender);
+
             // Send typing indicator
             if (globalSock) {
-                await globalSock.sendPresenceUpdate('composing', rawSender);
+                try {
+                    await globalSock.sendPresenceUpdate('composing', replyTarget);
+                } catch (_) {}
             }
 
-            let finalMessage = text;
-            
             if (hasMedia) {
                 try {
+                    const unwrappedMsg = {
+                        ...msg,
+                        message: unwrappedMessage
+                    };
                     const buffer = await downloadMediaMessage(
-                        msg,
+                        unwrappedMsg,
                         'buffer',
                         { },
                         { 
@@ -251,10 +322,10 @@ async function connectToWhatsApp() {
                         }
                     );
                     
-                    const mimeType = msg.message.imageMessage?.mimetype || 
-                                     msg.message.videoMessage?.mimetype || 
-                                     msg.message.audioMessage?.mimetype || 
-                                     msg.message.documentMessage?.mimetype || 
+                    const mimeType = unwrappedMessage?.imageMessage?.mimetype || 
+                                     unwrappedMessage?.videoMessage?.mimetype || 
+                                     unwrappedMessage?.audioMessage?.mimetype || 
+                                     unwrappedMessage?.documentMessage?.mimetype || 
                                      'application/octet-stream';
                                      
                     const base64Data = buffer.toString('base64');
@@ -264,6 +335,7 @@ async function connectToWhatsApp() {
                 }
             }
 
+            let reply = null;
             try {
                 // Forward to Jarvis API
                 const response = await axios.post(`${JARVIS_BACKEND_URL}/api/chat`, {
@@ -279,9 +351,7 @@ async function connectToWhatsApp() {
                     try { data = JSON.parse(data); } catch (_) {}
                 }
 
-                let reply;
                 const content = data?.content;
-
                 if (typeof content === 'string') {
                     try {
                         const parsed = JSON.parse(content);
@@ -298,22 +368,31 @@ async function connectToWhatsApp() {
                 if (!reply.startsWith('[Jarvis]: ')) {
                     reply = `[Jarvis]: ${reply}`;
                 }
-
-                // Send reply back via WhatsApp
-                if (globalSock) {
-                    await globalSock.sendMessage(rawSender, { text: reply }, { quoted: msg });
-                }
-                console.log(`[Jarvis] ${reply}`);
-
             } catch (error) {
                 console.error("Error communicating with Jarvis API:", error.message);
-                if (globalSock) {
-                    await globalSock.sendMessage(rawSender, { text: "⚠️ Jarvis Backend is unreachable." }, { quoted: msg });
+                reply = "⚠️ Jarvis Backend is unreachable.";
+            }
+
+            // Send reply back via WhatsApp
+            if (reply && globalSock) {
+                try {
+                    await globalSock.sendMessage(replyTarget, { text: reply }, { quoted: msg });
+                    console.log(`[Jarvis] ${reply}`);
+                } catch (sendErr) {
+                    console.warn(`[Bridge] Quoted send failed (${sendErr.message}), sending unquoted to ${replyTarget}...`);
+                    try {
+                        await globalSock.sendMessage(replyTarget, { text: reply });
+                        console.log(`[Jarvis] ${reply}`);
+                    } catch (retryErr) {
+                        console.error(`[Bridge] Failed to send reply to ${replyTarget}:`, retryErr.message);
+                    }
                 }
-            } finally {
-                if (globalSock) {
-                    await globalSock.sendPresenceUpdate('paused', rawSender);
-                }
+            }
+
+            if (globalSock) {
+                try {
+                    await globalSock.sendPresenceUpdate('paused', replyTarget);
+                } catch (_) {}
             }
         }
     });
