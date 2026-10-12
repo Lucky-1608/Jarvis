@@ -138,13 +138,32 @@ async function connectToTelegram() {
         }
 
         try {
-            // Forward to Jarvis API
-            const response = await axios.post(`${JARVIS_BACKEND_URL}/api/chat`, {
-                message: finalMessage,
-                stream: false
-            }, {
-                headers: { 'X-API-Key': process.env.JARVIS_SECRET_KEY || 'JARVIS_DEV_KEY' }
-            });
+            // Forward to Jarvis API with automatic local loopback retry if primary fails
+            let response = null;
+            const apiKeyHeader = { 'X-API-Key': process.env.JARVIS_SECRET_KEY || 'JARVIS_DEV_KEY' };
+            try {
+                response = await axios.post(`${JARVIS_BACKEND_URL}/api/chat`, {
+                    message: finalMessage,
+                    stream: false
+                }, {
+                    headers: apiKeyHeader,
+                    timeout: 30000
+                });
+            } catch (primaryErr) {
+                const fallbackUrl = `http://127.0.0.1:${localPort}/api/chat`;
+                if (`${JARVIS_BACKEND_URL}/api/chat` !== fallbackUrl) {
+                    console.warn(`[Bridge] Primary backend failed (${primaryErr.message}). Retrying via loopback ${fallbackUrl}...`);
+                    response = await axios.post(fallbackUrl, {
+                        message: finalMessage,
+                        stream: false
+                    }, {
+                        headers: apiKeyHeader,
+                        timeout: 30000
+                    });
+                } else {
+                    throw primaryErr;
+                }
+            }
 
             // Extract plain text from the API response
             let data = response.data;

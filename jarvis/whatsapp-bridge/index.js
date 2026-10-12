@@ -184,10 +184,20 @@ async function connectToWhatsApp() {
     });
 
     sock.ev.on('messages.upsert', async (m) => {
-        if (m.type !== 'notify') return;
+        // Handle both live notify events and companion device append syncs
+        if (m.type !== 'notify' && m.type !== 'append') return;
         
         for (const msg of m.messages) {
             if (!msg.message) continue;
+
+            // If the message is older than 2 minutes (e.g. historical chat sync on startup), ignore it
+            const rawTimestamp = msg.messageTimestamp;
+            const msgTimestamp = rawTimestamp
+                ? (typeof rawTimestamp === 'number' ? rawTimestamp * 1000 : Number(rawTimestamp) * 1000)
+                : Date.now();
+            if (msgTimestamp && (Date.now() - msgTimestamp > 120000)) {
+                continue;
+            }
 
             // Cache message for Signal protocol retry receipts
             if (msg.key?.id) {
@@ -199,21 +209,24 @@ async function connectToWhatsApp() {
             }
 
             // Normalize JIDs (remove device suffix like :12)
-            const rawSender = msg.key.remoteJid;
+            const rawSender = msg.key?.remoteJid;
+            if (!rawSender || rawSender === 'status@broadcast') continue;
+
             let senderId = rawSender;
             if (rawSender.includes(':')) {
                 const base = rawSender.split(':')[0];
                 const domain = rawSender.split('@')[1];
                 senderId = `${base}@${domain}`;
             }
-            const isOwner = (jid) => jid.replace(/\D/g, '').endsWith(OWNER_NUMBER.replace(/\D/g, ''));
+            const isOwner = (jid) => jid && typeof jid === 'string' && jid.replace(/\D/g, '').endsWith(OWNER_NUMBER.replace(/\D/g, ''));
             
+            const authId = state.creds?.me?.id ? state.creds.me.id.split(':')[0] + '@s.whatsapp.net' : null;
             const authLid = state.creds?.me?.lid ? state.creds.me.lid.split(':')[0] + '@lid' : null;
             const userLid = sock.user?.lid ? sock.user.lid.split(':')[0] + '@lid' : authLid;
-            const userId = sock.user?.id ? sock.user.id.split(':')[0] + '@s.whatsapp.net' : null;
+            const userId = sock.user?.id ? sock.user.id.split(':')[0] + '@s.whatsapp.net' : authId;
             
             // A message is a self-chat if it's sent to the owner's number, or the user's lid, or the user's own JID.
-            const isSelfChat = isOwner(senderId) || senderId === userLid || senderId === userId;
+            const isSelfChat = isOwner(senderId) || (userLid && senderId === userLid) || (userId && senderId === userId);
 
             console.log(`\n[DEBUG] Message received from: ${rawSender} | fromMe: ${msg.key.fromMe} | isSelfChat: ${isSelfChat} (userLid: ${userLid}, userId: ${userId})`);
 
@@ -354,13 +367,32 @@ async function connectToWhatsApp() {
 
             let reply = null;
             try {
-                // Forward to Jarvis API
-                const response = await axios.post(`${JARVIS_BACKEND_URL}/api/chat`, {
-                    message: finalMessage,
-                    stream: false
-                }, {
-                    headers: { 'X-API-Key': process.env.JARVIS_SECRET_KEY || 'JARVIS_DEV_KEY' }
-                });
+                // Forward to Jarvis API with automatic local loopback retry if primary fails
+                let response = null;
+                const apiKeyHeader = { 'X-API-Key': process.env.JARVIS_SECRET_KEY || 'JARVIS_DEV_KEY' };
+                try {
+                    response = await axios.post(`${JARVIS_BACKEND_URL}/api/chat`, {
+                        message: finalMessage,
+                        stream: false
+                    }, {
+                        headers: apiKeyHeader,
+                        timeout: 30000
+                    });
+                } catch (primaryErr) {
+                    const fallbackUrl = `http://127.0.0.1:${localPort}/api/chat`;
+                    if (`${JARVIS_BACKEND_URL}/api/chat` !== fallbackUrl) {
+                        console.warn(`[Bridge] Primary backend failed (${primaryErr.message}). Retrying via loopback ${fallbackUrl}...`);
+                        response = await axios.post(fallbackUrl, {
+                            message: finalMessage,
+                            stream: false
+                        }, {
+                            headers: apiKeyHeader,
+                            timeout: 30000
+                        });
+                    } else {
+                        throw primaryErr;
+                    }
+                }
 
                 // Extract plain text from the API response
                 let data = response.data;
