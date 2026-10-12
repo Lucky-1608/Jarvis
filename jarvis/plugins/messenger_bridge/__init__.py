@@ -1,7 +1,8 @@
 from jarvis.events.bus import EventBus
 from jarvis.tools.registry import ToolRegistry
 
-from .tools import WhatsAppSendMessageTool, TelegramSendMessageTool
+from .tools import TelegramSendMessageTool, WhatsAppSendMessageTool
+
 
 def setup(registry: ToolRegistry, bus: EventBus) -> None:
     """Register messaging bridge tools."""

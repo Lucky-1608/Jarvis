@@ -16,7 +16,7 @@ const formatNumber = (num) => `${num}@s.whatsapp.net`;
 const ownerJid = formatNumber(OWNER_NUMBER.replace(/[^0-9]/g, ''));
 
 const localPort = process.env.PORT || 8000;
-const JARVIS_BACKEND_URL = process.env.JARVIS_BACKEND_URL || `http://127.0.0.1:${localPort}`;
+const JARVIS_BACKEND_URL = (process.env.JARVIS_BACKEND_URL || `http://127.0.0.1:${localPort}`).replace(/\/+$/, '');
 const JARVIS_EVENT_URL = `${JARVIS_BACKEND_URL}/api/whatsapp/event`;
 
 let globalSock = null;
@@ -415,37 +415,71 @@ async function connectToWhatsApp() {
     });
 }
 
-// HTTP Server for Push Notifications
+// HTTP Server for Push Notifications & Status
 const server = http.createServer((req, res) => {
-    if (req.method === 'POST' && req.url === '/send') {
+    const url = req.url || '';
+    if (req.method === 'GET' && (url === '/' || url === '/health' || url.startsWith('/health'))) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+            status: 'ok',
+            bridge: 'whatsapp',
+            connected: isConnected,
+            ownerJid: ownerJid
+        }));
+        return;
+    }
+
+    if (req.method === 'POST' && (url === '/send' || url.startsWith('/send'))) {
         let body = '';
         req.on('data', chunk => { body += chunk.toString(); });
         req.on('end', async () => {
             try {
                 const data = JSON.parse(body);
-                if (data.message && globalSock) {
-                    await globalSock.sendMessage(ownerJid, { text: data.message });
-                    res.writeHead(200, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ status: 'ok' }));
-                } else {
-                    res.writeHead(400);
-                    res.end(JSON.stringify({ error: 'Bad Request or not connected' }));
+                if (!data.message) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Field "message" is required' }));
+                    return;
                 }
+                if (!globalSock || !isConnected) {
+                    res.writeHead(503, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'WhatsApp is not connected yet' }));
+                    return;
+                }
+
+                // Resolve target recipient (defaults to ownerJid)
+                let targetJid = ownerJid;
+                const recipient = data.to || data.recipient || data.phone_number;
+                if (recipient) {
+                    const cleanNum = String(recipient).replace(/[^0-9]/g, '');
+                    if (cleanNum) {
+                        targetJid = formatNumber(cleanNum);
+                    }
+                }
+
+                await globalSock.sendMessage(targetJid, { text: data.message });
+                console.log(`[Bridge] Sent message to ${targetJid}: "${data.message.substring(0, 60)}"`);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ status: 'ok', recipient: targetJid }));
             } catch (err) {
                 console.error("Push Notification Error:", err);
-                res.writeHead(500);
-                res.end('Error');
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: err.message || 'Internal server error' }));
             }
         });
     } else {
-        res.writeHead(404);
-        res.end('Not Found');
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Not Found' }));
     }
 });
 
-const port = process.env.WHATSAPP_BRIDGE_PORT || 3001;
-server.listen(port, () => {
-    console.log(`[Bridge] HTTP Server listening on port ${port} for push notifications`);
+server.on('error', (err) => {
+    console.error("[Bridge] HTTP Server error:", err.message);
+});
+
+const port = parseInt(process.env.WHATSAPP_BRIDGE_PORT || '3002', 10);
+const host = process.env.WHATSAPP_BRIDGE_HOST || '0.0.0.0';
+server.listen(port, host, () => {
+    console.log(`[Bridge] HTTP Server listening on http://${host}:${port} for push notifications`);
 });
 
 // Keep-alive / Connection check every 2 minutes

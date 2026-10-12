@@ -21,7 +21,7 @@ if (!OWNER_ID || OWNER_ID === 'YOUR_OWNER_ID_HERE') {
 }
 
 const localPort = process.env.PORT || 8000;
-const JARVIS_BACKEND_URL = process.env.JARVIS_BACKEND_URL || `http://127.0.0.1:${localPort}`;
+const JARVIS_BACKEND_URL = (process.env.JARVIS_BACKEND_URL || `http://127.0.0.1:${localPort}`).replace(/\/+$/, '');
 const JARVIS_EVENT_URL = `${JARVIS_BACKEND_URL}/api/telegram/event`;
 
 let globalBot = null;
@@ -189,37 +189,62 @@ async function connectToTelegram() {
     });
 }
 
-// HTTP Server for Push Notifications
+// HTTP Server for Push Notifications & Status
 const server = http.createServer((req, res) => {
-    if (req.method === 'POST' && req.url === '/send') {
+    const url = req.url || '';
+    if (req.method === 'GET' && (url === '/' || url === '/health' || url.startsWith('/health'))) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+            status: 'ok',
+            bridge: 'telegram',
+            connected: !!globalBot,
+            ownerId: OWNER_ID
+        }));
+        return;
+    }
+
+    if (req.method === 'POST' && (url === '/send' || url.startsWith('/send'))) {
         let body = '';
         req.on('data', chunk => { body += chunk.toString(); });
         req.on('end', async () => {
             try {
                 const data = JSON.parse(body);
-                if (data.message && globalBot) {
-                    await globalBot.sendMessage(OWNER_ID, data.message);
-                    res.writeHead(200, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ status: 'ok' }));
-                } else {
-                    res.writeHead(400);
-                    res.end(JSON.stringify({ error: 'Bad Request or not connected' }));
+                if (!data.message) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Field "message" is required' }));
+                    return;
                 }
+                if (!globalBot) {
+                    res.writeHead(503, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Telegram bot is not connected yet' }));
+                    return;
+                }
+
+                const targetChatId = data.to || data.chat_id || OWNER_ID;
+                await globalBot.sendMessage(targetChatId, data.message);
+                console.log(`[Bridge] Sent message to ${targetChatId}: "${data.message.substring(0, 60)}"`);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ status: 'ok', recipient: targetChatId }));
             } catch (err) {
                 console.error("Push Notification Error:", err);
-                res.writeHead(500);
-                res.end('Error');
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: err.message || 'Internal server error' }));
             }
         });
     } else {
-        res.writeHead(404);
-        res.end('Not Found');
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Not Found' }));
     }
 });
 
-const port = process.env.TELEGRAM_BRIDGE_PORT || 3003;
-server.listen(port, () => {
-    console.log(`[Bridge] HTTP Server listening on port ${port} for push notifications`);
+server.on('error', (err) => {
+    console.error("[Bridge] HTTP Server error:", err.message);
+});
+
+const port = parseInt(process.env.TELEGRAM_BRIDGE_PORT || '3003', 10);
+const host = process.env.TELEGRAM_BRIDGE_HOST || '0.0.0.0';
+server.listen(port, host, () => {
+    console.log(`[Bridge] HTTP Server listening on http://${host}:${port} for push notifications`);
 });
 
 connectToTelegram();
