@@ -1,4 +1,6 @@
 require('dotenv').config({ path: '../../.env' });
+const path = require('path');
+const fs = require('fs');
 const pino = require('pino');
 const qrcode = require('qrcode');
 const axios = require('axios');
@@ -18,6 +20,28 @@ const ownerJid = formatNumber(OWNER_NUMBER.replace(/[^0-9]/g, ''));
 const localPort = process.env.PORT || 8000;
 const JARVIS_BACKEND_URL = (process.env.JARVIS_BACKEND_URL || `http://127.0.0.1:${localPort}`).replace(/\/+$/, '');
 const JARVIS_EVENT_URL = `${JARVIS_BACKEND_URL}/api/whatsapp/event`;
+
+// Container lifecycle & instance tracking (prevents dual-container conflict on Azure deployments)
+const instanceId = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+const lockFolder = process.env.WEBSITE_SITE_NAME 
+    ? path.join(process.env.HOME || process.env.USERPROFILE || '/home', 'site')
+    : __dirname;
+const instanceLockPath = path.join(lockFolder, 'whatsapp_instance.id');
+
+try {
+    if (!fs.existsSync(lockFolder)) fs.mkdirSync(lockFolder, { recursive: true });
+    fs.writeFileSync(instanceLockPath, instanceId, 'utf8');
+} catch (_) {}
+
+function isCurrentInstance() {
+    try {
+        if (fs.existsSync(instanceLockPath)) {
+            const current = fs.readFileSync(instanceLockPath, 'utf8').trim();
+            return current === instanceId;
+        }
+    } catch (_) {}
+    return true;
+}
 
 let globalSock = null;
 let isConnected = false;
@@ -86,19 +110,26 @@ async function connectToWhatsApp() {
     const makeWASocket = baileys.default || baileys.makeWASocket;
     const { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, downloadMediaMessage } = baileys;
 
-    const path = require('path');
     const authFolder = process.env.WHATSAPP_AUTH_DIR
         ? process.env.WHATSAPP_AUTH_DIR
         : process.env.WEBSITE_SITE_NAME 
             ? path.join(process.env.HOME || process.env.USERPROFILE || '/home', 'site', 'auth_info_baileys')
             : path.join(__dirname, 'auth_info_baileys');
 
-    const fs = require('fs');
     const credsPath = path.join(authFolder, 'creds.json');
+    const credsBakPath = path.join(authFolder, 'creds.json.bak');
+
+    // Self-healing credentials check with automatic backup & restore
     if (fs.existsSync(credsPath)) {
         try {
             const credsStr = fs.readFileSync(credsPath, 'utf8');
+            if (!credsStr || credsStr.trim() === '') {
+                throw new Error("creds.json is empty");
+            }
             const creds = JSON.parse(credsStr);
+            // Valid JSON — update backup copy
+            try { fs.writeFileSync(credsBakPath, credsStr, 'utf8'); } catch (_) {}
+
             if (creds && creds.me && creds.account && creds.registered === false) {
                 console.log("Fixing corrupted creds.json (registered: false -> true)...");
                 creds.registered = true;
@@ -106,6 +137,16 @@ async function connectToWhatsApp() {
             }
         } catch (e) {
             console.error("Failed to parse creds.json during startup check:", e.message);
+            if (fs.existsSync(credsBakPath)) {
+                try {
+                    const bakStr = fs.readFileSync(credsBakPath, 'utf8');
+                    JSON.parse(bakStr); // verify valid JSON
+                    console.log("Restoring valid creds.json from creds.json.bak...");
+                    fs.writeFileSync(credsPath, bakStr, 'utf8');
+                } catch (bakErr) {
+                    console.error("Failed to restore from backup:", bakErr.message);
+                }
+            }
         }
     }
 
@@ -130,7 +171,25 @@ async function connectToWhatsApp() {
     
     globalSock = sock; // Expose to HTTP server
 
-    sock.ev.on('creds.update', saveCreds);
+    // Safe credentials saver that updates backup copy upon successful write
+    const safeSaveCreds = async () => {
+        try {
+            await saveCreds();
+            if (fs.existsSync(credsPath)) {
+                const data = fs.readFileSync(credsPath, 'utf8');
+                if (data && data.length > 50) {
+                    try {
+                        JSON.parse(data);
+                        fs.writeFileSync(credsBakPath, data, 'utf8');
+                    } catch (_) {}
+                }
+            }
+        } catch (err) {
+            console.error("[Bridge] Failed to save creds safely:", err.message);
+        }
+    };
+
+    sock.ev.on('creds.update', safeSaveCreds);
 
     sock.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect, qr } = update;
@@ -144,17 +203,35 @@ async function connectToWhatsApp() {
                 }
                 await sendStatus('whatsapp.qr', url);
             });
+
+            // Output QR code directly in the terminal logs for easy scanning
+            qrcode.toString(qr, { type: 'terminal', small: true }, (err, terminalStr) => {
+                if (!err && terminalStr) {
+                    console.log("\n================ WHATSAPP QR CODE ================");
+                    console.log(terminalStr);
+                    console.log("===================================================\n");
+                }
+            });
         }
         
         if (connection === 'close') {
             isConnected = false;
             const statusCode = lastDisconnect?.error?.output?.statusCode;
+            const errorMsg = String(lastDisconnect?.error?.message || lastDisconnect?.error || '');
+            const isConflict = statusCode === 440 || errorMsg.toLowerCase().includes('conflict');
             const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+
+            // If a newer container instance has started during deployment, exit this process cleanly
+            if (!isCurrentInstance()) {
+                console.log(`[Bridge] Stale container detected (active instance took over). Exiting bridge process.`);
+                process.exit(0);
+                return;
+            }
             
             if (statusCode === DisconnectReason.loggedOut) {
                 console.log('Connection closed: Logged out.');
             } else {
-                console.log(`Connection closed due to ${lastDisconnect?.error?.message || lastDisconnect?.error}. Reconnecting: ${shouldReconnect}`);
+                console.log(`Connection closed due to ${errorMsg}. Reconnecting: ${shouldReconnect}`);
             }
 
             sendStatus('whatsapp.status', 'disconnected');
@@ -162,18 +239,28 @@ async function connectToWhatsApp() {
             if (statusCode === 401) {
                 console.log("⚠️ 401 Unauthorized. The WhatsApp session is corrupted or unlinked.");
                 console.log(`Deleting ${authFolder} to force a fresh QR code scan...`);
-                const fs = require('fs');
                 if (fs.existsSync(authFolder)) {
                     fs.rmSync(authFolder, { recursive: true, force: true });
                 }
                 console.log("Restarting connection...");
-                connectToWhatsApp();
+                setTimeout(() => { if (isCurrentInstance()) connectToWhatsApp(); }, 3000);
             } else if (statusCode === 408) {
                 console.log("⚠️ 408 Request Timeout. QR code scanning timed out.");
                 console.log("Restarting connection...");
-                connectToWhatsApp();
+                setTimeout(() => { if (isCurrentInstance()) connectToWhatsApp(); }, 3000);
+            } else if (isConflict) {
+                // If another session connected (e.g. during Azure swap), back off before retrying
+                console.log("[Bridge] WhatsApp session conflict detected. Backing off 8s before reconnect...");
+                setTimeout(() => {
+                    if (isCurrentInstance()) {
+                        connectToWhatsApp();
+                    } else {
+                        console.log("[Bridge] Stale container detected after conflict. Exiting.");
+                        process.exit(0);
+                    }
+                }, 8000);
             } else if (shouldReconnect) {
-                connectToWhatsApp();
+                setTimeout(() => { if (isCurrentInstance()) connectToWhatsApp(); }, 3000);
             }
         } else if (connection === 'open') {
             isConnected = true;
