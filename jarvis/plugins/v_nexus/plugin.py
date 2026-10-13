@@ -34,13 +34,26 @@ class VNexusApiCallTool(Tool):
                 ToolParameter(
                     name="payload",
                     type="object",
-                    description="The payload for POST/PATCH (e.g., {'title': 'Buy groceries'}). For DELETE, pass {'id': '...'} or pass id in query. Omit for GET.",
+                    description="The payload for POST/PATCH (e.g., {'title': 'Buy groceries', 'status': 'in_progress'}). For DELETE, pass {'id': '...'} or pass id in query. Omit for GET.",
+                    required=False
+                ),
+                ToolParameter(
+                    name="resource_id",
+                    type="string",
+                    description="Optional ID of the specific resource to fetch, update (PATCH), or delete.",
                     required=False
                 )
             ]
         )
 
-    async def execute(self, resource_type: str, method: str, payload: dict[str, Any] | None = None) -> ToolResult:
+    async def execute(
+        self,
+        resource_type: str,
+        method: str,
+        payload: dict[str, Any] | None = None,
+        resource_id: str | None = None,
+        **kwargs: Any
+    ) -> ToolResult:
         base_url = os.getenv("VNEXUS_BASE_URL", "https://v-nexus.vercel.app")
         token = os.getenv("VNEXUS_PAT")
 
@@ -54,7 +67,10 @@ class VNexusApiCallTool(Tool):
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json"
         }
+        target_id = resource_id or (payload.get("id") if isinstance(payload, dict) else None)
         url = f"{base_url}/api/v1/{resource_type}"
+        if target_id and method.upper() in ["GET", "PATCH", "DELETE"]:
+            url = f"{url}?id={target_id}"
 
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
@@ -65,9 +81,6 @@ class VNexusApiCallTool(Tool):
                 elif method.upper() == "PATCH":
                     response = await client.patch(url, headers=headers, json=payload or {})
                 elif method.upper() == "DELETE":
-                    # DELETE might pass id in query params if provided in payload
-                    if payload and "id" in payload:
-                        url = f"{url}?id={payload['id']}"
                     response = await client.delete(url, headers=headers)
                 else:
                     return ToolResult(success=False, error=f"Unsupported method: {method}")

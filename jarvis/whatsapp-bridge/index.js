@@ -50,8 +50,32 @@ let isConnected = false;
 const userLastMessage = new Map();
 // Message ID deduplication set
 const processedMessageIds = new Set();
-// LRU message cache for Signal retry requests
+// LRU message cache for Signal retry requests (stores both incoming and outgoing messages)
 const messageStore = new Map();
+
+function cacheMessage(keyId, message) {
+    if (!keyId || !message) return;
+    messageStore.set(keyId, message);
+    if (messageStore.size > 500) {
+        const oldest = messageStore.keys().next().value;
+        messageStore.delete(oldest);
+    }
+}
+
+// In-memory retry counter cache store for Baileys (prevents infinite retry loops across reconnects)
+const retryCounterMap = new Map();
+const msgRetryCounterCache = {
+    get: (key) => retryCounterMap.get(key),
+    set: (key, value) => {
+        retryCounterMap.set(key, value);
+        if (retryCounterMap.size > 1000) {
+            const oldest = retryCounterMap.keys().next().value;
+            retryCounterMap.delete(oldest);
+        }
+    },
+    del: (key) => retryCounterMap.delete(key),
+    flushAll: () => retryCounterMap.clear()
+};
 
 /**
  * Recursively unwraps nested Baileys message containers
@@ -108,7 +132,7 @@ async function sendStatus(status, data = null, retries = 15) {
 async function connectToWhatsApp() {
     const baileys = await import('@whiskeysockets/baileys');
     const makeWASocket = baileys.default || baileys.makeWASocket;
-    const { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, downloadMediaMessage } = baileys;
+    const { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, downloadMediaMessage, makeCacheableSignalKeyStore } = baileys;
 
     const authFolder = process.env.WHATSAPP_AUTH_DIR
         ? process.env.WHATSAPP_AUTH_DIR
@@ -156,7 +180,11 @@ async function connectToWhatsApp() {
 
     const sock = makeWASocket({
         version,
-        auth: state,
+        auth: {
+            creds: state.creds,
+            keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }))
+        },
+        msgRetryCounterCache,
         printQRInTerminal: false,
         logger: pino({ level: 'silent' }),
         browser: ['Mac OS', 'Chrome', '121.0.0'],
@@ -165,7 +193,11 @@ async function connectToWhatsApp() {
         generateHighQualityLinkPreview: false,
         qrTimeout: 60000,
         getMessage: async (key) => {
-            return messageStore.get(key.id) || undefined;
+            if (key?.id) {
+                const cached = messageStore.get(key.id);
+                if (cached) return cached;
+            }
+            return undefined;
         }
     });
     
@@ -287,12 +319,8 @@ async function connectToWhatsApp() {
             }
 
             // Cache message for Signal protocol retry receipts
-            if (msg.key?.id) {
-                messageStore.set(msg.key.id, msg.message);
-                if (messageStore.size > 200) {
-                    const oldest = messageStore.keys().next().value;
-                    messageStore.delete(oldest);
-                }
+            if (msg.key?.id && msg.message) {
+                cacheMessage(msg.key.id, msg.message);
             }
 
             // Normalize JIDs (remove device suffix like :12)
@@ -512,12 +540,18 @@ async function connectToWhatsApp() {
             // Send reply back via WhatsApp
             if (reply && globalSock) {
                 try {
-                    await globalSock.sendMessage(replyTarget, { text: reply }, { quoted: msg });
+                    const sent = await globalSock.sendMessage(replyTarget, { text: reply }, { quoted: msg });
+                    if (sent?.key?.id && sent?.message) {
+                        cacheMessage(sent.key.id, sent.message);
+                    }
                     console.log(`[Jarvis] ${reply}`);
                 } catch (sendErr) {
                     console.warn(`[Bridge] Quoted send failed (${sendErr.message}), sending unquoted to ${replyTarget}...`);
                     try {
-                        await globalSock.sendMessage(replyTarget, { text: reply });
+                        const sent = await globalSock.sendMessage(replyTarget, { text: reply });
+                        if (sent?.key?.id && sent?.message) {
+                            cacheMessage(sent.key.id, sent.message);
+                        }
                         console.log(`[Jarvis] ${reply}`);
                     } catch (retryErr) {
                         console.error(`[Bridge] Failed to send reply to ${replyTarget}:`, retryErr.message);
@@ -575,7 +609,10 @@ const server = http.createServer((req, res) => {
                     }
                 }
 
-                await globalSock.sendMessage(targetJid, { text: data.message });
+                const sent = await globalSock.sendMessage(targetJid, { text: data.message });
+                if (sent?.key?.id && sent?.message) {
+                    cacheMessage(sent.key.id, sent.message);
+                }
                 console.log(`[Bridge] Sent message to ${targetJid}: "${data.message.substring(0, 60)}"`);
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ status: 'ok', recipient: targetJid }));

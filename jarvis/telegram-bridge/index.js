@@ -191,6 +191,9 @@ async function connectToTelegram() {
                 reply = String(data);
             }
 
+            if (!reply || !String(reply).trim()) {
+                reply = "⚠️ Jarvis completed processing, but no text response was produced.";
+            }
 
             // Send reply back via Telegram as plain text
             await bot.sendMessage(chatId, reply, {
