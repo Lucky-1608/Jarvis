@@ -16,7 +16,7 @@ class VNexusApiCallTool(Tool):
     def metadata(self) -> ToolMetadata:
         return ToolMetadata(
             name="v_nexus_api_call",
-            description="Call the V_Nexus API to read or write tasks, notes, goals, resources, etc.",
+            description="Call the V_Nexus API to read or write tasks, notes, goals, resources, etc. Note for tasks: statuses are 'Todo', 'In Progress', and 'Done'. Pending tasks include BOTH 'Todo' and 'In Progress' (all tasks that are not 'Done').",
             category=ToolCategory.CUSTOM,
             parameters=[
                 ToolParameter(
