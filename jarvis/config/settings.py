@@ -106,6 +106,16 @@ class ElevenLabsSettings(BaseSettings):
     timeout: int = 120
     max_retries: int = 3
 
+
+class AzureSpeechSettings(BaseSettings):
+    """Azure Cognitive Services Speech configuration."""
+
+    model_config = SettingsConfigDict(env_prefix="AZURE_SPEECH_", env_file=".env", extra="ignore")
+
+    key: str = ""
+    region: str = "centralindia"
+    voice_name: str = "en-US-GuyNeural"
+
 class ObsidianSettings(BaseSettings):
     """Obsidian vault configuration."""
 
@@ -174,8 +184,8 @@ class JarvisSettings(BaseSettings):
     ai_tool_selector_enabled: bool = False
 
     # --- Voice routing ------------------------------------------------------
-    tts_provider: str = "elevenlabs"  # elevenlabs | edge_tts
-    stt_provider: str = "elevenlabs"  # elevenlabs | azure
+    tts_provider: str = "azure"  # azure | edge_tts | elevenlabs
+    stt_provider: str = "groq"  # groq | azure | elevenlabs
 
     # --- Logging ------------------------------------------------------------
     log_level: str = "INFO"
@@ -188,6 +198,7 @@ class JarvisSettings(BaseSettings):
     groq: GroqSettings = Field(default_factory=GroqSettings)
     gemini: GeminiSettings = Field(default_factory=GeminiSettings)
     elevenlabs: ElevenLabsSettings = Field(default_factory=ElevenLabsSettings)
+    azure_speech: AzureSpeechSettings = Field(default_factory=AzureSpeechSettings)
     obsidian: ObsidianSettings = Field(default_factory=ObsidianSettings)
     memory: MemorySettings = Field(default_factory=MemorySettings)
     server: ServerSettings = Field(default_factory=ServerSettings)

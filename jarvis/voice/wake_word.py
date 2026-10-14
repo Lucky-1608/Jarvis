@@ -58,8 +58,8 @@ class WakeWordDetector:
         logger.info("wake_word.listening", wake_words=list(self._wake_words))
 
         try:
+            from jarvis.voice.audio import SAMPLE_RATE, AudioRecorder
             from jarvis.voice.stt import SpeechToText
-            from jarvis.voice.audio import AudioRecorder, SAMPLE_RATE
         except ImportError as exc:
             logger.error("wake_word.missing_deps", error=str(exc))
             return

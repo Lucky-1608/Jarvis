@@ -136,8 +136,9 @@ class AudioPlayer:
 
         # 1. Forward audio to connected Companion apps (PC / Mobile)
         try:
-            from jarvis.server.companion_manager import companion_manager
             import base64
+
+            from jarvis.server.companion_manager import companion_manager
             if companion_manager.has_companions():
                 with open(str(filepath), "rb") as f:
                     audio_b64 = base64.b64encode(f.read()).decode("utf-8")

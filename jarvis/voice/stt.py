@@ -34,7 +34,7 @@ class SpeechToText:
         api_keys = []
         if self._settings.elevenlabs.api_keys:
             api_keys.extend([k.strip() for k in self._settings.elevenlabs.api_keys.split(",") if k.strip()])
-        
+
         for key in [
             self._settings.elevenlabs.api_key_1,
             self._settings.elevenlabs.api_key_2,
@@ -49,10 +49,26 @@ class SpeechToText:
             self._settings.elevenlabs.api_key
         )
 
+        groq_keys = []
+        if self._settings.groq.api_keys:
+            groq_keys.extend([k.strip() for k in self._settings.groq.api_keys.split(",") if k.strip()])
+        if self._settings.groq.api_key:
+            groq_keys.append(self._settings.groq.api_key.strip())
+        env_groq = os.environ.get("GROQ_API_KEYS", "") or os.environ.get("GROQ_API_KEY", "")
+        if env_groq:
+            groq_keys.extend([k.strip() for k in env_groq.split(",") if k.strip()])
+        groq_keys = list(dict.fromkeys(groq_keys))
+
+        self._groq_rotator = APIKeyRotator(groq_keys)
+
     def _get_speech_config(self, language: str | None = None) -> Any:
         import azure.cognitiveservices.speech as speechsdk
-        speech_key = os.environ.get("AZURE_SPEECH_KEY")
-        service_region = os.environ.get("AZURE_SPEECH_REGION")
+        speech_key = os.environ.get("AZURE_SPEECH_KEY") or (
+            self._settings.azure_speech.key if hasattr(self._settings, "azure_speech") else ""
+        )
+        service_region = os.environ.get("AZURE_SPEECH_REGION") or (
+            self._settings.azure_speech.region if hasattr(self._settings, "azure_speech") else "centralindia"
+        )
         if not speech_key or not service_region:
             logger.error("stt.azure_missing_credentials", msg="AZURE_SPEECH_KEY or AZURE_SPEECH_REGION not set")
             raise ValueError("Missing Azure Speech credentials (AZURE_SPEECH_KEY, AZURE_SPEECH_REGION)")
@@ -96,10 +112,55 @@ class SpeechToText:
             raise
 
 
+    async def _transcribe_groq(
+        self,
+        audio_bytes: bytes,
+        language: str | None = None,
+        filename: str = "audio.webm",
+    ) -> str:
+        """Transcribe audio bytes using Groq Whisper API (whisper-large-v3-turbo)."""
+        url = "https://api.groq.com/openai/v1/audio/transcriptions"
+        mime_type = "audio/webm" if filename.endswith(".webm") else "audio/wav"
+        files = {
+            "file": (filename, audio_bytes, mime_type)
+        }
+        data: dict[str, Any] = {
+            "model": "whisper-large-v3-turbo",
+            "response_format": "json",
+        }
+        if language:
+            data["language"] = language.split("-")[0]
+
+        max_attempts = max(1, len(self._groq_rotator.keys))
+        for _ in range(max_attempts):
+            api_key = self._groq_rotator.get_key()
+            if not api_key:
+                raise ValueError("No Groq API keys configured.")
+
+            headers = {"Authorization": f"Bearer {api_key}"}
+            try:
+                async with httpx.AsyncClient(timeout=12.0) as client:
+                    resp = await client.post(url, headers=headers, files=files, data=data)
+                    resp.raise_for_status()
+                    result = resp.json()
+                    return result.get("text", "").strip()
+            except httpx.HTTPStatusError as e:
+                logger.warning("stt.groq_key_error", status=e.response.status_code, error=e.response.text[:200])
+                if e.response.status_code in (401, 429) and len(self._groq_rotator.keys) > 1:
+                    self._groq_rotator.rotate()
+                    continue
+                raise
+            except Exception as e:
+                logger.warning("stt.groq_failed", error=str(e))
+                if len(self._groq_rotator.keys) > 1:
+                    self._groq_rotator.rotate()
+                continue
+        return ""
+
     async def _transcribe_elevenlabs(self, audio_bytes: bytes, language: str | None = None, filename: str = "audio.wav") -> str:
         """Transcribe audio bytes using ElevenLabs STT."""
         url = f"{self._settings.elevenlabs.base_url.rstrip('/')}/v1/speech-to-text"
-        
+
         mime_type = "audio/webm" if filename.endswith(".webm") else "audio/wav"
         files = {
             "file": (filename, audio_bytes, mime_type)
@@ -139,39 +200,57 @@ class SpeechToText:
                     logger.debug("stt.elevenlabs.rotator", status=e.response.status_code, error=error_msg, msg="Rotating key")
                     self._elevenlabs_rotator.rotate()
                     continue
-                
+
                 logger.error("stt.elevenlabs.error", status=e.response.status_code, error=error_msg)
                 raise e
-        
+
         return ""
 
     async def transcribe_bytes(
         self,
         audio_bytes: bytes,
         language: str | None = None,
-        filename: str = "audio.wav",
+        filename: str = "audio.webm",
     ) -> str:
-        """Transcribe audio bytes using configured STT provider, falling back to Azure."""
-        provider = self._settings.stt_provider
+        """Transcribe audio bytes using configured STT provider with multi-tier fallback."""
+        preferred = self._settings.stt_provider or "groq"
+        providers = [preferred]
+        for p in ["groq", "azure", "elevenlabs"]:
+            if p not in providers:
+                providers.append(p)
 
-        try:
-            if provider == "elevenlabs":
-                return await self._transcribe_elevenlabs(audio_bytes, language, filename)
-            elif provider == "azure":
-                return await self._transcribe_azure_bytes(audio_bytes, language)
-            else:
-                raise ValueError(f"Unknown STT provider: {provider}")
-        except Exception as e:
-            if provider == "azure":
-                logger.error("stt.azure_failed", error=str(e))
-                return ""
-
-            logger.warning("stt.elevenlabs_failed_using_azure", provider=provider, error=str(e), msg="ElevenLabs failed, falling back to Azure STT.")
+        last_error = None
+        for provider in providers:
             try:
-                return await self._transcribe_azure_bytes(audio_bytes, language)
-            except Exception as e2:
-                logger.error("stt.fallback_failed", error=str(e2))
-                return ""
+                has_groq = bool(
+                    self._groq_rotator.keys
+                    or os.environ.get("GROQ_API_KEYS")
+                    or os.environ.get("GROQ_API_KEY")
+                )
+                if provider == "groq" and has_groq:
+                    text = await self._transcribe_groq(audio_bytes, language, filename)
+                    if text and text.strip():
+                        return text
+                has_azure = bool(
+                    os.environ.get("AZURE_SPEECH_KEY")
+                    or (hasattr(self._settings, "azure_speech") and self._settings.azure_speech.key)
+                )
+                if provider == "azure" and has_azure:
+                    text = await self._transcribe_azure_bytes(audio_bytes, language)
+                    if text and text.strip():
+                        return text
+                elif provider == "elevenlabs" and self._elevenlabs_rotator.keys:
+                    text = await self._transcribe_elevenlabs(audio_bytes, language, filename)
+                    if text and text.strip():
+                        return text
+            except Exception as e:
+                logger.debug("stt.provider_fallback", provider=provider, error=str(e))
+                last_error = e
+                continue
+
+        if last_error:
+            logger.error("stt.all_providers_failed", error=str(last_error))
+        return ""
 
     async def transcribe_file(
         self,

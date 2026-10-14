@@ -97,7 +97,22 @@ async def list_voices(language: str = "en"):
     """List available TTS voices for a language."""
     from jarvis.voice.tts import TextToSpeech
 
-    voices = await TextToSpeech.list_voices(language)
+    try:
+        voices = await TextToSpeech.list_voices(language)
+    except Exception:
+        voices = []
+
+    if not voices:
+        voices = [
+            {"name": "en-US-GuyNeural", "gender": "Male", "locale": "en-US"},
+            {"name": "en-US-JennyNeural", "gender": "Female", "locale": "en-US"},
+            {"name": "en-US-AriaNeural", "gender": "Female", "locale": "en-US"},
+            {"name": "en-US-DavisNeural", "gender": "Male", "locale": "en-US"},
+            {"name": "en-US-AndrewNeural", "gender": "Male", "locale": "en-US"},
+            {"name": "en-US-BrianNeural", "gender": "Male", "locale": "en-US"},
+            {"name": "en-GB-RyanNeural", "gender": "Male", "locale": "en-GB"},
+            {"name": "en-GB-SoniaNeural", "gender": "Female", "locale": "en-GB"},
+        ]
     return {"language": language, "count": len(voices), "voices": voices}
 
 
@@ -106,9 +121,11 @@ async def transcribe_stream(ws: WebSocket):
     """
     WebSocket endpoint for real-time transcription.
     Client sends binary audio (webm/mp4/wav) chunks.
-    Server writes cumulative audio to a temp file, runs STT, and returns text.
+    Server processes with ultra-fast STT and streams transcription text back.
     """
     await ws.accept()
+    import json
+
     import structlog
 
     from jarvis.voice.stt import SpeechToText
@@ -118,19 +135,31 @@ async def transcribe_stream(ws: WebSocket):
 
     try:
         while True:
-            # Receive cumulative audio payload from client
-            audio_bytes = await ws.receive_bytes()
-            if not audio_bytes:
+            # Receive either binary audio bytes or text command
+            message = await ws.receive()
+            if message.get("type") == "websocket.disconnect":
+                break
+
+            audio_bytes = message.get("bytes")
+            text_data = message.get("text")
+
+            if text_data:
+                try:
+                    payload = json.loads(text_data)
+                    action = payload.get("action")
+                    if action == "ping":
+                        await ws.send_json({"type": "pong"})
+                        continue
+                except Exception:
+                    pass
+
+            if not audio_bytes or len(audio_bytes) < 100:
                 continue
 
-            with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
-                tmp.write(audio_bytes)
-                tmp_path = tmp.name
-
             try:
-                # Transcribe the cumulative audio file
-                text = await stt.transcribe_file(tmp_path)
-                await ws.send_json({"text": text, "done": False})
+                # Transcribe audio bytes directly (using Groq Whisper turbo or Azure)
+                text = await stt.transcribe_bytes(audio_bytes, filename="audio.webm")
+                await ws.send_json({"text": text, "done": False, "interim": True})
             except WebSocketDisconnect:
                 raise
             except RuntimeError as e:
@@ -138,17 +167,15 @@ async def transcribe_stream(ws: WebSocket):
                     raise WebSocketDisconnect()
                 logger.error("voice.stream.error", error=str(e))
                 try:
-                    await ws.send_json({"error": str(e)})
+                    await ws.send_json({"error": str(e), "text": ""})
                 except Exception:
                     pass
             except Exception as e:
                 logger.error("voice.stream.error", error=str(e))
                 try:
-                    await ws.send_json({"error": str(e)})
+                    await ws.send_json({"error": str(e), "text": ""})
                 except Exception:
                     pass
-            finally:
-                Path(tmp_path).unlink(missing_ok=True)
 
     except WebSocketDisconnect:
         logger.debug("voice.stream.disconnected")
@@ -156,10 +183,6 @@ async def transcribe_stream(ws: WebSocket):
         pass
     except Exception as exc:
         logger.error("voice.stream.fatal", error=str(exc))
-        try:
-            await ws.send_json({"error": str(exc)})
-        except Exception:
-            pass
 
 @router.websocket("/voice/tts_stream")
 async def tts_stream(ws: WebSocket):
@@ -169,8 +192,9 @@ async def tts_stream(ws: WebSocket):
     """
     await ws.accept()
     import structlog
+
     from jarvis.voice.tts import TextToSpeech
-    
+
     logger = structlog.get_logger(__name__)
     tts = TextToSpeech(voice="en-US-GuyNeural")
 

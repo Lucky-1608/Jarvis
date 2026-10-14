@@ -6,6 +6,8 @@ Converts Jarvis's text responses into spoken audio.
 
 from __future__ import annotations
 
+import asyncio
+import os
 import tempfile
 from pathlib import Path
 
@@ -43,12 +45,12 @@ class TextToSpeech:
         self._is_speaking = False
         self._stop_requested = False
         self._settings = get_settings()
-        
+
         # Gather all ElevenLabs API keys
         api_keys = []
         if self._settings.elevenlabs.api_keys:
             api_keys.extend([k.strip() for k in self._settings.elevenlabs.api_keys.split(",") if k.strip()])
-        
+
         for key in [
             self._settings.elevenlabs.api_key_1,
             self._settings.elevenlabs.api_key_2,
@@ -96,12 +98,73 @@ class TextToSpeech:
     async def _speak_primary(self, text: str) -> None:
         """Primary TTS implementation based on configured provider."""
         provider = self._settings.tts_provider
-        if provider == "elevenlabs":
-            await self._speak_elevenlabs(text)
+        if provider == "azure":
+            await self._speak_azure(text)
         elif provider == "edge_tts":
             await self._speak_edge_tts(text)
+        elif provider == "elevenlabs":
+            await self._speak_elevenlabs(text)
         else:
-            raise ValueError(f"Unknown TTS provider: {provider}")
+            await self._speak_azure(text)
+
+    async def _speak_azure(self, text: str) -> None:
+        """Synthesize and play speech using Azure Speech."""
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
+            tmp_path = tmp.name
+
+        try:
+            await self._synthesize_azure_to_file(text, Path(tmp_path))
+            if self._stop_requested:
+                return
+            from jarvis.voice.audio import AudioPlayer
+            await AudioPlayer.play_file(tmp_path)
+        finally:
+            Path(tmp_path).unlink(missing_ok=True)
+
+    async def _synthesize_azure_to_file(self, text: str, output_path: Path) -> Path:
+        """Synthesize speech using Azure Cognitive Services Speech SDK."""
+        import os
+
+        import azure.cognitiveservices.speech as speechsdk
+
+        speech_key = os.environ.get("AZURE_SPEECH_KEY") or (
+            self._settings.azure_speech.key if hasattr(self._settings, "azure_speech") else ""
+        )
+        service_region = os.environ.get("AZURE_SPEECH_REGION") or (
+            self._settings.azure_speech.region if hasattr(self._settings, "azure_speech") else "centralindia"
+        )
+
+        if not speech_key:
+            raise ValueError("Azure Speech key not configured (AZURE_SPEECH_KEY).")
+
+        speech_config = speechsdk.SpeechConfig(subscription=speech_key, region=service_region)
+        speech_config.speech_synthesis_voice_name = self._voice or "en-US-GuyNeural"
+        speech_config.set_speech_synthesis_output_format(
+            speechsdk.SpeechSynthesisOutputFormat.Audio16Khz32KBitRateMonoMp3
+        )
+
+        loop = asyncio.get_running_loop()
+
+        def _synthesize():
+            synthesizer = speechsdk.SpeechSynthesizer(
+                speech_config=speech_config,
+                audio_config=None,
+            )
+            result = synthesizer.speak_text_async(text).get()
+            if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
+                with open(str(output_path), "wb") as f:
+                    f.write(result.audio_data)
+                return output_path
+            elif result.reason == speechsdk.ResultReason.Canceled:
+                cancellation = result.cancellation_details
+                err = f"Azure TTS canceled: {cancellation.reason} - {cancellation.error_details}"
+                raise RuntimeError(err)
+            else:
+                raise RuntimeError(f"Azure TTS failed: {result.reason}")
+
+        await loop.run_in_executor(None, _synthesize)
+        logger.info("tts.synthesized_azure_to_file", path=str(output_path))
+        return output_path
 
     async def _speak_elevenlabs(self, text: str) -> None:
         """ElevenLabs TTS implementation."""
@@ -146,12 +209,12 @@ class TextToSpeech:
                         error_msg = error_data.get("detail", {}).get("message", error_msg) if isinstance(error_data.get("detail"), dict) else str(error_data)
                     except Exception:
                         pass
-                        
+
                     if e.response.status_code in (401, 429) and attempt < self._settings.elevenlabs.max_retries - 1:
                         logger.debug("tts.elevenlabs.rotator", status=e.response.status_code, error=error_msg, msg="Rotating key")
                         self._elevenlabs_rotator.rotate()
                         continue
-                        
+
                     logger.error("tts.elevenlabs.error", status=e.response.status_code, error=error_msg)
                     raise e
 
@@ -206,24 +269,38 @@ class TextToSpeech:
         text: str,
         output_path: str | Path,
     ) -> Path:
-        """Synthesize speech to an audio file (MP3) without playing."""
+        """Synthesize speech to an audio file (MP3) without playing, using multi-tier fallback."""
+        import os
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        try:
-            provider = self._settings.tts_provider
-            if provider == "elevenlabs":
-                return await self._synthesize_elevenlabs_to_file(text, output_path)
-            elif provider == "edge_tts":
-                return await self._synthesize_edge_tts_to_file(text, output_path)
-            else:
-                raise ValueError(f"Unknown TTS provider: {provider}")
-        except httpx.HTTPStatusError as exc:
-            logger.warning("tts.elevenlabs_failed_using_edge", error=str(exc), response=exc.response.text, msg="ElevenLabs failed, falling back to Edge TTS")
-            return await self._synthesize_edge_tts_to_file(text, output_path)
-        except Exception as exc:
-            logger.warning("tts.elevenlabs_failed_using_edge", error=str(exc), msg="ElevenLabs failed, falling back to Edge TTS")
-            return await self._synthesize_edge_tts_to_file(text, output_path)
+        preferred = self._settings.tts_provider or "azure"
+        providers = [preferred]
+        for p in ["azure", "edge_tts", "elevenlabs"]:
+            if p not in providers:
+                providers.append(p)
+
+        last_error = None
+        for provider in providers:
+            try:
+                has_azure = bool(
+                    os.environ.get("AZURE_SPEECH_KEY")
+                    or (hasattr(self._settings, "azure_speech") and self._settings.azure_speech.key)
+                )
+                if provider == "azure" and has_azure:
+                    return await self._synthesize_azure_to_file(text, output_path)
+                elif provider == "edge_tts":
+                    return await self._synthesize_edge_tts_to_file(text, output_path)
+                elif provider == "elevenlabs" and self._elevenlabs_rotator.keys:
+                    return await self._synthesize_elevenlabs_to_file(text, output_path)
+            except Exception as exc:
+                logger.warning("tts.provider_failed", provider=provider, error=str(exc))
+                last_error = exc
+                continue
+
+        if last_error:
+            raise last_error
+        return output_path
 
     async def _synthesize_elevenlabs_to_file(self, text: str, output_path: Path) -> Path:
         """Synthesize using ElevenLabs."""
@@ -264,12 +341,12 @@ class TextToSpeech:
                     error_msg = error_data.get("detail", {}).get("message", error_msg) if isinstance(error_data.get("detail"), dict) else str(error_data)
                 except Exception:
                     pass
-                    
+
                 if e.response.status_code in (401, 429) and attempt < self._settings.elevenlabs.max_retries - 1:
                     logger.debug("tts.elevenlabs.rotator", status=e.response.status_code, error=error_msg, msg="Rotating key")
                     self._elevenlabs_rotator.rotate()
                     continue
-                    
+
                 logger.error("tts.elevenlabs.error", status=e.response.status_code, error=error_msg)
                 raise e
 
