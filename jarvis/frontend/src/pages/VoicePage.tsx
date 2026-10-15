@@ -49,9 +49,22 @@ export function VoicePage() {
 
   // Audio playback ref
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
-  const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const processUserSpeechRef = useRef<(text: string) => Promise<void>>(async () => {});
+  const isProcessingSpeechRef = useRef(false);
 
-  // Real-time voice recorder hook
+  const submitVoiceSpeech = useCallback(async (text: string) => {
+    if (isProcessingSpeechRef.current) return;
+    if (text && text.trim()) {
+      isProcessingSpeechRef.current = true;
+      try {
+        await processUserSpeechRef.current(text.trim());
+      } finally {
+        isProcessingSpeechRef.current = false;
+      }
+    }
+  }, []);
+
+  // Real-time voice recorder hook with automatic pause/stop detection
   const {
     isRecording,
     transcript,
@@ -63,16 +76,10 @@ export function VoicePage() {
     cancelRecording,
     error: micError,
   } = useVoiceRecorder({
-    onTranscription: (text: string, isFinal?: boolean) => {
-      // In hands-free mode, reset silence timer whenever new speech arrives
-      if (handsFreeMode && isRecording && text.trim()) {
-        if (silenceTimerRef.current) {
-          clearTimeout(silenceTimerRef.current);
-        }
-        silenceTimerRef.current = setTimeout(() => {
-          handleStopAndProcess();
-        }, 1800);
-      }
+    autoStopOnSilence: true,
+    silenceDurationMs: 1400,
+    onSilence: (finalText: string) => {
+      submitVoiceSpeech(finalText);
     },
   });
 
@@ -255,23 +262,22 @@ export function VoicePage() {
     }
   }, [speakText]);
 
+  processUserSpeechRef.current = processUserSpeech;
+
   // Stop recording and process
   const handleStopAndProcess = useCallback(async () => {
-    if (silenceTimerRef.current) {
-      clearTimeout(silenceTimerRef.current);
-      silenceTimerRef.current = null;
-    }
     const finalSpoken = await stopRecording();
     if (finalSpoken && finalSpoken.trim()) {
-      await processUserSpeech(finalSpoken);
+      await submitVoiceSpeech(finalSpoken);
     }
-  }, [stopRecording, processUserSpeech]);
+  }, [stopRecording, submitVoiceSpeech]);
 
   // Toggle record button
   const handleToggleRecord = useCallback(() => {
     if (isRecording) {
       handleStopAndProcess();
     } else {
+      isProcessingSpeechRef.current = false;
       stopJarvisSpeech();
       startRecording();
     }
@@ -486,6 +492,13 @@ export function VoicePage() {
                   >
                     Interrupt
                   </button>
+                </div>
+              ) : isRecording ? (
+                <div className="flex items-center justify-between text-xs text-amber-300">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                    <span>{fullTranscript ? `"${fullTranscript}"` : 'Listening... pause or stop talking to finish'}</span>
+                  </div>
                 </div>
               ) : fullTranscript ? (
                 <div className="text-xs text-zinc-300">

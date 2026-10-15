@@ -66,12 +66,13 @@ class AudioRecorder:
         max_initial_silent_chunks = int(10.0 * chunks_per_second) # 10s wait for speech to start
         max_chunks = int(max_duration * chunks_per_second)
         total_chunks = 0
+        speech_chunks = 0
         has_spoken = False
 
         logger.debug("audio.recording_started")
 
         def callback(indata, frames, time_info, status):
-            nonlocal silent_chunks, total_chunks, has_spoken
+            nonlocal silent_chunks, total_chunks, has_spoken, speech_chunks
             if status:
                 logger.warning("audio.status", status=str(status))
 
@@ -85,9 +86,12 @@ class AudioRecorder:
 
             if volume < silence_threshold:
                 silent_chunks += 1
+                speech_chunks = 0
             else:
                 silent_chunks = 0
-                has_spoken = True # User started speaking
+                speech_chunks += 1
+                if speech_chunks >= 2 or volume > (silence_threshold * 2):
+                    has_spoken = True  # User started speaking
 
         stream = sd.InputStream(
             samplerate=self._sample_rate,

@@ -128,19 +128,36 @@ export function ConversationInput() {
 
   const initialTextRef = useRef('');
   const wasVoiceInputRef = useRef(false);
+  const handleSendRef = useRef(handleSend);
+  handleSendRef.current = handleSend;
+  const isSubmittingVoiceRef = useRef(false);
 
-  const { isRecording, startRecording, stopRecording, error } = useVoiceRecorder((text: string) => {
-    const finalVal = (initialTextRef.current ? initialTextRef.current + ' ' : '') + text;
-    setValue(finalVal);
-    wasVoiceInputRef.current = true;
-    
-    if (shouldAutoSend.current) {
-      shouldAutoSend.current = false;
-      if (finalVal.trim() || selectedFiles.length > 0) {
-        handleSend(finalVal, true);
-        wasVoiceInputRef.current = false;
-      }
+  const submitVoiceInput = useCallback((finalText: string) => {
+    if (isSubmittingVoiceRef.current) return;
+    const fullVal = (initialTextRef.current ? initialTextRef.current + ' ' : '') + finalText;
+    const textToSend = fullVal.trim() || value.trim();
+    if (textToSend || selectedFiles.length > 0) {
+      isSubmittingVoiceRef.current = true;
+      setValue(textToSend);
+      handleSendRef.current(textToSend, true);
+      wasVoiceInputRef.current = false;
+      setTimeout(() => {
+        isSubmittingVoiceRef.current = false;
+      }, 500);
     }
+  }, [value, selectedFiles.length]);
+
+  const { isRecording, startRecording, stopRecording, error } = useVoiceRecorder({
+    autoStopOnSilence: true,
+    silenceDurationMs: 1400,
+    onTranscription: (text: string) => {
+      const finalVal = (initialTextRef.current ? initialTextRef.current + ' ' : '') + text;
+      setValue(finalVal);
+      wasVoiceInputRef.current = true;
+    },
+    onSilence: (finalText: string) => {
+      submitVoiceInput(finalText);
+    },
   });
 
   useEffect(() => {
@@ -170,25 +187,15 @@ export function ConversationInput() {
 
   const toggleRecording = async () => {
     if (isRecording) {
-      shouldAutoSend.current = true;
       wasVoiceInputRef.current = true;
-      await stopRecording();
+      const spoken = await stopRecording();
+      submitVoiceInput(spoken);
     } else {
-      shouldAutoSend.current = false;
       initialTextRef.current = value;
+      isSubmittingVoiceRef.current = false;
       await startRecording();
     }
   };
-
-  useEffect(() => {
-    if (!isRecording && shouldAutoSend.current) {
-      shouldAutoSend.current = false;
-      if (value.trim() || selectedFiles.length > 0) {
-        handleSend(value, true);
-        wasVoiceInputRef.current = false;
-      }
-    }
-  }, [isRecording, value, selectedFiles.length, handleSend]);
   const isGenerating = aiState === 'thinking' || aiState === 'executing' || aiState === 'listening';
 
   return (
@@ -255,7 +262,7 @@ export function ConversationInput() {
                 wasVoiceInputRef.current = false;
               }
             }}
-            placeholder={isRecording ? "Listening..." : (isGenerating ? "Processing instruction..." : "Ask Jarvis anything...")}
+            placeholder={isRecording ? "Listening... (pause to send)" : (isGenerating ? "Processing instruction..." : "Ask Jarvis anything...")}
             disabled={isGenerating || isRecording}
             className="flex-1 bg-transparent border-none outline-none text-white placeholder-zinc-500 px-2 font-medium tracking-wide disabled:opacity-50"
           />
