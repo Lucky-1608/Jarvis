@@ -38,6 +38,7 @@ from jarvis.tools.builtin.mobile_tools import get_mobile_tools
 from jarvis.tools.builtin.obsidian_tools import get_obsidian_tools
 from jarvis.tools.builtin.web_tools import get_web_tools
 from jarvis.tools.registry import ToolRegistry
+from jarvis.utils.formatting import convert_tables_to_readable_format
 from jarvis.verification.verifier import Verifier
 from jarvis.vision.vision_tools import get_vision_tools
 
@@ -488,14 +489,17 @@ class JarvisBrain:
         if not verification["valid"]:
             logger.warning("brain.response_verification_issues", issues=verification["issues"])
 
+        # Convert any markdown tables to clean, readable bullet points
+        final_content = convert_tables_to_readable_format(ai_response.content)
+
         # 6. Store in memory
-        self._memory.add_to_conversation("assistant", ai_response.content)
+        self._memory.add_to_conversation("assistant", final_content)
 
         # Store significant interactions in long-term memory
         if len(user_input) > 20:  # Skip trivial inputs
             try:
                 await self._memory.store(
-                    content=f"User: {user_input}\nJarvis: {ai_response.content[:500]}",
+                    content=f"User: {user_input}\nJarvis: {final_content[:500]}",
                     memory_type=MemoryType.CONVERSATION,
                     metadata={"type": "interaction"},
                     importance=0.3,
@@ -507,7 +511,7 @@ class JarvisBrain:
         elapsed = (time.perf_counter() - start) * 1000
 
         response = JarvisResponse(
-            content=ai_response.content,
+            content=final_content,
             plan=plan_dict,
             tool_results=tool_results,
             provider=ai_response.provider,

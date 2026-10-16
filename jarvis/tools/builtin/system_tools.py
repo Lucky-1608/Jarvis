@@ -154,6 +154,8 @@ class OpenAppTool(Tool):
         "edge browser": "msedge.exe",
         "ms edge": "msedge.exe",
         "brave": "brave.exe",
+        "barve": "brave.exe",
+        "brave browser": "brave.exe",
         "notepad": "notepad.exe",
         "calculator": "calc.exe",
         "calc": "calc.exe",
@@ -376,6 +378,21 @@ class OpenAppTool(Tool):
     async def execute(self, **params: Any) -> ToolResult:
         app_name_raw = params.get("app_name", "")
         app_name = str(app_name_raw).strip().lower() if isinstance(app_name_raw, str) else ""
+
+        # Normalize common application aliases and typos
+        app_aliases = {
+            "barve": "brave",
+            "brave browser": "brave",
+            "chorme": "chrome",
+            "google chrome": "chrome",
+            "msedge": "edge",
+            "microsoft edge": "edge",
+            "ms edge": "edge",
+            "edge browser": "edge",
+            "yt": "youtube",
+            "yt music": "youtube music",
+        }
+        app_name = app_aliases.get(app_name, app_name)
         
         target_url_raw = params.get("target_url", "")
         target_url = str(target_url_raw).strip() if isinstance(target_url_raw, str) else ""

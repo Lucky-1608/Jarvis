@@ -96,8 +96,82 @@ export class CompanionService {
           // We are on Mobile (Android/iOS)
           if (action === 'open_app') {
             try {
-              const res = await DeviceHands.launchApp({ name: params.app_name });
+              let res: { success: boolean; message?: string; error?: string };
+              try {
+                res = await DeviceHands.launchApp({ name: params.app_name });
+              } catch (pluginErr: any) {
+                const errMsg = pluginErr?.message || String(pluginErr);
+                if (errMsg.includes('not implemented') || errMsg.includes('launchApp')) {
+                  console.log('[Companion] DeviceHands.launchApp not implemented, falling back to performAction');
+                  const actionRes = await DeviceHands.performAction({ action: 'open_app', target: params.app_name });
+                  res = {
+                    success: actionRes.success,
+                    message: actionRes.message || (actionRes.success ? `Opened app: ${params.app_name}` : `Failed to open ${params.app_name}`)
+                  };
+                } else {
+                  throw pluginErr;
+                }
+              }
               result = { status: res.success ? 'success' : 'error', output: res.message || res.error || 'Launched app.' };
+            } catch (err: any) {
+              result = { status: 'error', error: err.message || String(err) };
+            }
+          } else if (action === 'tap') {
+            try {
+              const res = await DeviceHands.performAction({
+                action: 'tap',
+                target: params.target || '',
+                x: params.x,
+                y: params.y
+              });
+              result = { status: res.success ? 'success' : 'error', output: res.message || 'Tapped element.' };
+            } catch (err: any) {
+              result = { status: 'error', error: err.message || String(err) };
+            }
+          } else if (action === 'scroll') {
+            try {
+              const res = await DeviceHands.performAction({
+                action: 'scroll',
+                target: params.direction || 'down'
+              });
+              result = { status: res.success ? 'success' : 'error', output: res.message || 'Scrolled.' };
+            } catch (err: any) {
+              result = { status: 'error', error: err.message || String(err) };
+            }
+          } else if (action === 'read_screen') {
+            try {
+              if (DeviceHands.readScreen) {
+                const screenData = await DeviceHands.readScreen();
+                result = { status: 'success', output: screenData.elements };
+              } else {
+                result = { status: 'error', error: 'readScreen not supported by this build.' };
+              }
+            } catch (err: any) {
+              result = { status: 'error', error: err.message || String(err) };
+            }
+          } else if (action === 'get_battery') {
+            try {
+              if ('getBattery' in navigator) {
+                const battery: any = await (navigator as any).getBattery();
+                result = {
+                  status: 'success',
+                  output: `Battery level: ${Math.round(battery.level * 100)}%, Charging: ${battery.charging}`
+                };
+              } else {
+                result = { status: 'success', output: 'Battery status unavailable.' };
+              }
+            } catch (err: any) {
+              result = { status: 'error', error: err.message || String(err) };
+            }
+          } else if (action === 'get_location') {
+            try {
+              const pos: GeolocationPosition = await new Promise((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 });
+              });
+              result = {
+                status: 'success',
+                output: `Latitude: ${pos.coords.latitude}, Longitude: ${pos.coords.longitude}, Accuracy: ${pos.coords.accuracy}m`
+              };
             } catch (err: any) {
               result = { status: 'error', error: err.message || String(err) };
             }

@@ -71,13 +71,21 @@ JARVIS_SYSTEM_PROMPT = """You are Jarvis, an advanced AI Operating System assist
 - NATIVE ATTACHMENTS: If the user directly attaches an image or document to the chat, analyze and process it natively using the provided content. DO NOT ask the user for a local file path or try to use a tool to open it.
 
 ## Response Format
-- Communicate naturally and conversationally.
-- DO NOT output any JSON format or raw tool call strings in your responses.
-- Use clean, standard markdown for structured responses (tables, lists, headers), but do not wrap your entire response in code blocks.
-- Avoid using non-standard unicode characters (e.g. non-breaking hyphens, narrow no-break spaces) that might render poorly; use regular spaces and hyphens instead.
-- Format information in an easy-to-read, clean, and well-structured layout.
-- If you don't know something, or if the user's speech is garbled, just say so gracefully.
-- Keep responses focused and actionable."""
+- Communicate naturally, concisely, and conversationally in clean, human-friendly text.
+- STRICTLY DO NOT USE MARKDOWN TABLES (e.g., `| Col 1 | Col 2 |` or `|---|---|`). Messaging apps
+  (WhatsApp, Telegram) and mobile UIs cannot render tables cleanly, resulting in broken vertical
+  bars and ugly text wrapping.
+- NEVER format information into ascii or markdown grid tables. Instead, ALWAYS format structured
+  data using clean bullet points, bold key-value pairs, or numbered lists:
+  • **Field/Item Name:** Description or details
+  • **Another Field:** Value
+- Use clean headings (e.g., `### Summary`), bullet points (`•` or `-`), and clean line breaks.
+- DO NOT output any raw JSON, tool call strings, or unnecessary code blocks.
+- Avoid using non-standard unicode characters (e.g. non-breaking hyphens, narrow no-break spaces);
+  use regular spaces and hyphens instead.
+- Format information in an easy-to-read, clean layout that looks great on mobile chat screens.
+- If you don't know something, or if the user's speech/input is unclear, say so gracefully.
+- Keep responses focused, readable, and actionable."""
 
 
 class ContextManager:

@@ -45,6 +45,143 @@ async function sendStatus(status, data = null, retries = 15) {
     }
 }
 
+/**
+ * Converts markdown tables to clean, readable bullet points for chat
+ */
+function convertTablesToReadableFormat(text) {
+    if (!text || typeof text !== 'string' || !text.includes('|')) return text;
+
+    const lines = text.split('\n');
+    const outputLines = [];
+    let i = 0;
+
+    while (i < lines.length) {
+        const line = lines[i];
+        const stripped = line.trim();
+
+        if (
+            stripped.startsWith('|') &&
+            stripped.endsWith('|') &&
+            i + 1 < lines.length &&
+            /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$/.test(lines[i + 1].trim())
+        ) {
+            const rawHeaders = stripped.replace(/^\||\|$/g, '').split('|').map(c => c.trim().replace(/^\*+|\*+$/g, ''));
+            i += 2; // Skip header and separator
+
+            const tableRows = [];
+            while (i < lines.length) {
+                const rowLine = lines[i].trim();
+                if (!rowLine.startsWith('|') || !rowLine.includes('|')) break;
+                const rawCells = rowLine.replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+                tableRows.push(rawCells);
+                i += 1;
+            }
+
+            const formattedBullets = [];
+            for (const cells of tableRows) {
+                const cleanedCells = cells.map(cell => cell.replace(/<\s*br\s*\/?>/gi, '\n    ').trim());
+                if (cleanedCells.length >= 2) {
+                    const cleanK = cleanedCells[0].replace(/^\*+|\*+$/g, '').trim();
+                    const v = cleanedCells[1];
+                    if (cleanedCells.length === 2) {
+                        if (v.includes('\n')) {
+                            formattedBullets.push(`• **${cleanK}:**\n    ${v}`);
+                        } else {
+                            formattedBullets.push(`• **${cleanK}:** ${v}`);
+                        }
+                    } else {
+                        const restParts = [];
+                        for (let j = 1; j < cleanedCells.length; j++) {
+                            const h = rawHeaders[j] || `Col ${j + 1}`;
+                            if (cleanedCells[j]) restParts.push(`*${h}*: ${cleanedCells[j]}`);
+                        }
+                        formattedBullets.push(`• **${cleanK}** — ${restParts.join(' | ')}`);
+                    }
+                } else if (cleanedCells.length === 1 && cleanedCells[0]) {
+                    formattedBullets.push(`• ${cleanedCells[0]}`);
+                }
+            }
+
+            if (formattedBullets.length > 0) {
+                outputLines.push(formattedBullets.join('\n'));
+            }
+            continue;
+        }
+
+        outputLines.push(line);
+        i += 1;
+    }
+
+    return outputLines.join('\n');
+}
+
+/**
+ * Splits text into chunks safe for Telegram (limit is 4096, using 4000 for safety margin)
+ */
+function chunkMessage(text, maxLength = 4000) {
+    if (!text || typeof text !== 'string') return [];
+    if (text.length <= maxLength) return [text];
+
+    const chunks = [];
+    let remaining = text;
+
+    while (remaining.length > maxLength) {
+        let splitIdx = -1;
+
+        // Try to split at paragraph boundary (\n\n)
+        const paragraphIdx = remaining.lastIndexOf('\n\n', maxLength);
+        if (paragraphIdx > maxLength * 0.5) {
+            splitIdx = paragraphIdx + 2;
+        } else {
+            // Try single newline (\n)
+            const lineIdx = remaining.lastIndexOf('\n', maxLength);
+            if (lineIdx > maxLength * 0.5) {
+                splitIdx = lineIdx + 1;
+            } else {
+                // Try space
+                const spaceIdx = remaining.lastIndexOf(' ', maxLength);
+                if (spaceIdx > maxLength * 0.5) {
+                    splitIdx = spaceIdx + 1;
+                } else {
+                    // Hard cut if no clean break found
+                    splitIdx = maxLength;
+                }
+            }
+        }
+
+        const chunk = remaining.substring(0, splitIdx).trim();
+        if (chunk) chunks.push(chunk);
+        remaining = remaining.substring(splitIdx).trim();
+    }
+
+    if (remaining.length > 0) {
+        chunks.push(remaining);
+    }
+
+    return chunks;
+}
+
+/**
+ * Sends a message in sequential chunks to avoid Telegram's 4096 character limit
+ */
+async function sendTelegramChunks(bot, chatId, text, baseOptions = {}) {
+    const chunks = chunkMessage(text, 4000);
+    if (chunks.length === 0) return;
+
+    for (let i = 0; i < chunks.length; i++) {
+        const options = { ...baseOptions };
+        // Only quote the user message on the first chunk
+        if (i > 0 && options.reply_to_message_id) {
+            delete options.reply_to_message_id;
+        }
+        await bot.sendMessage(chatId, chunks[i], options);
+        // Small delay between chunks to preserve delivery order and respect rate limits
+        if (i < chunks.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 300));
+        }
+    }
+}
+
 async function connectToTelegram() {
     console.log('[Bridge] Starting Jarvis Telegram Bridge...');
 
@@ -195,18 +332,31 @@ async function connectToTelegram() {
                 reply = "⚠️ Jarvis completed processing, but no text response was produced.";
             }
 
-            // Send reply back via Telegram as plain text
-            await bot.sendMessage(chatId, reply, {
-                reply_to_message_id: msg.message_id,
-                parse_mode: undefined
-            });
-            console.log(`[Jarvis] ${reply}`);
+            reply = convertTablesToReadableFormat(reply);
 
         } catch (error) {
             console.error("Error communicating with Jarvis API:", error.message);
-            await bot.sendMessage(chatId, "⚠️ Jarvis Backend is unreachable.", {
-                reply_to_message_id: msg.message_id
-            });
+            try {
+                await bot.sendMessage(chatId, "⚠️ Jarvis Backend is unreachable.", {
+                    reply_to_message_id: msg.message_id
+                });
+            } catch (alertErr) {
+                console.error("Failed to send unreachable alert to Telegram:", alertErr.message);
+            }
+            return;
+        }
+
+        // Send reply back via Telegram as plain text with chunking
+        if (reply) {
+            try {
+                await sendTelegramChunks(bot, chatId, reply, {
+                    reply_to_message_id: msg.message_id,
+                    parse_mode: undefined
+                });
+                console.log(`[Jarvis] ${reply.substring(0, 80)}... (${reply.length} chars)`);
+            } catch (sendErr) {
+                console.error("Failed to send message to Telegram:", sendErr.message);
+            }
         }
     });
 }
@@ -243,8 +393,9 @@ const server = http.createServer((req, res) => {
                 }
 
                 const targetChatId = data.to || data.chat_id || OWNER_ID;
-                await globalBot.sendMessage(targetChatId, data.message);
-                console.log(`[Bridge] Sent message to ${targetChatId}: "${data.message.substring(0, 60)}"`);
+                const messageText = convertTablesToReadableFormat(data.message);
+                await sendTelegramChunks(globalBot, targetChatId, messageText);
+                console.log(`[Bridge] Sent message to ${targetChatId}: "${messageText.substring(0, 60)}"`);
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ status: 'ok', recipient: targetChatId }));
             } catch (err) {

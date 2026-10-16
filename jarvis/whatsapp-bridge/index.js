@@ -56,7 +56,7 @@ const messageStore = new Map();
 function cacheMessage(keyId, message) {
     if (!keyId || !message) return;
     messageStore.set(keyId, message);
-    if (messageStore.size > 500) {
+    if (messageStore.size > 2000) {
         const oldest = messageStore.keys().next().value;
         messageStore.delete(oldest);
     }
@@ -125,6 +125,156 @@ async function sendStatus(status, data = null, retries = 15) {
             if (i < retries - 1) {
                 await new Promise(resolve => setTimeout(resolve, 2000));
             }
+        }
+    }
+}
+
+/**
+ * Converts markdown tables to clean, readable bullet points for chat
+ */
+function convertTablesToReadableFormat(text) {
+    if (!text || typeof text !== 'string' || !text.includes('|')) return text;
+
+    const lines = text.split('\n');
+    const outputLines = [];
+    let i = 0;
+
+    while (i < lines.length) {
+        const line = lines[i];
+        const stripped = line.trim();
+
+        if (
+            stripped.startsWith('|') &&
+            stripped.endsWith('|') &&
+            i + 1 < lines.length &&
+            /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$/.test(lines[i + 1].trim())
+        ) {
+            const rawHeaders = stripped.replace(/^\||\|$/g, '').split('|').map(c => c.trim().replace(/^\*+|\*+$/g, ''));
+            i += 2; // Skip header and separator
+
+            const tableRows = [];
+            while (i < lines.length) {
+                const rowLine = lines[i].trim();
+                if (!rowLine.startsWith('|') || !rowLine.includes('|')) break;
+                const rawCells = rowLine.replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+                tableRows.push(rawCells);
+                i += 1;
+            }
+
+            const formattedBullets = [];
+            for (const cells of tableRows) {
+                const cleanedCells = cells.map(cell => cell.replace(/<\s*br\s*\/?>/gi, '\n    ').trim());
+                if (cleanedCells.length >= 2) {
+                    const cleanK = cleanedCells[0].replace(/^\*+|\*+$/g, '').trim();
+                    const v = cleanedCells[1];
+                    if (cleanedCells.length === 2) {
+                        if (v.includes('\n')) {
+                            formattedBullets.push(`• **${cleanK}:**\n    ${v}`);
+                        } else {
+                            formattedBullets.push(`• **${cleanK}:** ${v}`);
+                        }
+                    } else {
+                        const restParts = [];
+                        for (let j = 1; j < cleanedCells.length; j++) {
+                            const h = rawHeaders[j] || `Col ${j + 1}`;
+                            if (cleanedCells[j]) restParts.push(`*${h}*: ${cleanedCells[j]}`);
+                        }
+                        formattedBullets.push(`• **${cleanK}** — ${restParts.join(' | ')}`);
+                    }
+                } else if (cleanedCells.length === 1 && cleanedCells[0]) {
+                    formattedBullets.push(`• ${cleanedCells[0]}`);
+                }
+            }
+
+            if (formattedBullets.length > 0) {
+                outputLines.push(formattedBullets.join('\n'));
+            }
+            continue;
+        }
+
+        outputLines.push(line);
+        i += 1;
+    }
+
+    return outputLines.join('\n');
+}
+
+/**
+ * Splits text into chunks safe for WhatsApp (4000 characters per chunk)
+ */
+function chunkMessage(text, maxLength = 4000) {
+    if (!text || typeof text !== 'string') return [];
+    if (text.length <= maxLength) return [text];
+
+    const chunks = [];
+    let remaining = text;
+
+    while (remaining.length > maxLength) {
+        let splitIdx = -1;
+
+        const paragraphIdx = remaining.lastIndexOf('\n\n', maxLength);
+        if (paragraphIdx > maxLength * 0.5) {
+            splitIdx = paragraphIdx + 2;
+        } else {
+            const lineIdx = remaining.lastIndexOf('\n', maxLength);
+            if (lineIdx > maxLength * 0.5) {
+                splitIdx = lineIdx + 1;
+            } else {
+                const spaceIdx = remaining.lastIndexOf(' ', maxLength);
+                if (spaceIdx > maxLength * 0.5) {
+                    splitIdx = spaceIdx + 1;
+                } else {
+                    splitIdx = maxLength;
+                }
+            }
+        }
+
+        const chunk = remaining.substring(0, splitIdx).trim();
+        if (chunk) chunks.push(chunk);
+        remaining = remaining.substring(splitIdx).trim();
+    }
+
+    if (remaining.length > 0) {
+        chunks.push(remaining);
+    }
+
+    return chunks;
+}
+
+/**
+ * Sends a message in sequential chunks to avoid buffer drops or socket timeouts in Baileys
+ */
+async function sendWhatsAppChunks(sock, targetJid, text, quotedMsg = null) {
+    const chunks = chunkMessage(text, 4000);
+    if (chunks.length === 0) return;
+
+    // Safety: Never quote a fromMe message or self-chat message.
+    // Quoting fromMe stanzas across multi-device companion sessions corrupts the Signal ratchet
+    // and causes permanent "Waiting for this message" decryption failures.
+    const isFromMe = quotedMsg?.key?.fromMe;
+    const effectiveQuoted = isFromMe ? null : quotedMsg;
+
+    for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i];
+        const quoteOpt = (i === 0 && effectiveQuoted) ? { quoted: effectiveQuoted } : {};
+        try {
+            const sent = await sock.sendMessage(targetJid, { text: chunk }, quoteOpt);
+            if (sent?.key?.id && sent?.message) {
+                cacheMessage(sent.key.id, sent.message);
+            }
+        } catch (sendErr) {
+            console.warn(`[Bridge] Quoted send failed (${sendErr.message}), sending unquoted to ${targetJid}...`);
+            try {
+                const sent = await sock.sendMessage(targetJid, { text: chunk });
+                if (sent?.key?.id && sent?.message) {
+                    cacheMessage(sent.key.id, sent.message);
+                }
+            } catch (retryErr) {
+                console.error(`[Bridge] Failed to send reply chunk ${i + 1}/${chunks.length} to ${targetJid}:`, retryErr.message);
+            }
+        }
+        if (i < chunks.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 300));
         }
     }
 }
@@ -532,31 +682,20 @@ async function connectToWhatsApp() {
                 if (!reply.startsWith('[Jarvis]: ')) {
                     reply = `[Jarvis]: ${reply}`;
                 }
+
+                reply = convertTablesToReadableFormat(reply);
             } catch (error) {
                 console.error("Error communicating with Jarvis API:", error.message);
                 reply = "⚠️ Jarvis Backend is unreachable.";
             }
 
-            // Send reply back via WhatsApp
+            // Send reply back via WhatsApp with chunking
+            // In self-chat, NEVER quote the message: quoting a fromMe message across companion
+            // sessions causes Signal ratchet collisions and permanent "Waiting for this message" errors.
+            const quoteArg = (isSelfChat || msg.key?.fromMe) ? null : msg;
             if (reply && globalSock) {
-                try {
-                    const sent = await globalSock.sendMessage(replyTarget, { text: reply }, { quoted: msg });
-                    if (sent?.key?.id && sent?.message) {
-                        cacheMessage(sent.key.id, sent.message);
-                    }
-                    console.log(`[Jarvis] ${reply}`);
-                } catch (sendErr) {
-                    console.warn(`[Bridge] Quoted send failed (${sendErr.message}), sending unquoted to ${replyTarget}...`);
-                    try {
-                        const sent = await globalSock.sendMessage(replyTarget, { text: reply });
-                        if (sent?.key?.id && sent?.message) {
-                            cacheMessage(sent.key.id, sent.message);
-                        }
-                        console.log(`[Jarvis] ${reply}`);
-                    } catch (retryErr) {
-                        console.error(`[Bridge] Failed to send reply to ${replyTarget}:`, retryErr.message);
-                    }
-                }
+                await sendWhatsAppChunks(globalSock, replyTarget, reply, quoteArg);
+                console.log(`[Jarvis] ${reply.substring(0, 80)}... (${reply.length} chars)`);
             }
 
             if (globalSock) {
@@ -609,11 +748,9 @@ const server = http.createServer((req, res) => {
                     }
                 }
 
-                const sent = await globalSock.sendMessage(targetJid, { text: data.message });
-                if (sent?.key?.id && sent?.message) {
-                    cacheMessage(sent.key.id, sent.message);
-                }
-                console.log(`[Bridge] Sent message to ${targetJid}: "${data.message.substring(0, 60)}"`);
+                const messageToSend = convertTablesToReadableFormat(data.message);
+                await sendWhatsAppChunks(globalSock, targetJid, messageToSend);
+                console.log(`[Bridge] Sent message to ${targetJid}: "${messageToSend.substring(0, 60)}"`);
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ status: 'ok', recipient: targetJid }));
             } catch (err) {
