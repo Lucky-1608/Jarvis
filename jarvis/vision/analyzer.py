@@ -21,6 +21,7 @@ from typing import Any
 
 import structlog
 
+from jarvis.config.settings import get_settings
 from jarvis.events.bus import Event, EventTypes, get_event_bus
 from jarvis.providers.base import Message
 from jarvis.router.ai_router import AIRouter
@@ -93,9 +94,17 @@ class VisionAnalyzer:
     and parses structured JSON responses.
     """
 
-    def __init__(self, router: AIRouter | None = None) -> None:
+    def __init__(
+        self,
+        router: AIRouter | None = None,
+        model: str | None = None,
+        provider: str | None = None,
+    ) -> None:
         self._router = router
         self._bus = get_event_bus()
+        settings = get_settings()
+        self._model = model or getattr(settings, "vision_model", "gemma4:cloud")
+        self._provider = provider or getattr(settings, "vision_provider", "ollama_cloud")
 
     def _ensure_router(self) -> AIRouter:
         if self._router is None:
@@ -149,8 +158,8 @@ class VisionAnalyzer:
                 messages,
                 temperature=0.2,
                 max_tokens=2048,
-                provider="ollama",
-                model="qwen3.5:397b-cloud",
+                provider=self._provider,
+                model=self._model,
                 response_format={"type": "json_object"},
             )
 

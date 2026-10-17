@@ -183,6 +183,10 @@ class JarvisSettings(BaseSettings):
     ai_fallback_providers: str = "opencode,nvidia,groq,gemini"
     ai_tool_selector_enabled: bool = False
 
+    # --- Vision routing -----------------------------------------------------
+    vision_provider: str = "ollama_cloud"
+    vision_model: str = "gemma4:cloud"
+
     # --- Voice routing ------------------------------------------------------
     tts_provider: str = "azure"  # azure | edge_tts | elevenlabs
     stt_provider: str = "groq"  # groq | azure | elevenlabs

@@ -45,6 +45,40 @@ class OllamaCloudProvider(AIProvider):
             headers["Authorization"] = f"Bearer {key}"
         return headers
 
+    @classmethod
+    def _messages_to_dicts(cls, messages: list[Message]) -> list[dict[str, Any]]:
+        """Convert Message objects to Ollama dicts, extracting images if present."""
+        result = []
+        for m in messages:
+            d: dict[str, Any] = {"role": m.role}
+            if isinstance(m.content, list):
+                text_parts: list[str] = []
+                images: list[str] = []
+                for part in m.content:
+                    if isinstance(part, dict):
+                        if part.get("type") == "text":
+                            text_parts.append(part.get("text", ""))
+                        elif part.get("type") == "image_url":
+                            url = part.get("image_url", {}).get("url", "")
+                            if "base64," in url:
+                                images.append(url.split("base64,")[1])
+                            else:
+                                images.append(url)
+                d["content"] = " ".join(text_parts)
+                if images:
+                    d["images"] = images
+            else:
+                d["content"] = m.content
+
+            if m.name:
+                d["name"] = m.name
+            if m.tool_calls:
+                d["tool_calls"] = m.tool_calls
+            if m.tool_call_id:
+                d["tool_call_id"] = m.tool_call_id
+            result.append(d)
+        return result
+
     # -- Chat (non-streaming) -----------------------------------------------
 
     async def chat(
@@ -78,7 +112,9 @@ class OllamaCloudProvider(AIProvider):
         last_error: Exception | None = None
         for attempt in range(1, self._max_retries + 1):
             try:
-                async with httpx.AsyncClient(timeout=self._timeout, headers=self._get_headers()) as client:
+                async with httpx.AsyncClient(
+                    timeout=self._timeout, headers=self._get_headers()
+                ) as client:
                     resp = await client.post(
                         f"{self._base_url}/api/chat",
                         json=payload,
