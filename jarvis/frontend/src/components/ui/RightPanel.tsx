@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useJarvisStore } from '../../store/jarvisStore';
-import { api } from '../../services/api';
+import { api } from '../../lib/api';
 import { Cpu, Database, Network, Server, CheckCircle2, CircleDashed, Clock, ChevronRight, Search, FileText, Code2, Smartphone, WifiOff, Wifi, Send, RefreshCw, KeyRound } from 'lucide-react';
 
 const ToolIcon = ({ name }: { name: string }) => {
