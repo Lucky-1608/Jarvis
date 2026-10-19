@@ -43,6 +43,15 @@ function isCurrentInstance() {
     return true;
 }
 
+const authFolder = process.env.WHATSAPP_AUTH_DIR
+    ? process.env.WHATSAPP_AUTH_DIR
+    : process.env.WEBSITE_SITE_NAME 
+        ? path.join(process.env.HOME || process.env.USERPROFILE || '/home', 'site', 'auth_info_baileys')
+        : path.join(__dirname, 'auth_info_baileys');
+
+const credsPath = path.join(authFolder, 'creds.json');
+const credsBakPath = path.join(authFolder, 'creds.json.bak');
+
 let globalSock = null;
 let isConnected = false;
 
@@ -282,18 +291,11 @@ async function sendWhatsAppChunks(sock, targetJid, text, quotedMsg = null) {
 async function connectToWhatsApp() {
     const baileys = await import('@whiskeysockets/baileys');
     const makeWASocket = baileys.default || baileys.makeWASocket;
-    const { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, downloadMediaMessage, makeCacheableSignalKeyStore } = baileys;
+    const { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, downloadMediaMessage, makeCacheableSignalKeyStore, Browsers } = baileys;
 
-    const authFolder = process.env.WHATSAPP_AUTH_DIR
-        ? process.env.WHATSAPP_AUTH_DIR
-        : process.env.WEBSITE_SITE_NAME 
-            ? path.join(process.env.HOME || process.env.USERPROFILE || '/home', 'site', 'auth_info_baileys')
-            : path.join(__dirname, 'auth_info_baileys');
-
-    const credsPath = path.join(authFolder, 'creds.json');
-    const credsBakPath = path.join(authFolder, 'creds.json.bak');
-
-    // Self-healing credentials check with automatic backup & restore
+    // Self-healing credentials check:
+    // If authFolder exists but creds.json indicates it was never registered/completed,
+    // clear the unlinked/partial auth state so we don't present stale/rejected keys to WhatsApp!
     if (fs.existsSync(credsPath)) {
         try {
             const credsStr = fs.readFileSync(credsPath, 'utf8');
@@ -301,32 +303,52 @@ async function connectToWhatsApp() {
                 throw new Error("creds.json is empty");
             }
             const creds = JSON.parse(credsStr);
-            // Valid JSON — update backup copy
-            try { fs.writeFileSync(credsBakPath, credsStr, 'utf8'); } catch (_) {}
-
-            if (creds && creds.me && creds.account && creds.registered === false) {
-                console.log("Fixing corrupted creds.json (registered: false -> true)...");
-                creds.registered = true;
-                fs.writeFileSync(credsPath, JSON.stringify(creds, null, 2));
+            if (!creds || !creds.me || creds.registered !== true) {
+                console.log("[Bridge] Unlinked or incomplete session detected in authFolder. Clearing to generate fresh keys...");
+                try { fs.rmSync(authFolder, { recursive: true, force: true }); } catch (_) {}
+            } else {
+                // Valid JSON and registered — update backup copy
+                try { fs.writeFileSync(credsBakPath, credsStr, 'utf8'); } catch (_) {}
             }
         } catch (e) {
             console.error("Failed to parse creds.json during startup check:", e.message);
+            let restored = false;
             if (fs.existsSync(credsBakPath)) {
                 try {
                     const bakStr = fs.readFileSync(credsBakPath, 'utf8');
-                    JSON.parse(bakStr); // verify valid JSON
-                    console.log("Restoring valid creds.json from creds.json.bak...");
-                    fs.writeFileSync(credsPath, bakStr, 'utf8');
+                    const bakJson = JSON.parse(bakStr);
+                    if (bakJson?.me && bakJson?.registered === true) {
+                        console.log("Restoring valid registered creds.json from creds.json.bak...");
+                        fs.writeFileSync(credsPath, bakStr, 'utf8');
+                        restored = true;
+                    }
                 } catch (bakErr) {
                     console.error("Failed to restore from backup:", bakErr.message);
                 }
+            }
+            if (!restored) {
+                console.log("[Bridge] Clearing unrecoverable auth folder...");
+                try { fs.rmSync(authFolder, { recursive: true, force: true }); } catch (_) {}
             }
         }
     }
 
     const { state, saveCreds } = await useMultiFileAuthState(authFolder);
-    const { version, isLatest } = await fetchLatestBaileysVersion();
-    console.log(`[Bridge] Using WhatsApp Web v${version.join('.')}, isLatest: ${isLatest}`);
+    
+    // Resolve WhatsApp Web protocol version with modern fallback
+    let version = [2, 3000, 1043857760];
+    try {
+        const vData = await fetchLatestBaileysVersion();
+        if (vData?.version) {
+            version = vData.version;
+            console.log(`[Bridge] Using WhatsApp Web v${version.join('.')}, isLatest: ${vData.isLatest}`);
+        }
+    } catch (verErr) {
+        console.warn(`[Bridge] Could not fetch latest Baileys version (${verErr.message}), using fallback v${version.join('.')}`);
+    }
+
+    // Standard Desktop browser tuple to prevent WhatsApp flagging or rejecting client
+    const browserConfig = Browsers ? Browsers.macOS('Desktop') : ['Mac OS', 'Desktop', '14.4.1'];
 
     const sock = makeWASocket({
         version,
@@ -337,7 +359,7 @@ async function connectToWhatsApp() {
         msgRetryCounterCache,
         printQRInTerminal: false,
         logger: pino({ level: 'silent' }),
-        browser: ['Mac OS', 'Chrome', '121.0.0'],
+        browser: browserConfig,
         markOnlineOnConnect: false,
         syncFullHistory: false,
         generateHighQualityLinkPreview: false,
@@ -373,10 +395,32 @@ async function connectToWhatsApp() {
 
     sock.ev.on('creds.update', safeSaveCreds);
 
+    // Support Pairing Code linking when configured via env
+    const usePairingCode = process.env.WHATSAPP_USE_PAIRING_CODE === 'true' || process.env.WHATSAPP_AUTH_METHOD === 'pairing_code';
+    if (usePairingCode && !state.creds?.registered) {
+        const cleanPhone = OWNER_NUMBER.replace(/[^0-9]/g, '');
+        if (cleanPhone) {
+            setTimeout(async () => {
+                if (sock.authState?.creds?.registered) return;
+                try {
+                    console.log(`[Bridge] Requesting Pairing Code for phone: ${cleanPhone}...`);
+                    const code = await sock.requestPairingCode(cleanPhone);
+                    console.log("\n================ WHATSAPP PAIRING CODE ================");
+                    console.log(`🔑 PAIRING CODE: ${code}`);
+                    console.log("Open WhatsApp > Linked Devices > Link a Device > Link with phone number instead");
+                    console.log("=======================================================\n");
+                    await sendStatus('whatsapp.pairing_code', code);
+                } catch (pairErr) {
+                    console.error("[Bridge] Pairing code request failed:", pairErr.message);
+                }
+            }, 4000);
+        }
+    }
+
     sock.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect, qr } = update;
         
-        if (qr) {
+        if (qr && !usePairingCode) {
             console.log("Generating QR code to display in Jarvis Frontend...");
             qrcode.toDataURL(qr, async (err, url) => {
                 if (err) {
@@ -409,30 +453,43 @@ async function connectToWhatsApp() {
                 process.exit(0);
                 return;
             }
+
+            sendStatus('whatsapp.status', 'disconnected');
+
+            // If the connection closed while the device is NOT registered or returned 401 Unauthorized,
+            // wipe the unauthenticated authFolder. This prevents WhatsApp's server from receiving stale/rejected
+            // credentials on subsequent attempts, which triggers "Couldn't link device. Try again later".
+            const isRegistered = Boolean(state?.creds?.registered && state?.creds?.me);
+            if (statusCode === 401 || !isRegistered) {
+                if (statusCode === 401) {
+                    console.log("⚠️ 401 Unauthorized. WhatsApp session is invalidated.");
+                } else {
+                    console.log(`⚠️ Connection closed (${statusCode || errorMsg}) while not linked.`);
+                }
+                console.log(`Deleting ${authFolder} to ensure fresh keys for next QR / pairing attempt...`);
+                try {
+                    if (fs.existsSync(authFolder)) {
+                        fs.rmSync(authFolder, { recursive: true, force: true });
+                    }
+                } catch (rmErr) {
+                    console.error("Failed to delete authFolder:", rmErr.message);
+                }
+                
+                // Back off 8 seconds to prevent rapid reconnect rate-limiting by WhatsApp
+                console.log("Waiting 8s before generating a fresh session...");
+                setTimeout(() => { if (isCurrentInstance()) connectToWhatsApp(); }, 8000);
+                return;
+            }
             
             if (statusCode === DisconnectReason.loggedOut) {
                 console.log('Connection closed: Logged out.');
-            } else {
-                console.log(`Connection closed due to ${errorMsg}. Reconnecting: ${shouldReconnect}`);
-            }
-
-            sendStatus('whatsapp.status', 'disconnected');
-            
-            if (statusCode === 401) {
-                console.log("⚠️ 401 Unauthorized. The WhatsApp session is corrupted or unlinked.");
-                console.log(`Deleting ${authFolder} to force a fresh QR code scan...`);
-                if (fs.existsSync(authFolder)) {
-                    fs.rmSync(authFolder, { recursive: true, force: true });
-                }
-                console.log("Restarting connection...");
-                setTimeout(() => { if (isCurrentInstance()) connectToWhatsApp(); }, 3000);
-            } else if (statusCode === 408) {
-                console.log("⚠️ 408 Request Timeout. QR code scanning timed out.");
-                console.log("Restarting connection...");
-                setTimeout(() => { if (isCurrentInstance()) connectToWhatsApp(); }, 3000);
+                try {
+                    if (fs.existsSync(authFolder)) {
+                        fs.rmSync(authFolder, { recursive: true, force: true });
+                    }
+                } catch (_) {}
             } else if (isConflict) {
-                // If another session connected (e.g. during Azure swap), back off before retrying
-                console.log("[Bridge] WhatsApp session conflict detected. Backing off 8s before reconnect...");
+                console.log("[Bridge] WhatsApp session conflict detected. Backing off 10s before reconnect...");
                 setTimeout(() => {
                     if (isCurrentInstance()) {
                         connectToWhatsApp();
@@ -440,9 +497,10 @@ async function connectToWhatsApp() {
                         console.log("[Bridge] Stale container detected after conflict. Exiting.");
                         process.exit(0);
                     }
-                }, 8000);
+                }, 10000);
             } else if (shouldReconnect) {
-                setTimeout(() => { if (isCurrentInstance()) connectToWhatsApp(); }, 3000);
+                console.log(`Connection closed due to ${errorMsg}. Reconnecting in 6s...`);
+                setTimeout(() => { if (isCurrentInstance()) connectToWhatsApp(); }, 6000);
             }
         } else if (connection === 'open') {
             isConnected = true;
@@ -757,6 +815,60 @@ const server = http.createServer((req, res) => {
                 console.error("Push Notification Error:", err);
                 res.writeHead(500, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ error: err.message || 'Internal server error' }));
+            }
+        });
+    } else if (req.method === 'POST' && (url === '/reset' || url.startsWith('/reset'))) {
+        console.log("[Bridge] Manual session reset requested via HTTP /reset");
+        try {
+            if (globalSock) {
+                try { globalSock.end(undefined); } catch (_) {}
+                globalSock = null;
+            }
+            isConnected = false;
+            if (fs.existsSync(authFolder)) {
+                fs.rmSync(authFolder, { recursive: true, force: true });
+            }
+            sendStatus('whatsapp.status', 'disconnected');
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ status: 'ok', message: 'WhatsApp session reset, generating fresh QR...' }));
+            setTimeout(() => { if (isCurrentInstance()) connectToWhatsApp(); }, 2000);
+        } catch (err) {
+            console.error("[Bridge] Failed to reset session:", err.message);
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: err.message }));
+        }
+    } else if (req.method === 'POST' && (url === '/pairing-code' || url.startsWith('/pairing-code'))) {
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        req.on('end', async () => {
+            try {
+                let targetNumber = OWNER_NUMBER.replace(/[^0-9]/g, '');
+                if (body) {
+                    try {
+                        const parsed = JSON.parse(body);
+                        if (parsed.phone_number) targetNumber = String(parsed.phone_number).replace(/[^0-9]/g, '');
+                    } catch (_) {}
+                }
+                if (!targetNumber) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Valid phone number is required' }));
+                    return;
+                }
+                if (!globalSock || !globalSock.requestPairingCode) {
+                    res.writeHead(503, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'WhatsApp socket not ready yet' }));
+                    return;
+                }
+                console.log(`[Bridge] Generating pairing code on demand for: ${targetNumber}...`);
+                const code = await globalSock.requestPairingCode(targetNumber);
+                console.log(`[Bridge] Pairing code generated: ${code}`);
+                await sendStatus('whatsapp.pairing_code', code);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ status: 'ok', pairing_code: code }));
+            } catch (err) {
+                console.error("[Bridge] Error generating pairing code:", err);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: err.message }));
             }
         });
     } else {

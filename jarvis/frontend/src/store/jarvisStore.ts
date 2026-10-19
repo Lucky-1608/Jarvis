@@ -89,6 +89,7 @@ interface JarvisStore {
   
   whatsappStatus: 'disconnected' | 'waiting_qr' | 'connected';
   whatsappQr: string | null;
+  whatsappPairingCode: string | null;
   telegramStatus: 'disconnected' | 'connected';
 
   backendConnected: boolean;
@@ -153,6 +154,7 @@ export const useJarvisStore = create<JarvisStore>((set, get) => ({
 
   whatsappStatus: 'disconnected',
   whatsappQr: null,
+  whatsappPairingCode: null,
   telegramStatus: 'disconnected',
 
   backendConnected: false as boolean,
@@ -187,8 +189,13 @@ export const useJarvisStore = create<JarvisStore>((set, get) => ({
           set((state) => ({ systemStats: { ...state.systemStats, visionEngine: 100 } }));
         } else if (msg.type === 'whatsapp.qr') {
           set({ whatsappStatus: 'waiting_qr', whatsappQr: msg.data.payload });
+        } else if (msg.type === 'whatsapp.pairing_code') {
+          set({ whatsappStatus: 'waiting_qr', whatsappPairingCode: msg.data.payload });
         } else if (msg.type === 'whatsapp.status') {
-          set({ whatsappStatus: msg.data.payload });
+          set({ 
+            whatsappStatus: msg.data.payload,
+            ...(msg.data.payload === 'connected' ? { whatsappQr: null, whatsappPairingCode: null } : {})
+          });
         } else if (msg.type === 'telegram.status') {
           set({ telegramStatus: msg.data.payload });
         } else if (msg.type === 'hud.notification') {

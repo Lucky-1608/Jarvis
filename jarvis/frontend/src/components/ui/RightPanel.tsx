@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useJarvisStore } from '../../store/jarvisStore';
-import { Cpu, Database, Network, Server, CheckCircle2, CircleDashed, Clock, ChevronRight, Search, FileText, Code2, Smartphone, WifiOff, Wifi, Send } from 'lucide-react';
+import { api } from '../../services/api';
+import { Cpu, Database, Network, Server, CheckCircle2, CircleDashed, Clock, ChevronRight, Search, FileText, Code2, Smartphone, WifiOff, Wifi, Send, RefreshCw, KeyRound } from 'lucide-react';
 
 const ToolIcon = ({ name }: { name: string }) => {
   if (name.includes('Search')) return <Search size={14} className="text-blue-400" />;
@@ -10,7 +12,34 @@ const ToolIcon = ({ name }: { name: string }) => {
 };
 
 export function RightPanelContent({ className = '' }: { className?: string }) {
-  const { currentTask, systemStats, whatsappStatus, whatsappQr, telegramStatus, backendConnected } = useJarvisStore();
+  const { currentTask, systemStats, whatsappStatus, whatsappQr, whatsappPairingCode, telegramStatus, backendConnected } = useJarvisStore();
+  const [isResetting, setIsResetting] = useState(false);
+  const [isPairingLoading, setIsPairingLoading] = useState(false);
+
+  const handleResetWhatsApp = async () => {
+    setIsResetting(true);
+    try {
+      await api.post('/api/whatsapp/reset');
+    } catch (e) {
+      console.error('Failed to reset WhatsApp session:', e);
+    } finally {
+      setTimeout(() => setIsResetting(false), 2000);
+    }
+  };
+
+  const handleRequestPairingCode = async () => {
+    setIsPairingLoading(true);
+    try {
+      const res = await api.post<{ status: string; pairing_code?: string }>('/api/whatsapp/pairing-code');
+      if (res.ok && res.data?.pairing_code) {
+        useJarvisStore.setState({ whatsappPairingCode: res.data.pairing_code });
+      }
+    } catch (e) {
+      console.error('Failed to request pairing code:', e);
+    } finally {
+      setIsPairingLoading(false);
+    }
+  };
 
   return (
     <div className={`flex flex-col gap-8 ${className}`}>
@@ -146,12 +175,56 @@ export function RightPanelContent({ className = '' }: { className?: string }) {
             </div>
           </div>
           
-          {whatsappStatus === 'waiting_qr' && whatsappQr && (
+          {whatsappStatus === 'waiting_qr' && (
             <div className="flex flex-col items-center gap-2 mt-2 pb-2">
-              <div className="bg-white p-2 rounded-lg inline-block shadow-lg">
-                <img src={whatsappQr} alt="WhatsApp QR Code" className="w-32 h-32 object-contain" />
+              {whatsappQr ? (
+                <div className="bg-white p-2 rounded-lg inline-block shadow-lg">
+                  <img src={whatsappQr} alt="WhatsApp QR Code" className="w-32 h-32 object-contain" />
+                </div>
+              ) : (
+                <div className="w-32 h-32 rounded-lg border border-dashed border-zinc-700 flex flex-col items-center justify-center text-zinc-500 text-[10px] text-center p-2">
+                  <CircleDashed size={20} className="animate-spin mb-1 text-[var(--accent-cyan)]" />
+                  Generating QR...
+                </div>
+              )}
+
+              {whatsappPairingCode ? (
+                <div className="w-full bg-zinc-900/90 border border-[var(--accent-cyan)]/50 rounded-lg p-2.5 text-center mt-1">
+                  <div className="text-[10px] text-zinc-300 font-medium mb-1">WhatsApp Pairing Code</div>
+                  <div className="font-mono text-sm tracking-widest text-[var(--accent-cyan)] font-bold select-all bg-black/50 py-1 px-2 rounded border border-[var(--accent-cyan)]/30">
+                    {whatsappPairingCode}
+                  </div>
+                  <div className="text-[9px] text-zinc-400 mt-1">
+                    WhatsApp &gt; Linked Devices &gt; Link with phone number instead
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="flex items-center gap-2 mt-1">
+                <button
+                  onClick={handleResetWhatsApp}
+                  disabled={isResetting}
+                  className="text-[10px] px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 flex items-center gap-1.5 transition-colors border border-zinc-700"
+                  title="Clears stale session credentials on server and generates a fresh QR"
+                >
+                  <RefreshCw size={11} className={isResetting ? "animate-spin text-[var(--accent-cyan)]" : ""} />
+                  {isResetting ? "Resetting..." : "Reset Session"}
+                </button>
+
+                <button
+                  onClick={handleRequestPairingCode}
+                  disabled={isPairingLoading}
+                  className="text-[10px] px-2.5 py-1 rounded bg-[rgba(0,212,255,0.1)] hover:bg-[rgba(0,212,255,0.2)] text-[var(--accent-cyan)] flex items-center gap-1.5 transition-colors border border-[rgba(0,212,255,0.3)]"
+                  title="Link device with phone number instead of scanning QR"
+                >
+                  <KeyRound size={11} className={isPairingLoading ? "animate-spin" : ""} />
+                  {isPairingLoading ? "Generating..." : "Pairing Code"}
+                </button>
               </div>
-              <span className="text-[10px] text-zinc-400 text-center">Open WhatsApp on your phone<br/>and go to Linked Devices</span>
+
+              <span className="text-[9px] text-zinc-400 text-center leading-tight mt-0.5">
+                Scan QR or click <b>Pairing Code</b> to link by phone number.
+              </span>
             </div>
           )}
 

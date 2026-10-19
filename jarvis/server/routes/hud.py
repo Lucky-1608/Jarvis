@@ -28,6 +28,7 @@ async def hud_websocket(websocket: WebSocket):
     bus.subscribe(EventTypes.VISION_COMPLETED, _queue_event)
     bus.subscribe(EventTypes.TTS_STARTED, _queue_event)
     bus.subscribe("whatsapp.qr", _queue_event)
+    bus.subscribe("whatsapp.pairing_code", _queue_event)
     bus.subscribe("whatsapp.status", _queue_event)
     bus.subscribe("telegram.status", _queue_event)
 
@@ -39,14 +40,17 @@ async def hud_websocket(websocket: WebSocket):
         if history:
             await queue.put(history[0])
 
-    # Only replay QR if WhatsApp is not already connected
+    # Only replay QR or pairing code if WhatsApp is not already connected
     wa_status = bus.get_history(event_type="whatsapp.status", limit=1)
     is_wa_connected = wa_status and wa_status[0].data.get("payload") == "connected"
-    
+
     if not is_wa_connected:
         qr_history = bus.get_history(event_type="whatsapp.qr", limit=1)
         if qr_history:
             await queue.put(qr_history[0])
+        pair_history = bus.get_history(event_type="whatsapp.pairing_code", limit=1)
+        if pair_history:
+            await queue.put(pair_history[0])
 
     try:
         while True:
@@ -78,5 +82,6 @@ async def hud_websocket(websocket: WebSocket):
         bus.unsubscribe(EventTypes.VISION_COMPLETED, _queue_event)
         bus.unsubscribe(EventTypes.TTS_STARTED, _queue_event)
         bus.unsubscribe("whatsapp.qr", _queue_event)
+        bus.unsubscribe("whatsapp.pairing_code", _queue_event)
         bus.unsubscribe("whatsapp.status", _queue_event)
         bus.unsubscribe("telegram.status", _queue_event)

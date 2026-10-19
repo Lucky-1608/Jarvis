@@ -516,21 +516,34 @@ export function SettingsPage() {
                       <span className="px-2 py-1 text-xs font-medium bg-[rgba(34,197,94,0.1)] text-green-400 rounded-full">Connected</span>
                     )}
                   </div>
-                  <p className="text-sm text-[var(--text-muted)] mb-4">Chat with Jarvis via WhatsApp using Twilio API.</p>
+                  <p className="text-sm text-[var(--text-muted)] mb-4">Chat with Jarvis via WhatsApp using Baileys Web multi-device bridge.</p>
                 </div>
                 {integrations.whatsapp ? (
-                  <Button 
-                    variant="outline" 
-                    className="w-full text-red-400 border-red-900/30 hover:bg-red-900/10"
-                    onClick={async () => {
-                      if (window.confirm("Disconnect WhatsApp? This will remove your owner number.")) {
-                        await handleUpdatePlugin("whatsapp_owner_number", "");
-                        api.get('/api/settings/integrations').then(res => res.ok && setIntegrations(res.data));
-                      }
-                    }}
-                  >
-                    Disconnect
-                  </Button>
+                  <div className="flex flex-col gap-2">
+                    <Button 
+                      variant="outline" 
+                      className="w-full text-zinc-300 border-zinc-700 hover:bg-zinc-800"
+                      onClick={async () => {
+                        await api.post('/api/whatsapp/reset');
+                        alert("WhatsApp session credentials reset. Generating a fresh QR code...");
+                      }}
+                    >
+                      Reset Session &amp; Fresh QR
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      className="w-full text-red-400 border-red-900/30 hover:bg-red-900/10"
+                      onClick={async () => {
+                        if (window.confirm("Disconnect WhatsApp? This will remove your owner number.")) {
+                          await handleUpdatePlugin("whatsapp_owner_number", "");
+                          await api.post('/api/whatsapp/reset');
+                          api.get('/api/settings/integrations').then(res => res.ok && setIntegrations(res.data));
+                        }
+                      }}
+                    >
+                      Disconnect
+                    </Button>
+                  </div>
                 ) : (
                   <Button 
                     className="w-full bg-[#25D366] text-white hover:bg-[#20b858]"

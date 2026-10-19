@@ -1,13 +1,13 @@
 {
   "name": "whatsapp-bridge",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "WhatsApp bridge for Jarvis OS using Baileys",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "^6.7.9",
+    "@whiskeysockets/baileys": "^6.7.23",
     "axios": "^1.7.2",
     "dotenv": "^16.4.5",
     "pino": "^9.2.0",
