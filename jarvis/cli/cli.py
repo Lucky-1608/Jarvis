@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import asyncio
+from pathlib import Path
 
 import click
 from rich.console import Console
@@ -232,12 +233,45 @@ def serve(host: str, port: int, reload: bool):
     console.print(f"[green]Starting server on {host}:{port}[/green]")
     console.print(f"[dim]API docs: http://localhost:{port}/docs[/dim]\n")
 
+    run_kwargs: dict[str, object] = {
+        "host": host,
+        "port": port,
+        "reload": reload,
+        "log_level": "info",
+    }
+    if reload:
+        import jarvis
+        jarvis_dir = Path(jarvis.__file__).resolve().parent
+        run_kwargs["reload_dirs"] = [
+            str(jarvis_dir / "server"),
+            str(jarvis_dir / "brain"),
+            str(jarvis_dir / "router"),
+            str(jarvis_dir / "providers"),
+            str(jarvis_dir / "tools"),
+            str(jarvis_dir / "memory"),
+            str(jarvis_dir / "voice"),
+            str(jarvis_dir / "vision"),
+            str(jarvis_dir / "config"),
+            str(jarvis_dir / "team"),
+            str(jarvis_dir / "events"),
+            str(jarvis_dir / "notifications"),
+        ]
+        run_kwargs["reload_excludes"] = [
+            "*.json",
+            "*.json.bak",
+            "*.id",
+            "*.log",
+            "*auth_info_baileys*",
+            "*whatsapp-bridge*",
+            "*telegram-bridge*",
+            "*data*",
+            "*frontend*",
+            "*node_modules*",
+        ]
+
     uvicorn.run(
         "jarvis.server.app:app",
-        host=host,
-        port=port,
-        reload=reload,
-        log_level="info",
+        **run_kwargs,
     )
 
 

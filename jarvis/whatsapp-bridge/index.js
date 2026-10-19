@@ -54,6 +54,21 @@ const credsBakPath = path.join(authFolder, 'creds.json.bak');
 
 let globalSock = null;
 let isConnected = false;
+let reconnectTimeout = null;
+let lastEmittedQr = null;
+
+function scheduleReconnect(delayMs = 5000) {
+    if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+        reconnectTimeout = null;
+    }
+    reconnectTimeout = setTimeout(() => {
+        reconnectTimeout = null;
+        if (isCurrentInstance()) {
+            connectToWhatsApp();
+        }
+    }, delayMs);
+}
 
 // Debounce map: senderJid -> timestamp
 const userLastMessage = new Map();
@@ -289,13 +304,31 @@ async function sendWhatsAppChunks(sock, targetJid, text, quotedMsg = null) {
 }
 
 async function connectToWhatsApp() {
+    if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+        reconnectTimeout = null;
+    }
+
+    // Safely tear down existing socket and remove listeners before reconnecting
+    if (globalSock) {
+        try {
+            globalSock.ev.removeAllListeners();
+            if (globalSock.ws) {
+                globalSock.ws.close();
+            }
+            if (globalSock.end) {
+                globalSock.end(undefined);
+            }
+        } catch (_) {}
+        globalSock = null;
+    }
+
     const baileys = await import('@whiskeysockets/baileys');
     const makeWASocket = baileys.default || baileys.makeWASocket;
     const { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, downloadMediaMessage, makeCacheableSignalKeyStore, Browsers } = baileys;
 
     // Self-healing credentials check:
-    // If authFolder exists but creds.json indicates it was never registered/completed,
-    // clear the unlinked/partial auth state so we don't present stale/rejected keys to WhatsApp!
+    // Only attempt recovery or wipe if creds.json exists but is completely corrupt (unparseable or empty).
     if (fs.existsSync(credsPath)) {
         try {
             const credsStr = fs.readFileSync(credsPath, 'utf8');
@@ -303,31 +336,28 @@ async function connectToWhatsApp() {
                 throw new Error("creds.json is empty");
             }
             const creds = JSON.parse(credsStr);
-            if (!creds || !creds.me || creds.registered !== true) {
-                console.log("[Bridge] Unlinked or incomplete session detected in authFolder. Clearing to generate fresh keys...");
-                try { fs.rmSync(authFolder, { recursive: true, force: true }); } catch (_) {}
-            } else {
-                // Valid JSON and registered — update backup copy
+            if (creds?.me && creds?.registered === true) {
+                // Valid registered session — update backup copy
                 try { fs.writeFileSync(credsBakPath, credsStr, 'utf8'); } catch (_) {}
             }
         } catch (e) {
-            console.error("Failed to parse creds.json during startup check:", e.message);
+            console.error("[Bridge] Failed to parse creds.json during startup check:", e.message);
             let restored = false;
             if (fs.existsSync(credsBakPath)) {
                 try {
                     const bakStr = fs.readFileSync(credsBakPath, 'utf8');
                     const bakJson = JSON.parse(bakStr);
                     if (bakJson?.me && bakJson?.registered === true) {
-                        console.log("Restoring valid registered creds.json from creds.json.bak...");
+                        console.log("[Bridge] Restoring valid registered creds.json from creds.json.bak...");
                         fs.writeFileSync(credsPath, bakStr, 'utf8');
                         restored = true;
                     }
                 } catch (bakErr) {
-                    console.error("Failed to restore from backup:", bakErr.message);
+                    console.error("[Bridge] Failed to restore from backup:", bakErr.message);
                 }
             }
             if (!restored) {
-                console.log("[Bridge] Clearing unrecoverable auth folder...");
+                console.log("[Bridge] Clearing unrecoverable corrupt auth folder...");
                 try { fs.rmSync(authFolder, { recursive: true, force: true }); } catch (_) {}
             }
         }
@@ -347,8 +377,8 @@ async function connectToWhatsApp() {
         console.warn(`[Bridge] Could not fetch latest Baileys version (${verErr.message}), using fallback v${version.join('.')}`);
     }
 
-    // Standard Desktop browser tuple to prevent WhatsApp flagging or rejecting client
-    const browserConfig = Browsers ? Browsers.macOS('Desktop') : ['Mac OS', 'Desktop', '14.4.1'];
+    // Standard Desktop browser tuple (Chrome on Ubuntu) for smooth WhatsApp Web companion linking
+    const browserConfig = Browsers?.ubuntu ? Browsers.ubuntu('Chrome') : ['Ubuntu', 'Chrome', '22.04.4'];
 
     const sock = makeWASocket({
         version,
@@ -372,6 +402,7 @@ async function connectToWhatsApp() {
             return undefined;
         }
     });
+
     
     globalSock = sock; // Expose to HTTP server
 
@@ -383,8 +414,10 @@ async function connectToWhatsApp() {
                 const data = fs.readFileSync(credsPath, 'utf8');
                 if (data && data.length > 50) {
                     try {
-                        JSON.parse(data);
-                        fs.writeFileSync(credsBakPath, data, 'utf8');
+                        const parsed = JSON.parse(data);
+                        if (parsed?.me && parsed?.registered) {
+                            fs.writeFileSync(credsBakPath, data, 'utf8');
+                        }
                     } catch (_) {}
                 }
             }
@@ -421,23 +454,17 @@ async function connectToWhatsApp() {
         const { connection, lastDisconnect, qr } = update;
         
         if (qr && !usePairingCode) {
-            console.log("Generating QR code to display in Jarvis Frontend...");
-            qrcode.toDataURL(qr, async (err, url) => {
-                if (err) {
-                    console.error("Error generating QR code", err);
-                    return;
-                }
-                await sendStatus('whatsapp.qr', url);
-            });
-
-            // Output QR code directly in the terminal logs for easy scanning
-            qrcode.toString(qr, { type: 'terminal', small: true }, (err, terminalStr) => {
-                if (!err && terminalStr) {
-                    console.log("\n================ WHATSAPP QR CODE ================");
-                    console.log(terminalStr);
-                    console.log("===================================================\n");
-                }
-            });
+            if (qr !== lastEmittedQr) {
+                lastEmittedQr = qr;
+                console.log("[Bridge] QR code updated. Sending to Jarvis Frontend...");
+                qrcode.toDataURL(qr, async (err, url) => {
+                    if (err) {
+                        console.error("[Bridge] Error generating QR code data URL:", err.message);
+                        return;
+                    }
+                    await sendStatus('whatsapp.qr', url);
+                });
+            }
         }
         
         if (connection === 'close') {
@@ -456,17 +483,10 @@ async function connectToWhatsApp() {
 
             sendStatus('whatsapp.status', 'disconnected');
 
-            // If the connection closed while the device is NOT registered or returned 401 Unauthorized,
-            // wipe the unauthenticated authFolder. This prevents WhatsApp's server from receiving stale/rejected
-            // credentials on subsequent attempts, which triggers "Couldn't link device. Try again later".
-            const isRegistered = Boolean(state?.creds?.registered && state?.creds?.me);
-            if (statusCode === 401 || !isRegistered) {
-                if (statusCode === 401) {
-                    console.log("⚠️ 401 Unauthorized. WhatsApp session is invalidated.");
-                } else {
-                    console.log(`⚠️ Connection closed (${statusCode || errorMsg}) while not linked.`);
-                }
-                console.log(`Deleting ${authFolder} to ensure fresh keys for next QR / pairing attempt...`);
+            // 1) Explicit logout or 401 Unauthorized: session credentials permanently invalidated
+            if (statusCode === DisconnectReason.loggedOut || statusCode === 401) {
+                console.log("⚠️ Connection closed: Logged out (401). WhatsApp session is invalidated.");
+                console.log(`Clearing ${authFolder} to allow a clean fresh login...`);
                 try {
                     if (fs.existsSync(authFolder)) {
                         fs.rmSync(authFolder, { recursive: true, force: true });
@@ -474,36 +494,41 @@ async function connectToWhatsApp() {
                 } catch (rmErr) {
                     console.error("Failed to delete authFolder:", rmErr.message);
                 }
-                
-                // Back off 8 seconds to prevent rapid reconnect rate-limiting by WhatsApp
-                console.log("Waiting 8s before generating a fresh session...");
-                setTimeout(() => { if (isCurrentInstance()) connectToWhatsApp(); }, 8000);
+                lastEmittedQr = null;
+                scheduleReconnect(3000);
                 return;
             }
-            
-            if (statusCode === DisconnectReason.loggedOut) {
-                console.log('Connection closed: Logged out.');
-                try {
-                    if (fs.existsSync(authFolder)) {
-                        fs.rmSync(authFolder, { recursive: true, force: true });
-                    }
-                } catch (_) {}
-            } else if (isConflict) {
+
+            // 2) Companion linking handshake (515 restart required): MUST NOT delete credentials!
+            // WhatsApp companion handshake completes by closing socket 515 and restarting with exchanged keys.
+            if (statusCode === DisconnectReason.restartRequired || statusCode === 515) {
+                console.log("[Bridge] Restart required (515) after device pairing. Reconnecting with paired credentials in 2s...");
+                scheduleReconnect(2000);
+                return;
+            }
+
+            // 3) Session conflict (440): another active session connected
+            if (isConflict) {
                 console.log("[Bridge] WhatsApp session conflict detected. Backing off 10s before reconnect...");
-                setTimeout(() => {
-                    if (isCurrentInstance()) {
-                        connectToWhatsApp();
-                    } else {
-                        console.log("[Bridge] Stale container detected after conflict. Exiting.");
-                        process.exit(0);
-                    }
-                }, 10000);
-            } else if (shouldReconnect) {
-                console.log(`Connection closed due to ${errorMsg}. Reconnecting in 6s...`);
-                setTimeout(() => { if (isCurrentInstance()) connectToWhatsApp(); }, 6000);
+                scheduleReconnect(10000);
+                return;
+            }
+
+            // 4) QR timeout / connection timeout (408):
+            if (statusCode === 408) {
+                console.log("[Bridge] QR code scanning window timed out. Refreshing session in 3s...");
+                scheduleReconnect(3000);
+                return;
+            }
+
+            // 5) Any other normal disconnect / reconnect
+            if (shouldReconnect) {
+                console.log(`[Bridge] Connection closed (${statusCode || errorMsg}). Reconnecting in 5s...`);
+                scheduleReconnect(5000);
             }
         } else if (connection === 'open') {
             isConnected = true;
+            lastEmittedQr = null;
             console.log('✅ Jarvis WhatsApp Bridge connected!');
             console.log(`🔒 Listening for commands exclusively from: ${ownerJid}`);
             sendStatus('whatsapp.status', 'connected');
@@ -820,18 +845,27 @@ const server = http.createServer((req, res) => {
     } else if (req.method === 'POST' && (url === '/reset' || url.startsWith('/reset'))) {
         console.log("[Bridge] Manual session reset requested via HTTP /reset");
         try {
+            if (reconnectTimeout) {
+                clearTimeout(reconnectTimeout);
+                reconnectTimeout = null;
+            }
             if (globalSock) {
-                try { globalSock.end(undefined); } catch (_) {}
+                try {
+                    globalSock.ev.removeAllListeners();
+                    globalSock.ws?.close();
+                    globalSock.end?.(undefined);
+                } catch (_) {}
                 globalSock = null;
             }
             isConnected = false;
+            lastEmittedQr = null;
             if (fs.existsSync(authFolder)) {
                 fs.rmSync(authFolder, { recursive: true, force: true });
             }
             sendStatus('whatsapp.status', 'disconnected');
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ status: 'ok', message: 'WhatsApp session reset, generating fresh QR...' }));
-            setTimeout(() => { if (isCurrentInstance()) connectToWhatsApp(); }, 2000);
+            scheduleReconnect(1500);
         } catch (err) {
             console.error("[Bridge] Failed to reset session:", err.message);
             res.writeHead(500, { 'Content-Type': 'application/json' });
