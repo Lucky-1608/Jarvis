@@ -43,6 +43,14 @@ function isCurrentInstance() {
     return true;
 }
 
+// Check every 5s for new deployments / containers and exit cleanly if superseded
+setInterval(() => {
+    if (!isCurrentInstance()) {
+        console.log("[Bridge] Newer deployment container detected. Gracefully exiting stale instance.");
+        process.exit(0);
+    }
+}, 5000);
+
 const authFolder = process.env.WHATSAPP_AUTH_DIR
     ? process.env.WHATSAPP_AUTH_DIR
     : process.env.WEBSITE_SITE_NAME 

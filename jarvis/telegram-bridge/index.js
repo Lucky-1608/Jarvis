@@ -274,6 +274,7 @@ async function connectToTelegram() {
             }
         }
 
+        let reply = null;
         try {
             // Forward to Jarvis API with automatic local loopback retry if primary fails
             let response = null;
@@ -308,7 +309,6 @@ async function connectToTelegram() {
                 try { data = JSON.parse(data); } catch (_) {}
             }
 
-            let reply;
             const content = data?.content;
 
             if (typeof content === 'string') {
