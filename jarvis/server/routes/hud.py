@@ -24,15 +24,25 @@ async def hud_websocket(websocket: WebSocket):
 
     bus.subscribe("hud.notification", _queue_event)
     bus.subscribe(EventTypes.SYSTEM_READY, _queue_event)
+    bus.subscribe(EventTypes.SYSTEM_STATS, _queue_event)
     bus.subscribe(EventTypes.VISION_STARTED, _queue_event)
     bus.subscribe(EventTypes.VISION_COMPLETED, _queue_event)
     bus.subscribe(EventTypes.TTS_STARTED, _queue_event)
+    bus.subscribe(EventTypes.TTS_COMPLETED, _queue_event)
     bus.subscribe("whatsapp.qr", _queue_event)
     bus.subscribe("whatsapp.pairing_code", _queue_event)
     bus.subscribe("whatsapp.status", _queue_event)
     bus.subscribe("telegram.status", _queue_event)
 
     logger.info("hud.websocket_connected", id=subscriber_id)
+
+    # Immediately push current system stats on connect
+    from jarvis.monitoring.daemon import get_system_metrics
+    await websocket.send_json({
+        "type": EventTypes.SYSTEM_STATS,
+        "data": get_system_metrics(),
+        "source": "system_monitor"
+    })
 
     # Replay the last known status for bridges so the UI isn't stuck on "Offline"
     for event_type in ["telegram.status", "whatsapp.status"]:
@@ -78,9 +88,11 @@ async def hud_websocket(websocket: WebSocket):
     finally:
         bus.unsubscribe("hud.notification", _queue_event)
         bus.unsubscribe(EventTypes.SYSTEM_READY, _queue_event)
+        bus.unsubscribe(EventTypes.SYSTEM_STATS, _queue_event)
         bus.unsubscribe(EventTypes.VISION_STARTED, _queue_event)
         bus.unsubscribe(EventTypes.VISION_COMPLETED, _queue_event)
         bus.unsubscribe(EventTypes.TTS_STARTED, _queue_event)
+        bus.unsubscribe(EventTypes.TTS_COMPLETED, _queue_event)
         bus.unsubscribe("whatsapp.qr", _queue_event)
         bus.unsubscribe("whatsapp.pairing_code", _queue_event)
         bus.unsubscribe("whatsapp.status", _queue_event)

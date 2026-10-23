@@ -53,12 +53,14 @@ export function Home() {
 
   const connectWebSocket = useJarvisStore(s => s.connectWebSocket);
   const updateVisionStatus = useJarvisStore(s => s.updateVisionStatus);
+  const fetchSystemStats = useJarvisStore(s => s.fetchSystemStats);
   const setBackendConnected = useJarvisStore(s => s.setBackendConnected);
   const addLog = useJarvisStore(s => s.addLog);
 
   useEffect(() => {
     setHasWebGL(webGLAvailable());
     connectWebSocket();
+    fetchSystemStats();
 
     // Check backend health on mount
     checkBackendHealth().then(connected => {
@@ -69,7 +71,7 @@ export function Home() {
         addLog({ message: 'Backend API unreachable — start with: python -m jarvis serve', type: 'warning' });
       }
     });
-  }, [connectWebSocket, updateVisionStatus, setBackendConnected, addLog]);
+  }, [connectWebSocket, updateVisionStatus, fetchSystemStats, setBackendConnected, addLog]);
 
   return (
     <div className="w-full h-[100dvh] flex overflow-hidden bg-[var(--bg-primary)] text-[var(--text-primary)] selection:bg-[var(--accent-cyan)] selection:text-black">

@@ -32,10 +32,11 @@ from jarvis.memory.memory_manager import MemoryManager, MemoryType
 from jarvis.planner.planner import Planner
 from jarvis.providers.base import Message, StreamChunk
 from jarvis.router.ai_router import AIRouter
-from jarvis.tools.builtin.social_tools import get_social_tools
-from jarvis.tools.builtin.system_tools import get_system_tools
+from jarvis.tools.builtin.market_tools import get_market_tools
 from jarvis.tools.builtin.mobile_tools import get_mobile_tools
 from jarvis.tools.builtin.obsidian_tools import get_obsidian_tools
+from jarvis.tools.builtin.social_tools import get_social_tools
+from jarvis.tools.builtin.system_tools import get_system_tools
 from jarvis.tools.builtin.web_tools import get_web_tools
 from jarvis.tools.registry import ToolRegistry
 from jarvis.utils.formatting import convert_tables_to_readable_format
@@ -142,6 +143,7 @@ class JarvisBrain:
         self._tools.register_many(get_team_tools(self._router))
         from jarvis.tools.builtin.n8n_tools import get_n8n_tools
         self._tools.register_many(get_n8n_tools())
+        self._tools.register_many(get_market_tools())
 
         # 3b. Knowledge Graph tools
         if self._graph_registry:

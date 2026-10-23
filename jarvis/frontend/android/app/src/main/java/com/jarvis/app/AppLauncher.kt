@@ -65,6 +65,68 @@ class AppLauncher {
             return false
         }
 
+        fun closeApp(context: Context, appName: String): Boolean {
+            val clean = appName.lowercase().trim()
+
+            // 1. If closing Jarvis itself or self
+            if (clean in listOf("jarvis", "jarvis app", "this", "this app", "self", "companion")) {
+                MainActivity.instance?.runOnUiThread {
+                    MainActivity.instance?.moveTaskToBack(true)
+                }
+                return true
+            }
+
+            // 2. If closing the currently active/foreground app or general window
+            if (clean in listOf("current", "active", "active app", "foreground", "window", "the app", "that app", "any", "this")) {
+                val acc = JarvisAccessibilityService.instance
+                if (acc != null) {
+                    return acc.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK) ||
+                           acc.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME)
+                }
+                MainActivity.instance?.runOnUiThread {
+                    MainActivity.instance?.moveTaskToBack(true)
+                }
+                return true
+            }
+
+            // 3. Resolve target package name
+            val resolvedPkg = resolvePackageName(appName)
+            val targetPkg = if (resolvedPkg != null) {
+                resolvedPkg
+            } else {
+                val pm = context.packageManager
+                val packages = pm.getInstalledApplications(PackageManager.GET_META_DATA)
+                packages.firstOrNull { pkg ->
+                    val label = pm.getApplicationLabel(pkg).toString().lowercase().trim()
+                    label == clean || label.contains(clean)
+                }?.packageName
+            }
+
+            if (targetPkg != null) {
+                try {
+                    val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
+                    am?.killBackgroundProcesses(targetPkg)
+                } catch (e: Exception) {
+                    Log.w("AppLauncher", "killBackgroundProcesses failed for $targetPkg", e)
+                }
+
+                // If currently visible, use accessibility service to return to home
+                val acc = JarvisAccessibilityService.instance
+                if (acc != null) {
+                    acc.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME)
+                }
+                return true
+            }
+
+            // Fallback: send HOME action to dismiss active window
+            val acc = JarvisAccessibilityService.instance
+            if (acc != null) {
+                return acc.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME)
+            }
+
+            return false
+        }
+
         private fun launch(context: Context, intent: Intent): Boolean {
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             intent.addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)

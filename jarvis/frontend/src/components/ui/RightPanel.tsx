@@ -98,41 +98,56 @@ export function RightPanelContent({ className = '' }: { className?: string }) {
 
       {/* System Health */}
       <section className="mt-auto">
-        <h3 className="text-[10px] uppercase tracking-widest text-[var(--text-muted)] font-semibold mb-3">System Matrix</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-[10px] uppercase tracking-widest text-[var(--text-muted)] font-semibold">System Matrix</h3>
+          <span className="text-[9px] text-[var(--accent-cyan)]/70 font-mono tracking-wider">LIVE TELEMETRY</span>
+        </div>
         <div className="grid grid-cols-2 gap-3">
-          <div className="bg-[rgba(0,0,0,0.2)] p-2 rounded-md border border-[rgba(255,255,255,0.03)] flex flex-col gap-1">
+          <div className="bg-[rgba(0,0,0,0.2)] p-2 rounded-md border border-[rgba(255,255,255,0.03)] flex flex-col gap-1" title="Brain Core — Host CPU & AI compute load">
             <div className="flex items-center gap-1.5 text-[10px] text-zinc-400"><Cpu size={12}/> Brain Core</div>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-white">{systemStats.brainCore}%</span>
+              <span className="text-xs font-medium text-white min-w-[28px]">{systemStats.brainCore}%</span>
               <div className="flex-1 h-1 bg-zinc-800 rounded-full overflow-hidden">
-                <div className="h-full bg-blue-500" style={{ width: `${systemStats.brainCore}%` }} />
+                <div 
+                  className={`h-full transition-all duration-700 ease-out ${systemStats.brainCore > 85 ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]' : systemStats.brainCore > 60 ? 'bg-amber-400' : 'bg-blue-500'}`} 
+                  style={{ width: `${Math.min(100, Math.max(0, systemStats.brainCore))}%` }} 
+                />
               </div>
             </div>
           </div>
-          <div className="bg-[rgba(0,0,0,0.2)] p-2 rounded-md border border-[rgba(255,255,255,0.03)] flex flex-col gap-1">
+          <div className="bg-[rgba(0,0,0,0.2)] p-2 rounded-md border border-[rgba(255,255,255,0.03)] flex flex-col gap-1" title="Router — RAM utilization & task routing buffers">
             <div className="flex items-center gap-1.5 text-[10px] text-zinc-400"><Network size={12}/> Router</div>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-white">{systemStats.router}%</span>
+              <span className="text-xs font-medium text-white min-w-[28px]">{systemStats.router}%</span>
               <div className="flex-1 h-1 bg-zinc-800 rounded-full overflow-hidden">
-                <div className={`h-full ${systemStats.router > 80 ? 'bg-[var(--accent-violet)]' : 'bg-[var(--accent-cyan)]'}`} style={{ width: `${systemStats.router}%` }} />
+                <div 
+                  className={`h-full transition-all duration-700 ease-out ${systemStats.router > 85 ? 'bg-[var(--accent-violet)] shadow-[0_0_8px_rgba(124,58,237,0.6)]' : 'bg-[var(--accent-cyan)]'}`} 
+                  style={{ width: `${Math.min(100, Math.max(0, systemStats.router))}%` }} 
+                />
               </div>
             </div>
           </div>
-          <div className="bg-[rgba(0,0,0,0.2)] p-2 rounded-md border border-[rgba(255,255,255,0.03)] flex flex-col gap-1">
+          <div className="bg-[rgba(0,0,0,0.2)] p-2 rounded-md border border-[rgba(255,255,255,0.03)] flex flex-col gap-1" title="Vision Engine — Camera & screen analysis status">
             <div className="flex items-center gap-1.5 text-[10px] text-zinc-400"><Search size={12}/> Vision Engine</div>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-white">{systemStats.visionEngine}%</span>
+              <span className="text-xs font-medium text-white min-w-[28px]">{systemStats.visionEngine}%</span>
               <div className="flex-1 h-1 bg-zinc-800 rounded-full overflow-hidden">
-                <div className="h-full bg-[var(--accent-cyan)]" style={{ width: `${systemStats.visionEngine}%` }} />
+                <div 
+                  className="h-full bg-[var(--accent-cyan)] transition-all duration-700 ease-out" 
+                  style={{ width: `${Math.min(100, Math.max(0, systemStats.visionEngine))}%` }} 
+                />
               </div>
             </div>
           </div>
-          <div className="bg-[rgba(0,0,0,0.2)] p-2 rounded-md border border-[rgba(255,255,255,0.03)] flex flex-col gap-1">
+          <div className="bg-[rgba(0,0,0,0.2)] p-2 rounded-md border border-[rgba(255,255,255,0.03)] flex flex-col gap-1" title="Voice Engine — Speech synthesis & audio processing pipeline">
             <div className="flex items-center gap-1.5 text-[10px] text-zinc-400"><Server size={12}/> Voice Engine</div>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-white">{systemStats.voiceEngine}%</span>
+              <span className="text-xs font-medium text-white min-w-[28px]">{systemStats.voiceEngine}%</span>
               <div className="flex-1 h-1 bg-zinc-800 rounded-full overflow-hidden">
-                <div className="h-full bg-[var(--accent-violet)]" style={{ width: `${systemStats.voiceEngine}%` }} />
+                <div 
+                  className="h-full bg-[var(--accent-violet)] transition-all duration-700 ease-out" 
+                  style={{ width: `${Math.min(100, Math.max(0, systemStats.voiceEngine))}%` }} 
+                />
               </div>
             </div>
           </div>

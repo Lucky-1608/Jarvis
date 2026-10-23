@@ -48,6 +48,7 @@ interface SystemStats {
   router: number;
   visionEngine: number;
   voiceEngine: number;
+  disk?: number;
 }
 
 export interface LogEntry {
@@ -77,6 +78,8 @@ interface JarvisStore {
 
   systemStats: SystemStats;
   updateVisionStatus: (val: number) => void;
+  updateSystemStats: (stats: Partial<SystemStats>) => void;
+  fetchSystemStats: () => Promise<void>;
   
   audioAmplitude: number;
   setAudioAmplitude: (amp: number) => void;
@@ -129,12 +132,38 @@ export const useJarvisStore = create<JarvisStore>((set, get) => ({
   }),
   
   systemStats: {
-    brainCore: 100,
-    router: 100,
+    brainCore: 15,
+    router: 30,
     visionEngine: 100,
     voiceEngine: 100
   },
   updateVisionStatus: (val) => set((state) => ({ systemStats: { ...state.systemStats, visionEngine: val } })),
+  updateSystemStats: (stats) => set((state) => ({ systemStats: { ...state.systemStats, ...stats } })),
+  fetchSystemStats: async () => {
+    try {
+      const base = await getBaseUrl();
+      const token = localStorage.getItem('JARVIS_API_KEY') || 'JARVIS_DEV_KEY';
+      const res = await fetch(`${base}/api/system/stats`, {
+        headers: { 'X-API-Key': token },
+        signal: AbortSignal.timeout(3000),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        set((state) => ({
+          systemStats: {
+            ...state.systemStats,
+            brainCore: data.brain_core ?? state.systemStats.brainCore,
+            router: data.router ?? state.systemStats.router,
+            visionEngine: data.vision_engine ?? state.systemStats.visionEngine,
+            voiceEngine: data.voice_engine ?? state.systemStats.voiceEngine,
+            disk: data.disk ?? state.systemStats.disk,
+          }
+        }));
+      }
+    } catch {
+      // offline / demo fallback
+    }
+  },
   
   audioAmplitude: 0,
   setAudioAmplitude: (amp) => set({ audioAmplitude: amp }),
@@ -183,10 +212,26 @@ export const useJarvisStore = create<JarvisStore>((set, get) => ({
         const msg = JSON.parse(event.data);
         if (msg.type === 'system.ready') {
           get().addLog({ message: `Core system ready. Tools loaded: ${msg.data?.tools_registered || 0}` });
+        } else if (msg.type === 'system.stats') {
+          const stats = msg.data || {};
+          set((state) => ({
+            systemStats: {
+              ...state.systemStats,
+              brainCore: stats.brain_core ?? state.systemStats.brainCore,
+              router: stats.router ?? state.systemStats.router,
+              visionEngine: stats.vision_engine ?? state.systemStats.visionEngine,
+              voiceEngine: stats.voice_engine ?? state.systemStats.voiceEngine,
+              disk: stats.disk ?? state.systemStats.disk,
+            }
+          }));
         } else if (msg.type === 'vision.started') {
-          set((state) => ({ systemStats: { ...state.systemStats, visionEngine: 80 } }));
+          set((state) => ({ systemStats: { ...state.systemStats, visionEngine: 75 } }));
         } else if (msg.type === 'vision.completed') {
           set((state) => ({ systemStats: { ...state.systemStats, visionEngine: 100 } }));
+        } else if (msg.type === 'tts' || msg.type === 'voice.tts_started') {
+          set((state) => ({ systemStats: { ...state.systemStats, voiceEngine: 85 } }));
+        } else if (msg.type === 'voice.tts_completed') {
+          set((state) => ({ systemStats: { ...state.systemStats, voiceEngine: 100 } }));
         } else if (msg.type === 'whatsapp.qr') {
           set({ whatsappStatus: 'waiting_qr', whatsappQr: msg.data.payload });
         } else if (msg.type === 'whatsapp.pairing_code') {

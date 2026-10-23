@@ -31,6 +31,7 @@ class NvidiaNimProvider(AIProvider):
     name = "nvidia"
 
     def __init__(self) -> None:
+        super().__init__()
         cfg = get_settings().nvidia
         self._key_rotator = APIKeyRotator(cfg.api_keys.strip('"\''), cfg.api_key.strip('"\''))
         self._base_url = cfg.base_url.rstrip("/")
@@ -59,6 +60,11 @@ class NvidiaNimProvider(AIProvider):
         tools: list[dict[str, Any]] | None = None,
         response_format: dict[str, Any] | None = None,
     ) -> ChatResponse:
+        if self.is_cooling_down():
+            raise ConnectionError(
+                f"Nvidia is on rate-limit cooldown for {self.remaining_cooldown()}s"
+            )
+
         model = model or self._default_model
         start = self._timer()
 
@@ -101,12 +107,24 @@ class NvidiaNimProvider(AIProvider):
 
             except (httpx.HTTPStatusError, httpx.ConnectError, httpx.TimeoutException) as exc:
                 last_error = exc
-                logger.warning(
-                    "nvidia.chat.retry",
-                    attempt=attempt,
-                    max_retries=self._max_retries,
-                    error=str(exc),
-                )
+                is_429 = isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 429
+                if is_429:
+                    cooldown = self.handle_rate_limit(exc.response, key_rotator=self._key_rotator)
+                    logger.warning(
+                        "nvidia.chat.rate_limited",
+                        attempt=attempt,
+                        cooldown_seconds=cooldown,
+                        keys_available=self._key_rotator.key_count,
+                    )
+                    if not self._key_rotator.has_multiple_keys:
+                        break
+                else:
+                    logger.warning(
+                        "nvidia.chat.retry",
+                        attempt=attempt,
+                        max_retries=self._max_retries,
+                        error=str(exc),
+                    )
                 if attempt == self._max_retries:
                     break
 
@@ -124,6 +142,11 @@ class NvidiaNimProvider(AIProvider):
         temperature: float = 0.7,
         max_tokens: int = 4096,
     ) -> AsyncIterator[StreamChunk]:
+        if self.is_cooling_down():
+            raise ConnectionError(
+                f"Nvidia is on rate-limit cooldown for {self.remaining_cooldown()}s"
+            )
+
         model = model or self._default_model
 
         payload = {
@@ -134,41 +157,56 @@ class NvidiaNimProvider(AIProvider):
             "stream": True,
         }
 
-        async with httpx.AsyncClient(timeout=self._timeout) as client:
-            async with client.stream(
-                "POST",
-                f"{self._base_url}/chat/completions",
-                json=payload,
-                headers=self._headers(),
-            ) as resp:
-                resp.raise_for_status()
-                async for line in resp.aiter_lines():
-                    if not line or not line.startswith("data: "):
-                        continue
-                    data_str = line[6:]  # strip "data: "
-                    if data_str.strip() == "[DONE]":
-                        yield StreamChunk(done=True, model=model, provider=self.name)
-                        return
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                async with client.stream(
+                    "POST",
+                    f"{self._base_url}/chat/completions",
+                    json=payload,
+                    headers=self._headers(),
+                ) as resp:
+                    resp.raise_for_status()
+                    async for line in resp.aiter_lines():
+                        if not line or not line.startswith("data: "):
+                            continue
+                        data_str = line[6:]  # strip "data: "
+                        if data_str.strip() == "[DONE]":
+                            yield StreamChunk(done=True, model=model, provider=self.name)
+                            return
 
-                    import json
+                        import json
 
-                    try:
-                        data = json.loads(data_str)
-                    except json.JSONDecodeError:
-                        continue
+                        try:
+                            data = json.loads(data_str)
+                        except json.JSONDecodeError:
+                            continue
 
-                    delta = data.get("choices", [{}])[0].get("delta", {})
-                    content = delta.get("content", "")
-                    if content:
-                        yield StreamChunk(
-                            content=content,
-                            model=data.get("model", model),
-                            provider=self.name,
-                        )
+                        delta = data.get("choices", [{}])[0].get("delta", {})
+                        content = delta.get("content", "")
+                        if content:
+                            yield StreamChunk(
+                                content=content,
+                                model=data.get("model", model),
+                                provider=self.name,
+                            )
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 429:
+                self.handle_rate_limit(exc.response, key_rotator=self._key_rotator)
+            raise
 
     # -- Health check -------------------------------------------------------
 
     async def health_check(self) -> ProviderHealth:
+        if self.is_cooling_down():
+            return ProviderHealth(
+                name=self.name,
+                available=False,
+                latency_ms=0.0,
+                error=f"Rate-limited ({self.remaining_cooldown()}s remaining)",
+                model=self._default_model,
+                cooldown_remaining=self.remaining_cooldown(),
+            )
+
         start = self._timer()
         try:
             async with httpx.AsyncClient(timeout=10) as client:
@@ -186,10 +224,19 @@ class NvidiaNimProvider(AIProvider):
                 )
         except Exception as exc:
             elapsed = self._timer() - start
+            err_msg = str(exc)
+            if hasattr(exc, "response") and exc.response is not None:
+                try:
+                    if exc.response.status_code == 429:
+                        self.handle_rate_limit(exc.response, key_rotator=self._key_rotator)
+                    err_msg = f"HTTP {exc.response.status_code}: {exc.response.text}"
+                except Exception:
+                    pass
             return ProviderHealth(
                 name=self.name,
                 available=False,
                 latency_ms=elapsed,
-                error=str(exc),
+                error=err_msg,
                 model=self._default_model,
+                cooldown_remaining=self.remaining_cooldown(),
             )

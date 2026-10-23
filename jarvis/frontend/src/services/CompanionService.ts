@@ -116,6 +116,22 @@ export class CompanionService {
             } catch (err: any) {
               result = { status: 'error', error: err.message || String(err) };
             }
+          } else if (action === 'close_app') {
+            try {
+              let res: { success: boolean; message?: string; error?: string };
+              try {
+                res = await DeviceHands.closeApp({ name: params.app_name || 'current' });
+              } catch (pluginErr: any) {
+                const actionRes = await DeviceHands.performAction({ action: 'close_app', target: params.app_name || 'current' });
+                res = {
+                  success: actionRes.success,
+                  message: actionRes.message || (actionRes.success ? `Closed app: ${params.app_name}` : `Failed to close ${params.app_name}`)
+                };
+              }
+              result = { status: res.success ? 'success' : 'error', output: res.message || res.error || 'Closed app.' };
+            } catch (err: any) {
+              result = { status: 'error', error: err.message || String(err) };
+            }
           } else if (action === 'tap') {
             try {
               const res = await DeviceHands.performAction({
@@ -125,6 +141,16 @@ export class CompanionService {
                 y: params.y
               });
               result = { status: res.success ? 'success' : 'error', output: res.message || 'Tapped element.' };
+            } catch (err: any) {
+              result = { status: 'error', error: err.message || String(err) };
+            }
+          } else if (action === 'type_text' || action === 'type') {
+            try {
+              const res = await DeviceHands.performAction({
+                action: 'type_text',
+                text: params.text || params.target || ''
+              });
+              result = { status: res.success ? 'success' : 'error', output: res.message || 'Typed text.' };
             } catch (err: any) {
               result = { status: 'error', error: err.message || String(err) };
             }
@@ -138,30 +164,38 @@ export class CompanionService {
             } catch (err: any) {
               result = { status: 'error', error: err.message || String(err) };
             }
+          } else if (action === 'back' || action === 'home' || action === 'recents') {
+            try {
+              const res = await DeviceHands.performAction({ action });
+              result = { status: res.success ? 'success' : 'error', output: `Performed ${action}.` };
+            } catch (err: any) {
+              result = { status: 'error', error: err.message || String(err) };
+            }
           } else if (action === 'read_screen') {
             try {
-              if (DeviceHands.readScreen) {
-                const screenData = await DeviceHands.readScreen();
-                result = { status: 'success', output: screenData.elements };
-              } else {
-                result = { status: 'error', error: 'readScreen not supported by this build.' };
-              }
+              const screenData = await DeviceHands.readScreen();
+              result = { status: 'success', output: screenData.elements };
             } catch (err: any) {
               result = { status: 'error', error: err.message || String(err) };
             }
           } else if (action === 'get_battery') {
             try {
-              if ('getBattery' in navigator) {
-                const battery: any = await (navigator as any).getBattery();
-                result = {
-                  status: 'success',
-                  output: `Battery level: ${Math.round(battery.level * 100)}%, Charging: ${battery.charging}`
-                };
-              } else {
-                result = { status: 'success', output: 'Battery status unavailable.' };
-              }
+              const bRes = await DeviceHands.getBattery();
+              result = { status: 'success', output: bRes.output || `Battery level: ${bRes.level}%, Charging: ${bRes.charging}` };
             } catch (err: any) {
-              result = { status: 'error', error: err.message || String(err) };
+              if ('getBattery' in navigator) {
+                try {
+                  const battery: any = await (navigator as any).getBattery();
+                  result = {
+                    status: 'success',
+                    output: `Battery level: ${Math.round(battery.level * 100)}%, Charging: ${battery.charging}`
+                  };
+                } catch {
+                  result = { status: 'error', error: err.message || String(err) };
+                }
+              } else {
+                result = { status: 'error', error: err.message || String(err) };
+              }
             }
           } else if (action === 'get_location') {
             try {
@@ -175,16 +209,34 @@ export class CompanionService {
             } catch (err: any) {
               result = { status: 'error', error: err.message || String(err) };
             }
+          } else if (action === 'send_sms') {
+            try {
+              const res = await DeviceHands.sendSMS({ number: params.number, message: params.message });
+              result = { status: res.success ? 'success' : 'error', output: res.message || 'SMS sent.' };
+            } catch (err: any) {
+              result = { status: 'error', error: err.message || String(err) };
+            }
+          } else if (action === 'make_call') {
+            try {
+              const res = await DeviceHands.makeCall({ number: params.number });
+              result = { status: res.success ? 'success' : 'error', output: res.message || 'Call initiated.' };
+            } catch (err: any) {
+              result = { status: 'error', error: err.message || String(err) };
+            }
           } else if (action === 'show_notification') {
-            // Standard browser/Capacitor notification fallback
-            if ('Notification' in window && Notification.permission === 'granted') {
-              new Notification(params.title || 'Jarvis Alert', { body: params.message || params.body || '' });
-              result = { status: 'success' };
-            } else {
-              result = { status: 'success', output: 'Notification received.' };
+            try {
+              await DeviceHands.showNotification({ title: params.title || 'Jarvis', message: params.message || '' });
+              result = { status: 'success', output: 'Notification displayed.' };
+            } catch {
+              if ('Notification' in window && Notification.permission === 'granted') {
+                new Notification(params.title || 'Jarvis Alert', { body: params.message || params.body || '' });
+                result = { status: 'success' };
+              } else {
+                result = { status: 'success', output: 'Notification received.' };
+              }
             }
           } else {
-             result = { status: 'error', error: 'Action not supported on mobile companion.' };
+            result = { status: 'error', error: `Action '${action}' not supported on mobile companion.` };
           }
         } else {
           // We are in a standard browser

@@ -11,6 +11,7 @@ import {
   Notification,
   desktopCapturer,
 } from 'electron';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { exec } from 'node:child_process';
@@ -40,76 +41,136 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 
 let win: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;
+let hasShownTrayBalloon = false;
 
-function createTray() {
-  const iconPath = path.join(process.env.VITE_PUBLIC || '', 'arc_reactor.png');
-  let icon: NativeImage;
-  try {
-    icon = nativeImage.createFromPath(iconPath);
-    if (icon.isEmpty()) {
-      icon = nativeImage.createEmpty();
+function resolveIconPath(): string | null {
+  const candidatePaths = [
+    path.join(process.env.VITE_PUBLIC || '', 'arc_reactor.png'),
+    path.join(__dirname, '../public/arc_reactor.png'),
+    path.join(__dirname, '../dist/arc_reactor.png'),
+    path.join(process.cwd(), 'public/arc_reactor.png'),
+    path.join(process.cwd(), 'dist/arc_reactor.png'),
+    path.join(process.cwd(), 'jarvis/frontend/public/arc_reactor.png'),
+    path.join(process.cwd(), 'jarvis/frontend/dist/arc_reactor.png'),
+    path.join(app.getAppPath(), 'public/arc_reactor.png'),
+    path.join(app.getAppPath(), 'dist/arc_reactor.png'),
+  ];
+
+  for (const p of candidatePaths) {
+    try {
+      if (fs.existsSync(p)) {
+        return p;
+      }
+    } catch {
+      // Ignore errors for unreadable paths
     }
-  } catch {
-    icon = nativeImage.createEmpty();
+  }
+  return null;
+}
+
+function getAppIcon(): NativeImage {
+  const resolved = resolveIconPath();
+  if (resolved) {
+    try {
+      const img = nativeImage.createFromPath(resolved);
+      if (!img.isEmpty()) {
+        return img;
+      }
+    } catch (e) {
+      console.warn('Failed to load icon from path:', resolved, e);
+    }
   }
 
-  tray = new Tray(icon);
-  tray.setToolTip('Jarvis Companion OS');
+  // Fallback high-contrast Arc Reactor SVG rendered as DataURL
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+    <circle cx="32" cy="32" r="28" fill="#030712" stroke="#00d8ff" stroke-width="4"/>
+    <circle cx="32" cy="32" r="16" fill="#00d8ff" fill-opacity="0.4" stroke="#38bdf8" stroke-width="3"/>
+    <circle cx="32" cy="32" r="6" fill="#ffffff"/>
+  </svg>`;
+  return nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`);
+}
 
-  const contextMenu = Menu.buildFromTemplate([
-    {
-      label: 'Open Jarvis',
-      click: () => {
-        if (win) {
+function getTrayIcon(): NativeImage {
+  const icon = getAppIcon();
+  // Windows System Tray requires 16x16 or 32x32 pixels
+  return icon.resize({ width: 16, height: 16 });
+}
+
+function createTray() {
+  if (tray) return;
+
+  try {
+    const icon = getTrayIcon();
+    tray = new Tray(icon);
+    tray.setToolTip('Jarvis Companion OS');
+
+    const contextMenu = Menu.buildFromTemplate([
+      {
+        label: 'Open Jarvis',
+        click: () => {
+          if (win) {
+            win.show();
+            win.focus();
+          }
+        },
+      },
+      {
+        label: 'Minimize to Tray',
+        click: () => {
+          win?.hide();
+        },
+      },
+      { type: 'separator' },
+      {
+        label: 'Shortcut: Ctrl+Shift+J / Cmd+Shift+J',
+        enabled: false,
+      },
+      { type: 'separator' },
+      {
+        label: 'Quit Jarvis',
+        click: () => {
+          isQuitting = true;
+          app.quit();
+        },
+      },
+    ]);
+
+    tray.setContextMenu(contextMenu);
+
+    tray.on('click', () => {
+      if (win) {
+        if (win.isVisible() && !win.isMinimized()) {
+          win.hide();
+        } else {
           win.show();
           win.focus();
         }
-      },
-    },
-    {
-      label: 'Minimize to Tray',
-      click: () => {
-        win?.hide();
-      },
-    },
-    { type: 'separator' },
-    {
-      label: 'Shortcut: Ctrl+Shift+J / Cmd+Shift+J',
-      enabled: false,
-    },
-    { type: 'separator' },
-    {
-      label: 'Quit Jarvis',
-      click: () => {
-        isQuitting = true;
-        app.quit();
-      },
-    },
-  ]);
+      }
+    });
 
-  tray.setContextMenu(contextMenu);
-
-  tray.on('click', () => {
-    if (win) {
-      if (win.isVisible() && !win.isMinimized()) {
-        win.hide();
-      } else {
+    tray.on('double-click', () => {
+      if (win) {
         win.show();
         win.focus();
       }
-    }
-  });
+    });
+  } catch (err) {
+    console.error('Failed to initialize system tray:', err);
+  }
 }
 
 function createWindow() {
+  const appIcon = getAppIcon();
+
   win = new BrowserWindow({
     width: 1200,
     height: 800,
-    icon: path.join(process.env.VITE_PUBLIC || '', 'arc_reactor.png'),
+    icon: appIcon,
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
       nodeIntegration: false,
       contextIsolation: true,
+      backgroundThrottling: false, // Ensure background tasks/WebSockets don't sleep
     },
   });
 
@@ -118,6 +179,15 @@ function createWindow() {
     if (!isQuitting) {
       event.preventDefault();
       win?.hide();
+
+      // Notify the user so they know it is running in the tray
+      if (tray && process.platform === 'win32' && !hasShownTrayBalloon) {
+        hasShownTrayBalloon = true;
+        tray.displayBalloon({
+          title: 'Jarvis is running in background',
+          content: 'Jarvis has minimized to your system tray. Click the tray icon or press Ctrl+Shift+J to reopen.',
+        });
+      }
       return false;
     }
   });
@@ -277,8 +347,24 @@ ipcMain.handle('capture-screen', async () => {
 });
 
 app.whenReady().then(() => {
+  // Configure auto-launch at system boot
+  try {
+    app.setLoginItemSettings({
+      openAtLogin: true,
+      openAsHidden: true,
+      args: ['--hidden'],
+    });
+  } catch (err) {
+    console.warn('Failed to set login item settings:', err);
+  }
+
   createWindow();
   createTray();
+
+  // If launched with --hidden argument, start minimized in system tray
+  if (process.argv.includes('--hidden')) {
+    win?.hide();
+  }
 
   // Register global hotkey (CommandOrControl+Shift+J) to toggle Jarvis visibility
   try {

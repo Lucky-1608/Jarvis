@@ -41,3 +41,14 @@ async def health_check():
         "status": overall,
         **health,
     }
+
+
+@router.get("/system/stats")
+async def system_stats():
+    """
+    Get dynamic system metrics for HUD System Matrix.
+    """
+    from jarvis.monitoring.daemon import get_system_metrics
+
+    return get_system_metrics()
+

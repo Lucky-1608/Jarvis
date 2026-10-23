@@ -101,6 +101,7 @@ class EventTypes:
 
     # System
     SYSTEM_READY = "system.ready"
+    SYSTEM_STATS = "system.stats"
     SYSTEM_ERROR = "system.error"
     SYSTEM_SHUTDOWN = "system.shutdown"
     HEALTH_CHECK = "system.health_check"

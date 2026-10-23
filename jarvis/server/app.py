@@ -95,10 +95,17 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.error("Failed to start Telegram bridge", error=str(e))
 
+    from jarvis.monitoring.daemon import get_system_monitor
+    system_monitor = get_system_monitor(interval_seconds=3)
+    await system_monitor.start()
+
     logger.info("server.ready", docs="/docs")
     yield
 
     # Shutdown
+    if system_monitor:
+        await system_monitor.stop()
+
     if whatsapp_proc:
         logger.info("Stopping WhatsApp bridge...")
         whatsapp_proc.terminate()
@@ -154,7 +161,7 @@ def create_app() -> FastAPI:
             return await call_next(request)
 
         # Whitelist public API routes
-        if path == "/api/health" or path.startswith("/api/oauth"):
+        if path in ("/api/health", "/api/system/stats") or path.startswith("/api/oauth"):
             return await call_next(request)
 
         # Check header or query param

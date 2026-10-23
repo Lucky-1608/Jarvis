@@ -4,9 +4,11 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import okhttp3.*
@@ -27,15 +29,35 @@ class JarvisBackgroundService : Service() {
         
     private lateinit var ttsEngine: JarvisTTS
     private lateinit var wakeWordEngine: JarvisWakeWordEngine
+    private var wakeLock: PowerManager.WakeLock? = null
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Ensures the service is revived by Android if killed under memory pressure
+        return START_STICKY
+    }
 
     override fun onCreate() {
         super.onCreate()
         instance = this
         createNotificationChannel()
+
+        // Acquire partial WakeLock so CPU keeps WebSocket and wake word alive while screen is off
+        try {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
+            wakeLock = powerManager?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Jarvis::ServiceWakeLock")?.apply {
+                setReferenceCounted(false)
+                acquire(24 * 60 * 60 * 1000L) // 24 hours fallback limit
+            }
+        } catch (e: Exception) {
+            Log.w("JarvisBackground", "Could not acquire WakeLock", e)
+        }
+
         val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Jarvis Background Service")
             .setContentText("Listening for wake word and backend commands...")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
         
         startForeground(1, notification)
@@ -133,15 +155,38 @@ class JarvisBackgroundService : Service() {
         }
 
         when (type) {
-            "perform_action" -> {
-                val action = command.optString("action")
-                val target = command.optString("target")
-                val x = command.optDouble("x", 0.0).toFloat()
-                val y = command.optDouble("y", 0.0).toFloat()
-                val success = JarvisAccessibilityService.instance?.performAction(action, target, x, y) ?: false
+            "open_app" -> {
+                val target = command.optString("target").ifBlank { command.optString("app_name") }
+                val success = AppLauncher.openApp(this, target)
                 sendToBackend(JSONObject().apply {
                     put("type", "action_result")
-                    put("action", action)
+                    put("action", "open_app")
+                    put("success", success)
+                })
+            }
+            "close_app" -> {
+                val target = command.optString("target").ifBlank { command.optString("app_name") }
+                val success = AppLauncher.closeApp(this, target)
+                sendToBackend(JSONObject().apply {
+                    put("type", "action_result")
+                    put("action", "close_app")
+                    put("success", success)
+                })
+            }
+            "perform_action" -> {
+                val act = command.optString("action")
+                val target = command.optString("target").ifBlank { command.optString("app_name") }
+                val text = command.optString("text")
+                val x = command.optDouble("x", 0.0).toFloat()
+                val y = command.optDouble("y", 0.0).toFloat()
+                val success = when (act) {
+                    "open_app", "launch_app" -> AppLauncher.openApp(this, target)
+                    "close_app", "close" -> AppLauncher.closeApp(this, target)
+                    else -> JarvisAccessibilityService.instance?.performAction(act, target, x, y, text) ?: false
+                }
+                sendToBackend(JSONObject().apply {
+                    put("type", "action_result")
+                    put("action", act)
                     put("success", success)
                 })
             }
@@ -164,6 +209,14 @@ class JarvisBackgroundService : Service() {
         wakeWordEngine.stopListening()
         ttsEngine.destroy()
         webSocket?.close(1000, "Service destroyed")
+        try {
+            if (wakeLock?.isHeld == true) {
+                wakeLock?.release()
+            }
+        } catch (e: Exception) {
+            Log.w("JarvisBackground", "Error releasing WakeLock", e)
+        }
+        wakeLock = null
         instance = null
     }
 

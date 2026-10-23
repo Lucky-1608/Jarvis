@@ -139,6 +139,13 @@ class AIRouter:
         for prov in providers_to_try:
             if prov is None:
                 continue
+            if prov.is_cooling_down():
+                logger.info(
+                    "ai_router.chat.skip_cooling_down",
+                    provider=prov.name,
+                    remaining_seconds=prov.remaining_cooldown(),
+                )
+                continue
             try:
                 await self._bus.publish(Event(
                     type=EventTypes.PROVIDER_SELECTED,
@@ -205,6 +212,13 @@ class AIRouter:
         last_error: Exception | None = None
         for prov in providers_to_try:
             if prov is None:
+                continue
+            if prov.is_cooling_down():
+                logger.info(
+                    "ai_router.stream.skip_cooling_down",
+                    provider=prov.name,
+                    remaining_seconds=prov.remaining_cooldown(),
+                )
                 continue
             try:
                 await self._bus.publish(Event(
