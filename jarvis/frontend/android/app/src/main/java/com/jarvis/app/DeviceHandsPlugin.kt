@@ -259,7 +259,21 @@ class DeviceHandsPlugin : Plugin() {
     @PluginMethod
     fun getPermissionsStatus(call: PluginCall) {
         val ret = JSObject()
-        val isAccessibility = JarvisAccessibilityService.instance != null
+        var isAccessibility = JarvisAccessibilityService.instance != null
+        if (!isAccessibility) {
+            try {
+                val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as? android.view.accessibility.AccessibilityManager
+                val enabledServices = am?.getEnabledAccessibilityServiceList(android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
+                isAccessibility = enabledServices?.any { it.id?.contains(context.packageName, ignoreCase = true) == true } ?: false
+            } catch (ignored: Exception) {}
+        }
+        if (!isAccessibility) {
+            try {
+                val settingValue = Settings.Secure.getString(context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
+                isAccessibility = settingValue?.contains(context.packageName, ignoreCase = true) == true
+            } catch (ignored: Exception) {}
+        }
+
         val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
         val isBatteryIgnored = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             pm?.isIgnoringBatteryOptimizations(context.packageName) ?: false

@@ -14,6 +14,8 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import android.accessibilityservice.AccessibilityServiceInfo;
+import android.view.accessibility.AccessibilityManager;
 import com.getcapacitor.BridgeActivity;
 import java.util.ArrayList;
 import java.util.List;
@@ -202,24 +204,42 @@ public class MainActivity extends BridgeActivity {
     }
 
     private boolean isAccessibilityServiceEnabled() {
+        if (JarvisAccessibilityService.Companion.getInstance() != null) {
+            return true;
+        }
+
+        // 1. Official Android AccessibilityManager API
         try {
-            int accessibilityEnabled = Settings.Secure.getInt(
-                getContentResolver(),
-                Settings.Secure.ACCESSIBILITY_ENABLED
-            );
-            if (accessibilityEnabled == 1) {
-                String settingValue = Settings.Secure.getString(
-                    getContentResolver(),
-                    Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-                );
-                if (settingValue != null) {
-                    return settingValue.toLowerCase().contains(getPackageName().toLowerCase());
+            AccessibilityManager am = (AccessibilityManager) getSystemService(Context.ACCESSIBILITY_SERVICE);
+            if (am != null) {
+                List<AccessibilityServiceInfo> enabledServices =
+                    am.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK);
+                if (enabledServices != null) {
+                    for (AccessibilityServiceInfo service : enabledServices) {
+                        if (service.getId() != null && service.getId().toLowerCase().contains(getPackageName().toLowerCase())) {
+                            return true;
+                        }
+                    }
                 }
             }
         } catch (Exception e) {
-            Log.w(TAG, "Error checking accessibility status", e);
+            Log.w(TAG, "Error checking AccessibilityManager status", e);
         }
-        return JarvisAccessibilityService.Companion.getInstance() != null;
+
+        // 2. Direct Settings.Secure check without strict int gating
+        try {
+            String settingValue = Settings.Secure.getString(
+                getContentResolver(),
+                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+            );
+            if (settingValue != null && settingValue.toLowerCase().contains(getPackageName().toLowerCase())) {
+                return true;
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Error checking Settings.Secure accessibility status", e);
+        }
+
+        return false;
     }
 
     private boolean isNotificationListenerEnabled() {
