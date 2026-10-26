@@ -4,9 +4,9 @@
   "version": "1.0.0",
   "identifier": "com.jarvis.desktop",
   "build": {
-    "beforeDevCommand": "bun run dev",
+    "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:3000",
-    "beforeBuildCommand": "node ./node_modules/vite/bin/vite.js build",
+    "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },
   "app": {

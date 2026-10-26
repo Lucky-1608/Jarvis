@@ -166,8 +166,15 @@ fn main() {
                 ],
             )?;
 
+            let icon = app
+                .default_window_icon()
+                .cloned()
+                .unwrap_or_else(|| tauri::include_image!("icons/icon.png"));
+
             let tray = TrayIconBuilder::new()
+                .icon(icon)
                 .menu(&tray_menu)
+                .show_menu_on_left_click(false)
                 .tooltip("Jarvis Companion OS")
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "open" => {
