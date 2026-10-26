@@ -1,7 +1,7 @@
+import json
+
 import structlog
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from pydantic import BaseModel
-from typing import Dict, Any, Optional
 
 from jarvis.server.companion_manager import companion_manager
 
@@ -15,23 +15,41 @@ async def companion_websocket(websocket: WebSocket):
     connection_id = await companion_manager.connect(websocket)
     try:
         while True:
-            data = await websocket.receive_json()
-            
-            # Expecting response payload: {"task_id": "...", "status": "success/error", "output": "..."}
-            # Or registration payload: {"type": "register", "device": "pc"}
+            raw = await websocket.receive_text()
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError:
+                logger.warning("companion.invalid_json", connection_id=connection_id)
+                continue
+
+            # Respond to heartbeat pings to keep the connection alive
+            if data.get("type") == "ping":
+                try:
+                    await websocket.send_json({"type": "pong"})
+                except Exception:
+                    break  # Connection is dead
+                continue
+
+            # Registration payload: {"type": "register", "device": "pc"}
             if data.get("type") == "register":
                 device = data.get("device", "unknown")
                 companion_manager.register_device(connection_id, device)
                 continue
 
+            # Response payload: {"task_id": "...", "status": "success/error", "output": "..."}
             task_id = data.get("task_id")
             if task_id:
                 await companion_manager.handle_response(task_id, data)
             else:
-                logger.debug("companion.received_unsolicited", connection_id=connection_id, data=data)
-                
+                logger.debug(
+                    "companion.received_unsolicited",
+                    connection_id=connection_id,
+                    data=data,
+                )
+
     except WebSocketDisconnect:
         companion_manager.disconnect(connection_id)
     except Exception as e:
         logger.error("companion.websocket_error", error=str(e), connection_id=connection_id)
         companion_manager.disconnect(connection_id)
+

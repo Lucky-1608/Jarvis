@@ -1,5 +1,7 @@
 node_modules
-# dist
-# dist-electron
+dist
 release
 .vite
+src-tauri/target
+target
+

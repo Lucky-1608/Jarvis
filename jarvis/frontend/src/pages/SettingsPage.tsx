@@ -83,7 +83,6 @@ export function SettingsPage() {
     const baseUrl = await getBaseUrl();
     let url = `${baseUrl}/api/oauth/login/${provider}`;
     
-    // Electron's openExternal requires an absolute URL.
     // If the base URL is relative, convert it to absolute.
     if (url.startsWith('/')) {
       if (window.location.protocol === 'file:') {
@@ -93,11 +92,12 @@ export function SettingsPage() {
       }
     }
     
-    const electronAPI = (window as any).electronAPI;
+    const isTauri = typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window);
     
-    if (electronAPI && electronAPI.openExternal) {
+    if (isTauri) {
       // Open in default system browser
-      electronAPI.openExternal(url);
+      window.open(url, '_blank');
+
       
       // Start polling for updates since we won't get a window message
       const pollInterval = setInterval(() => {

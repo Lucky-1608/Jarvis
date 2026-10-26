@@ -25,6 +25,8 @@ export interface DeviceHandsPlugin {
     batteryOptimizationIgnored: boolean;
     notificationAccessEnabled: boolean;
   }>;
+  setBackendUrl(options: { url: string }): Promise<{ success: boolean }>;
 }
+
 
 export const DeviceHands = registerPlugin<DeviceHandsPlugin>('DeviceHands');

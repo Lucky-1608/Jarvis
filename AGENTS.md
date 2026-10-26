@@ -4,7 +4,7 @@
 
 - `jarvis/` contains the Python backend: `brain/` and `router/` coordinate AI requests, `providers/` wraps model APIs, `server/` exposes FastAPI routes, and `cli/` defines terminal commands.
 - `tools/`, `plugins/`, and `automation/` implement capabilities; `memory/` and `database/` handle persistence.
-- `jarvis/frontend/src/` contains React/TypeScript pages, components, hooks, and services. Frontend assets live in `public/` and `assets/`; `electron/` and `android/` contain desktop and mobile integrations.
+- `jarvis/frontend/src/` contains React/TypeScript pages, components, hooks, and services. Frontend assets live in `public/` and `assets/`; `src-tauri/` and `android/` contain desktop and mobile integrations.
 - `jarvis/whatsapp-bridge/` and `jarvis/telegram-bridge/` are Node.js services. `docs/` holds documentation; `data/` holds local runtime data; `graphify-out/` contains generated architecture artifacts.
 
 ## Build, Test, and Development Commands
@@ -21,8 +21,11 @@ From `jarvis/frontend/`:
 
 - `npm ci`: install locked dependencies.
 - `npm run dev`: start Vite.
+- `npm run dev:tauri`: start the Tauri desktop companion in development mode.
+- `npm run build:tauri`: create the production Tauri desktop binary.
 - `npm run typecheck`: check TypeScript types.
-- `npm run build`: type-check and create the production build.
+- `npm run build`: type-check and create the production web build.
+
 
 ## Coding Style & Naming Conventions
 

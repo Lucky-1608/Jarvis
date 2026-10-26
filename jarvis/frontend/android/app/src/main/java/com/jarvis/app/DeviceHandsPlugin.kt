@@ -292,4 +292,19 @@ class DeviceHandsPlugin : Plugin() {
         ret.put("notificationAccessEnabled", isNotificationEnabled)
         call.resolve(ret)
     }
+
+    @PluginMethod
+    fun setBackendUrl(call: PluginCall) {
+        val url = call.getString("url") ?: ""
+        if (url.isNotBlank()) {
+            val prefs = context.getSharedPreferences("jarvis_prefs", Context.MODE_PRIVATE)
+            prefs.edit().putString("backend_url", url).apply()
+            JarvisBackgroundService.instance?.updateBackendUrl(url)
+            val ret = JSObject().apply { put("success", true) }
+            call.resolve(ret)
+        } else {
+            call.reject("Missing url")
+        }
+    }
 }
+

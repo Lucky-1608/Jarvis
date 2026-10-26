@@ -4,24 +4,15 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
 
-import electron from 'vite-plugin-electron/simple';
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export default defineConfig({
   base: './',
+  clearScreen: false,
   plugins: [
     react(),
     tailwindcss(),
-    electron({
-      main: {
-        entry: 'electron/main.ts',
-      },
-      preload: {
-        input: 'electron/preload.ts',
-      },
-    }),
   ],
   resolve: {
     alias: [

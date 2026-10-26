@@ -15,6 +15,8 @@ import { SettingsPage } from './pages/SettingsPage';
 
 import { CompanionService } from './services/CompanionService';
 import { getBaseUrl } from './lib/api';
+import { Capacitor } from '@capacitor/core';
+import { DeviceHands } from './lib/device-bridge';
 
 const queryClient = new QueryClient();
 
@@ -71,16 +73,33 @@ function App() {
     let companion: CompanionService | null = null;
     let isMounted = true;
 
+    // Page Visibility handler — reconnect WebSocket when app resumes from background
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && companion) {
+        companion.reconnectIfNeeded();
+      }
+    };
+
     if (hasKey) {
       getBaseUrl().then((baseUrl) => {
         if (!isMounted) return;
-        companion = new CompanionService(baseUrl || window.location.origin);
+        const targetUrl = baseUrl || window.location.origin;
+        companion = new CompanionService(targetUrl);
         companion.connect();
+
+        if (Capacitor.isNativePlatform() && targetUrl) {
+          DeviceHands.setBackendUrl({ url: targetUrl }).catch(() => {});
+        }
+
+        // Listen for app resume events (mobile backgrounding, desktop tray restore)
+        document.addEventListener('visibilitychange', onVisibilityChange);
       });
     }
 
+
     return () => {
       isMounted = false;
+      document.removeEventListener('visibilitychange', onVisibilityChange);
       if (companion) {
         companion.disconnect();
       }

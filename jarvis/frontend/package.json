@@ -3,13 +3,13 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
-    "dev:electron": "vite",
-    "build:electron": "tsc -p tsconfig.json --noEmit && node -e \"const fs=require('fs'); fs.rmSync('node_modules/.vite', {recursive:true, force:true}); fs.rmSync('dist', {recursive:true, force:true});\" && vite build && electron-builder",
+    "tauri": "tauri",
+    "dev:tauri": "tauri dev",
+    "build:tauri": "tauri build",
     "cap:sync": "npx cap sync",
-    "build": "tsc -p tsconfig.json --noEmit && node -e \"const fs=require('fs'); fs.rmSync('node_modules/.vite', {recursive:true, force:true});\" && vite build",
+    "build": "tsc -p tsconfig.json --noEmit && vite build",
     "serve": "vite preview",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
@@ -79,44 +79,18 @@
     "@capacitor/cli": "^8.5.0",
     "@tailwindcss/typography": "^0.5.20",
     "@tailwindcss/vite": "^4.3.3",
+    "@tauri-apps/api": "^2.2.0",
+    "@tauri-apps/cli": "^2.2.0",
     "@types/node": "^26.2.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@types/three": "^0.185.4",
     "@vitejs/plugin-react": "^6.0.5",
-    "electron": "^43.4.0",
-    "electron-builder": "^26.15.3",
     "playwright": "^1.62.1",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
     "vite": "^8.2.1",
-    "vite-plugin-electron": "^1.1.1",
-    "vite-plugin-electron-renderer": "^1.0.0",
     "vite-tsconfig-paths": "^6.1.1"
-  },
-  "allowScripts": {
-    "electron": true,
-    "esbuild": true
-  },
-  "build": {
-    "appId": "com.jarvis.app",
-    "productName": "Jarvis",
-    "icon": "public/arc_reactor.png",
-    "files": [
-      "dist/**/*",
-      "dist-electron/**/*"
-    ],
-    "directories": {
-      "output": "release"
-    },
-    "win": {
-      "target": [
-        "nsis"
-      ]
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true
-    }
   }
 }
+

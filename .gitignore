@@ -47,10 +47,12 @@ htmlcov/
 # Build
 *.whl
 
-# Frontend
+# Frontend & Desktop Build
 node_modules/
-# dist/
-# dist-electron/
+dist/
+target/
+src-tauri/target/
+
 
 # Agent and AI config
 .agents/

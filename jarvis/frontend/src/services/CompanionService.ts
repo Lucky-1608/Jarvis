@@ -4,18 +4,6 @@ import { DeviceHands } from '../lib/device-bridge';
 // CompanionService.ts
 // Connects to the Jarvis Backend via WebSocket to receive system commands.
 
-declare global {
-  interface Window {
-    electronAPI?: {
-      runCommand: (command: string, cwd?: string) => Promise<{ status: string, output?: any, error?: string }>;
-      openApp: (appName: string, url?: string) => Promise<{ status: string, error?: string }>;
-      closeApp: (appName: string) => Promise<{ status: string, error?: string }>;
-      openExternal?: (url: string) => Promise<{ status: string, error?: string }>;
-      showNotification: (title: string, body: string) => Promise<{ status: string, error?: string }>;
-      captureScreen: () => Promise<{ status: string, image_base64?: string, error?: string }>;
-    };
-  }
-}
 
 function playAudio(audioBase64?: string, format: string = 'mp3', textFallback?: string) {
   if (audioBase64) {
@@ -37,6 +25,14 @@ function playAudio(audioBase64?: string, format: string = 'mp3', textFallback?: 
 export class CompanionService {
   private ws: WebSocket | null = null;
   private backendUrl: string;
+  private intentionalDisconnect = false;
+  private reconnectAttempts = 0;
+  private maxReconnectDelay = 60000; // 60s cap
+  private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+  private heartbeatTimeout: ReturnType<typeof setTimeout> | null = null;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly HEARTBEAT_INTERVAL = 25000; // 25s — under typical 30s proxy timeout
+  private readonly HEARTBEAT_TIMEOUT = 10000;  // 10s to receive pong
 
   constructor(backendUrl: string) {
     // If the url is http(s), convert it to ws(s)
@@ -47,24 +43,49 @@ export class CompanionService {
   }
 
   public connect() {
+    // Clean up any previous connection attempt
+    this.cleanup();
+
+    if (this.intentionalDisconnect) return;
+
     console.log('[Companion] Connecting to backend...', this.backendUrl);
-    this.ws = new WebSocket(this.backendUrl);
+
+    try {
+      this.ws = new WebSocket(this.backendUrl);
+    } catch (err) {
+      console.error('[Companion] Failed to create WebSocket:', err);
+      this.scheduleReconnect();
+      return;
+    }
 
     this.ws.onopen = () => {
       console.log('[Companion] Connected to Jarvis Backend.');
+      this.reconnectAttempts = 0; // Reset backoff on successful connection
+
       // Identify the device type to the backend
       let deviceType = 'web';
-      if (window.electronAPI) {
+      const isTauriEnv = typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window);
+      if (isTauriEnv) {
         deviceType = 'pc';
       } else if (Capacitor.isNativePlatform()) {
         deviceType = 'mobile';
       }
       this.ws?.send(JSON.stringify({ type: 'register', device: deviceType }));
+
+      // Start heartbeat keepalive
+      this.startHeartbeat();
     };
 
     this.ws.onmessage = async (event) => {
       try {
         const data = JSON.parse(event.data);
+
+        // Handle pong responses from the backend heartbeat
+        if (data.type === 'pong') {
+          this.clearHeartbeatTimeout();
+          return;
+        }
+
         const { action, task_id, params } = data;
 
         console.log(`[Companion] Received action: ${action}`, params);
@@ -72,27 +93,42 @@ export class CompanionService {
         if (!action || !task_id) return;
 
         let result: any = { status: 'error', error: 'Unknown action' };
+        const isTauri = typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window);
 
         if (action === 'play_audio' || action === 'speak' || action === 'tts') {
           playAudio(params.audio_base64, params.format || 'mp3', params.text);
           result = { status: 'success' };
-        } else if (window.electronAPI) {
-          // We are in Electron Desktop Companion
+        } else if (isTauri) {
+          // We are in Tauri Desktop Companion
+          const invokeCmd = async (cmd: string, args: Record<string, any> = {}) => {
+            try {
+              const tauri = (window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__?.core;
+              if (tauri && typeof tauri.invoke === 'function') {
+                return await tauri.invoke(cmd, args);
+              }
+              return { status: 'error', error: 'Tauri IPC bridge not available' };
+            } catch (err: any) {
+              return { status: 'error', error: err?.message || String(err) };
+            }
+          };
+
           if (action === 'run_command') {
-            result = await window.electronAPI.runCommand(params.command, params.cwd);
+            result = await invokeCmd('run_command', { command: params.command, cwd: params.cwd });
           } else if (action === 'open_app') {
-            result = await window.electronAPI.openApp(params.app_name, params.target_url);
+            result = await invokeCmd('open_app', { appName: params.app_name, url: params.target_url });
           } else if (action === 'close_app') {
-            result = await window.electronAPI.closeApp(params.app_name);
+            result = await invokeCmd('close_app', { appName: params.app_name });
           } else if (action === 'show_notification') {
-            result = await window.electronAPI.showNotification(
-              params.title || 'Jarvis Notification',
-              params.message || params.body || ''
-            );
+            result = await invokeCmd('show_notification', {
+              title: params.title || 'Jarvis Notification',
+              message: params.message || params.body || '',
+            });
           } else if (action === 'capture_screen' || action === 'take_screenshot' || action === 'read_screen') {
-            result = await window.electronAPI.captureScreen();
+            result = await invokeCmd('capture_screen');
           }
         } else if (Capacitor.isNativePlatform()) {
+
+
           // We are on Mobile (Android/iOS)
           if (action === 'open_app') {
             try {
@@ -244,8 +280,9 @@ export class CompanionService {
             new Notification(params.title || 'Jarvis Alert', { body: params.message || params.body || '' });
             result = { status: 'success' };
           } else {
-            result = { status: 'error', error: 'Companion commands only supported on Desktop (Electron) or Native Mobile (Capacitor).' };
+            result = { status: 'error', error: 'Companion commands only supported on Desktop (Tauri) or Native Mobile (Capacitor).' };
           }
+
         }
 
         // Send the result back
@@ -264,21 +301,98 @@ export class CompanionService {
     };
 
     this.ws.onclose = () => {
-      console.log('[Companion] Disconnected. Reconnecting in 5s...');
-      setTimeout(() => this.connect(), 5000);
+      console.log('[Companion] Disconnected.');
+      this.stopHeartbeat();
+      if (!this.intentionalDisconnect) {
+        this.scheduleReconnect();
+      }
     };
 
     this.ws.onerror = (err) => {
       console.error('[Companion] WebSocket error:', err);
-      this.ws?.close();
+      // onclose will fire after onerror, triggering reconnect
     };
   }
 
-  public disconnect() {
+  /** Heartbeat keepalive: sends ping, expects pong within timeout */
+  private startHeartbeat() {
+    this.stopHeartbeat();
+    this.heartbeatInterval = setInterval(() => {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ type: 'ping' }));
+        // Set a timeout — if we don't get pong, force reconnect
+        this.heartbeatTimeout = setTimeout(() => {
+          console.warn('[Companion] Heartbeat timeout — no pong received. Forcing reconnect.');
+          this.ws?.close();
+        }, this.HEARTBEAT_TIMEOUT);
+      }
+    }, this.HEARTBEAT_INTERVAL);
+  }
+
+  private stopHeartbeat() {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
+    this.clearHeartbeatTimeout();
+  }
+
+  private clearHeartbeatTimeout() {
+    if (this.heartbeatTimeout) {
+      clearTimeout(this.heartbeatTimeout);
+      this.heartbeatTimeout = null;
+    }
+  }
+
+  /** Exponential backoff reconnect: 1s, 2s, 4s, 8s, ... up to 60s */
+  private scheduleReconnect() {
+    if (this.intentionalDisconnect) return;
+
+    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), this.maxReconnectDelay);
+    this.reconnectAttempts++;
+    console.log(`[Companion] Reconnecting in ${Math.round(delay / 1000)}s (attempt ${this.reconnectAttempts})...`);
+
+    this.reconnectTimer = setTimeout(() => this.connect(), delay);
+  }
+
+  /** Clean up WebSocket and all timers without triggering auto-reconnect */
+  private cleanup() {
+    this.stopHeartbeat();
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     if (this.ws) {
-      this.ws.onclose = null; // Prevent auto-reconnect
-      this.ws.close();
+      this.ws.onopen = null;
+      this.ws.onmessage = null;
+      this.ws.onclose = null;
+      this.ws.onerror = null;
+      if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+        this.ws.close();
+      }
       this.ws = null;
     }
+  }
+
+  /**
+   * Called by the visibility change handler when the page comes back to the foreground.
+   * Forces an immediate reconnect if the WebSocket is not currently open.
+   */
+  public reconnectIfNeeded() {
+    if (this.intentionalDisconnect) return;
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.log('[Companion] App resumed — reconnecting immediately.');
+      this.reconnectAttempts = 0; // Reset backoff for immediate reconnect
+      if (this.reconnectTimer) {
+        clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null;
+      }
+      this.connect();
+    }
+  }
+
+  public disconnect() {
+    this.intentionalDisconnect = true;
+    this.cleanup();
   }
 }

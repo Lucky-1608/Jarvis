@@ -1,8 +1,9 @@
 import asyncio
 import uuid
+from typing import Any
+
 import structlog
-from typing import Dict, Any, Optional
-from fastapi import WebSocket, WebSocketDisconnect
+from fastapi import WebSocket
 
 logger = structlog.get_logger(__name__)
 
@@ -11,17 +12,21 @@ class CompanionManager:
 
     def __init__(self):
         # Maps connection_id to WebSocket
-        self.active_connections: Dict[str, WebSocket] = {}
+        self.active_connections: dict[str, WebSocket] = {}
         # Maps connection_id to device type ("pc", "mobile", "web")
-        self.device_types: Dict[str, str] = {}
+        self.device_types: dict[str, str] = {}
         # Maps task_id to asyncio.Future waiting for a response
-        self.pending_tasks: Dict[str, asyncio.Future] = {}
+        self.pending_tasks: dict[str, asyncio.Future] = {}
 
     async def connect(self, websocket: WebSocket) -> str:
         await websocket.accept()
         connection_id = str(uuid.uuid4())
         self.active_connections[connection_id] = websocket
-        logger.info("companion.connected", connection_id=connection_id, total_connected=len(self.active_connections))
+        logger.info(
+            "companion.connected",
+            connection_id=connection_id,
+            total_connected=len(self.active_connections),
+        )
         return connection_id
 
     def disconnect(self, connection_id: str):
@@ -29,7 +34,11 @@ class CompanionManager:
             del self.active_connections[connection_id]
         if connection_id in self.device_types:
             del self.device_types[connection_id]
-        logger.info("companion.disconnected", connection_id=connection_id, total_connected=len(self.active_connections))
+        logger.info(
+            "companion.disconnected",
+            connection_id=connection_id,
+            total_connected=len(self.active_connections),
+        )
 
     def register_device(self, connection_id: str, device: str):
         self.device_types[connection_id] = device
@@ -39,8 +48,13 @@ class CompanionManager:
         """Returns True if there is at least one active companion connected."""
         return len(self.active_connections) > 0
 
-    async def broadcast_command(self, action: str, params: Dict[str, Any], target_device: Optional[str] = None):
-        """Broadcasts a command to all matching connected companions without waiting for a response."""
+    async def broadcast_command(
+        self,
+        action: str,
+        params: dict[str, Any],
+        target_device: str | None = None,
+    ):
+        """Broadcasts a command to all matching companions without waiting for a response."""
         if not self.has_companions():
             return
         payload = {
@@ -56,26 +70,33 @@ class CompanionManager:
                 except Exception as e:
                     logger.warning("companion.broadcast_failed", connection_id=cid, error=str(e))
 
-    async def send_command_and_wait(self, action: str, params: Dict[str, Any], timeout: int = 15, target_device: str = "pc") -> Dict[str, Any]:
+    async def send_command_and_wait(
+        self,
+        action: str,
+        params: dict[str, Any],
+        timeout: int = 15,
+        target_device: str = "pc",
+    ) -> dict[str, Any]:
         """
         Sends a command to the specified companion (or first available) and waits for the response.
+        Prioritizes the most recently connected companion and automatically prunes broken sockets.
         Raises TimeoutError if it takes too long.
         Raises ConnectionError if no companions are connected.
         """
         if not self.has_companions():
             raise ConnectionError("No local companions are currently connected.")
 
-        target_id = None
-        for cid, ws in self.active_connections.items():
-            if self.device_types.get(cid) == target_device:
-                target_id = cid
-                break
-        
-        # Fallback to the first available if specific target isn't found
-        if not target_id:
-            target_id = list(self.active_connections.keys())[0]
+        # Find all connections matching the target device, newest first
+        matching_cids = [
+            cid for cid in self.active_connections.keys()
+            if self.device_types.get(cid) == target_device
+        ]
+        matching_cids.reverse()
 
-        websocket = self.active_connections[target_id]
+        # Fallback to any active connection if specific target isn't found
+        if not matching_cids:
+            matching_cids = list(self.active_connections.keys())
+            matching_cids.reverse()
 
         task_id = str(uuid.uuid4())
         future = asyncio.Future()
@@ -87,15 +108,45 @@ class CompanionManager:
             "params": params
         }
 
+        sent = False
+        last_error = None
+
+        for cid in matching_cids:
+            websocket = self.active_connections.get(cid)
+            if not websocket:
+                continue
+            try:
+                await websocket.send_json(payload)
+                logger.debug(
+                    "companion.command_sent",
+                    action=action,
+                    task_id=task_id,
+                    connection_id=cid,
+                )
+                sent = True
+                break
+            except Exception as e:
+                logger.warning(
+                    "companion.send_failed_pruning",
+                    action=action,
+                    connection_id=cid,
+                    error=str(e),
+                )
+                self.disconnect(cid)
+                last_error = e
+
+        if not sent:
+            if task_id in self.pending_tasks:
+                del self.pending_tasks[task_id]
+            err_msg = f"Failed to deliver command to {target_device} companion: {str(last_error)}"
+            raise ConnectionError(err_msg)
+
+
         try:
-            await websocket.send_json(payload)
-            logger.debug("companion.command_sent", action=action, task_id=task_id, connection_id=target_id)
-            
             # Wait for the companion to reply
             response = await asyncio.wait_for(future, timeout=timeout)
             return response
-            
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("companion.command_timeout", action=action, task_id=task_id)
             if task_id in self.pending_tasks:
                 del self.pending_tasks[task_id]
@@ -106,7 +157,8 @@ class CompanionManager:
                 del self.pending_tasks[task_id]
             raise
 
-    async def handle_response(self, task_id: str, payload: Dict[str, Any]):
+
+    async def handle_response(self, task_id: str, payload: dict[str, Any]):
         """Called when the WebSocket receives a response from the companion."""
         if task_id in self.pending_tasks:
             future = self.pending_tasks[task_id]
