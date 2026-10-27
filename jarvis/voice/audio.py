@@ -29,7 +29,7 @@ class AudioRecorder:
     Capture audio from the microphone.
 
     Uses ``sounddevice`` for cross-platform audio input.
-    Records in 16kHz mono PCM — the format faster-whisper expects.
+    Records in 16kHz mono PCM format.
     """
 
     def __init__(self, sample_rate: int = SAMPLE_RATE, channels: int = CHANNELS) -> None:
@@ -119,6 +119,89 @@ class AudioRecorder:
         logger.info("audio.recording_stopped", duration_s=round(duration, 2))
         return audio_bytes
 
+    async def record_speech_segment(
+        self,
+        energy_threshold: float = 0.015,
+        silence_duration: float = 0.6,
+        max_duration: float = 3.2,
+        listen_timeout: float = 1.8,
+    ) -> bytes | None:
+        """
+        Record a speech segment if detected within listen_timeout.
+        If no speech is detected (ambient noise or silence), returns None
+        without wasting STT API calls.
+        """
+        try:
+            import numpy as np
+            import sounddevice as sd
+        except ImportError:
+            raise RuntimeError("sounddevice is required for audio recording.")
+
+        self._frames = []
+        pre_buffer: list[bytes] = []
+        max_pre_chunks = 6  # ~0.4s pre-speech buffer to retain the beginning of words
+        self._recording = True
+        silent_chunks = 0
+        chunks_per_second = self._sample_rate // CHUNK_SIZE
+        max_silent_chunks = int(silence_duration * chunks_per_second)
+        max_listen_chunks = int(listen_timeout * chunks_per_second)
+        max_chunks = int(max_duration * chunks_per_second)
+        total_chunks = 0
+        speech_chunks = 0
+        has_spoken = False
+
+        def callback(indata, frames, time_info, status):
+            nonlocal silent_chunks, total_chunks, has_spoken, speech_chunks
+            audio_data = indata.copy()
+            total_chunks += 1
+
+            audio_float = audio_data.astype(np.float32) / 32768.0
+            volume = np.sqrt(np.mean(audio_float**2))
+
+            if volume > energy_threshold:
+                silent_chunks = 0
+                speech_chunks += 1
+                if speech_chunks >= 2:
+                    has_spoken = True
+            else:
+                silent_chunks += 1
+                speech_chunks = 0
+
+            if has_spoken:
+                if pre_buffer:
+                    self._frames.extend(pre_buffer)
+                    pre_buffer.clear()
+                self._frames.append(audio_data.tobytes())
+            else:
+                pre_buffer.append(audio_data.tobytes())
+                if len(pre_buffer) > max_pre_chunks:
+                    pre_buffer.pop(0)
+
+        stream = sd.InputStream(
+            samplerate=self._sample_rate,
+            channels=self._channels,
+            dtype="int16",
+            blocksize=CHUNK_SIZE,
+            callback=callback,
+        )
+
+        with stream:
+            while self._recording:
+                await asyncio.sleep(0.04)
+                if not has_spoken and total_chunks >= max_listen_chunks:
+                    break
+                if has_spoken and silent_chunks >= max_silent_chunks:
+                    break
+                if total_chunks >= max_chunks:
+                    break
+
+        self._recording = False
+        if not has_spoken or not self._frames:
+            return None
+
+        audio_bytes = b"".join(self._frames)
+        return audio_bytes
+
     def stop(self) -> None:
         """Stop any ongoing recording."""
         self._recording = False
@@ -188,8 +271,9 @@ class AudioPlayer:
         try:
             if system == "Windows":
                 if suffix == ".wav":
+                    ps_cmd = f"(New-Object Media.SoundPlayer '{filepath}').PlaySync()"
                     subprocess.Popen(
-                        ["powershell", "-c", f"(New-Object Media.SoundPlayer '{filepath}').PlaySync()"],
+                        ["powershell", "-c", ps_cmd],
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL,
                     )
@@ -206,9 +290,17 @@ class AudioPlayer:
                         stderr=subprocess.DEVNULL,
                     )
             elif system == "Darwin":
-                subprocess.Popen(["afplay", str(filepath)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.Popen(
+                    ["afplay", str(filepath)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
             else:
-                subprocess.Popen(["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", str(filepath)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.Popen(
+                    ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", str(filepath)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
         except Exception as e:
             logger.debug("audio.system_playback_failed", error=str(e))
 

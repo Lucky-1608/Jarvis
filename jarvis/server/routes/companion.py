@@ -36,6 +36,19 @@ async def companion_websocket(websocket: WebSocket):
                 companion_manager.register_device(connection_id, device)
                 continue
 
+            # Companion wake word detected
+            if data.get("type") == "wake_word_detected":
+                from jarvis.events.bus import Event, EventTypes, get_event_bus
+                device = companion_manager.device_types.get(connection_id, "mobile")
+                logger.info("companion.wake_word_detected", connection_id=connection_id, device=device)
+                bus = get_event_bus()
+                await bus.publish(Event(
+                    type=EventTypes.WAKE_WORD_DETECTED,
+                    data={"source": "companion", "device": device},
+                    source="companion",
+                ))
+                continue
+
             # Response payload: {"task_id": "...", "status": "success/error", "output": "..."}
             task_id = data.get("task_id")
             if task_id:

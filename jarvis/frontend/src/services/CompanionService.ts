@@ -125,6 +125,8 @@ export class CompanionService {
             });
           } else if (action === 'capture_screen' || action === 'take_screenshot' || action === 'read_screen') {
             result = await invokeCmd('capture_screen');
+          } else if (action === 'show_window' || action === 'open_window' || action === 'wake_window' || action === 'focus_window') {
+            result = await invokeCmd('show_window');
           }
         } else if (Capacitor.isNativePlatform()) {
 

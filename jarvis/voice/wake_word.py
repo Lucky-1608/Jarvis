@@ -8,6 +8,7 @@ before activating the voice pipeline.
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from collections.abc import Callable, Coroutine
 from typing import Any
@@ -21,15 +22,14 @@ logger = structlog.get_logger(__name__)
 
 class WakeWordDetector:
     """
-    Detects the wake word "Jarvis" from a continuous audio stream.
-    
-    Uses a simple keyword-spotting approach with faster-whisper:
-    continuously transcribes small audio chunks and checks for
-    the wake word. This is CPU-efficient because we use the
-    smallest Whisper model (tiny) for detection only.
+    Detects the wake word "Jarvis" from an audio stream.
+
+    Uses an energy-gated acoustic buffer to detect human speech,
+    then transcribes the speech segment using the configured STT engine
+    (e.g. Azure Cognitive Services) to check for wake words.
     """
 
-    WAKE_WORDS = {"jarvis", "hey jarvis", "ok jarvis", "hello jarvis"}
+    WAKE_WORDS = {"jarvis", "hey jarvis", "hi jarvis", "ok jarvis", "okay jarvis", "hello jarvis"}
 
     def __init__(
         self,
@@ -64,33 +64,35 @@ class WakeWordDetector:
             logger.error("wake_word.missing_deps", error=str(exc))
             return
 
-        # Use the smallest/fastest model for wake word detection
-        stt = SpeechToText(model_size="tiny")
+        stt = SpeechToText()
         recorder = AudioRecorder(sample_rate=SAMPLE_RATE)
 
         while self._active:
             try:
-                # Record a short clip (1-3 seconds)
-                audio = await recorder.record_until_silence(
-                    silence_threshold=0.005,
-                    silence_duration=0.8,
-                    max_duration=3.0,
+                # Only captures audio when speech above energy threshold is detected
+                audio = await recorder.record_speech_segment(
+                    energy_threshold=0.015,
+                    silence_duration=0.6,
+                    max_duration=3.2,
+                    listen_timeout=1.8,
                 )
 
-                if not audio or len(audio) < SAMPLE_RATE:  # Less than 1 second
-                    await asyncio.sleep(0.1)
+                if not audio or len(audio) < SAMPLE_RATE * 0.5:
+                    await asyncio.sleep(0.05)
                     continue
 
-                # Transcribe with tiny model
+                # Transcribe speech with configured STT engine (e.g. Azure)
                 text = await stt.transcribe_bytes(audio)
+
                 text_lower = text.strip().lower()
 
                 if not text_lower:
                     continue
 
-                # Check for wake word
+                # Check for wake word (strip punctuation for robust matching)
+                text_clean = re.sub(r"[^\w\s]", " ", text_lower)
                 for wake_word in self._wake_words:
-                    if wake_word in text_lower:
+                    if wake_word in text_lower or wake_word in text_clean:
                         now = time.time()
                         if now - self._last_trigger < self._cooldown:
                             logger.debug("wake_word.cooldown")
@@ -104,6 +106,20 @@ class WakeWordDetector:
                             data={"text": text_lower, "wake_word": wake_word},
                             source="wake_word",
                         ))
+
+                        # Unminimize/show desktop companion on PC
+                        try:
+                            from jarvis.server.companion_manager import companion_manager
+                            if companion_manager.has_companions():
+                                asyncio.create_task(
+                                    companion_manager.broadcast_command(
+                                        "show_window",
+                                        {},
+                                        target_device="pc",
+                                    )
+                                )
+                        except Exception:
+                            pass
 
                         if self._on_wake:
                             await self._on_wake()

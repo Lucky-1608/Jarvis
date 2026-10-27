@@ -221,9 +221,13 @@ def _show_memory(brain):
 @click.option("--host", default="0.0.0.0", help="Server host")
 @click.option("--port", default=8000, type=int, help="Server port")
 @click.option("--reload", is_flag=True, help="Enable auto-reload for development")
-def serve(host: str, port: int, reload: bool):
+@click.option("--wake-word", is_flag=True, help="Enable background wake-word listening on PC")
+def serve(host: str, port: int, reload: bool, wake_word: bool):
     """Start the Jarvis OS API server."""
     import uvicorn
+
+    if wake_word:
+        os.environ["JARVIS_ENABLE_WAKE_WORD"] = "true"
 
     console.print(Panel(
         Text(BANNER, style="cyan bold"),
@@ -231,6 +235,8 @@ def serve(host: str, port: int, reload: bool):
         border_style="cyan",
     ))
     console.print(f"[green]Starting server on {host}:{port}[/green]")
+    if wake_word:
+        console.print("[cyan]🎤 Background wake word listener enabled ('Hey Jarvis').[/cyan]")
     console.print(f"[dim]API docs: http://localhost:{port}/docs[/dim]\n")
 
     run_kwargs: dict[str, object] = {

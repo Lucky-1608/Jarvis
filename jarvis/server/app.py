@@ -99,10 +99,28 @@ async def lifespan(app: FastAPI):
     system_monitor = get_system_monitor(interval_seconds=3)
     await system_monitor.start()
 
+    # Background wake word listener on PC if enabled
+    wake_word_detector = None
+    wake_word_task = None
+    if os.getenv("JARVIS_ENABLE_WAKE_WORD", "false").lower() in ("true", "1", "yes"):
+        try:
+            import asyncio
+            from jarvis.voice.wake_word import WakeWordDetector
+            wake_word_detector = WakeWordDetector()
+            wake_word_task = asyncio.create_task(wake_word_detector.start())
+            logger.info("server.wake_word_listener_active")
+        except Exception as e:
+            logger.warning("server.wake_word_startup_failed", error=str(e))
+
     logger.info("server.ready", docs="/docs")
     yield
 
     # Shutdown
+    if wake_word_detector:
+        wake_word_detector.stop()
+    if wake_word_task:
+        wake_word_task.cancel()
+
     if system_monitor:
         await system_monitor.stop()
 

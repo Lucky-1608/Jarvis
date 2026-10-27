@@ -132,6 +132,16 @@ fn capture_screen() -> Result<serde_json::Value, String> {
     }))
 }
 
+#[tauri::command]
+fn show_window(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+    Ok(json!({ "status": "success" }))
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -147,7 +157,8 @@ fn main() {
             open_app,
             close_app,
             show_notification,
-            capture_screen
+            capture_screen,
+            show_window
         ])
         .setup(|app| {
             // System Tray Menu Setup

@@ -65,7 +65,6 @@ dev = [
 ]
 
 voice = [
-    "faster-whisper>=1.0",
     "edge-tts>=6.1",
     "sounddevice>=0.4",
     "pyttsx3>=2.90",
