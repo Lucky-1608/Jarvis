@@ -77,7 +77,7 @@ export function VoicePage() {
     error: micError,
   } = useVoiceRecorder({
     autoStopOnSilence: true,
-    silenceDurationMs: 1400,
+    silenceDurationMs: 2200,
     onSilence: (finalText: string) => {
       submitVoiceSpeech(finalText);
     },

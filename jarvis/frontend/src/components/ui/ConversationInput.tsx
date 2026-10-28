@@ -134,8 +134,8 @@ export function ConversationInput() {
 
   const submitVoiceInput = useCallback((finalText: string) => {
     if (isSubmittingVoiceRef.current) return;
-    const fullVal = (initialTextRef.current ? initialTextRef.current + ' ' : '') + finalText;
-    const textToSend = fullVal.trim() || value.trim();
+    const fullVal = (initialTextRef.current ? initialTextRef.current + ' ' : '') + (finalText || '');
+    const textToSend = fullVal.trim();
     if (textToSend || selectedFiles.length > 0) {
       isSubmittingVoiceRef.current = true;
       setValue(textToSend);
@@ -144,12 +144,14 @@ export function ConversationInput() {
       setTimeout(() => {
         isSubmittingVoiceRef.current = false;
       }, 500);
+    } else {
+      setValue(initialTextRef.current);
     }
-  }, [value, selectedFiles.length]);
+  }, [selectedFiles.length]);
 
   const { isRecording, startRecording, stopRecording, error } = useVoiceRecorder({
     autoStopOnSilence: true,
-    silenceDurationMs: 1400,
+    silenceDurationMs: 2200,
     onTranscription: (text: string) => {
       const finalVal = (initialTextRef.current ? initialTextRef.current + ' ' : '') + text;
       setValue(finalVal);

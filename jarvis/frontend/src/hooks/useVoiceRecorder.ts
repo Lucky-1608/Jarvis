@@ -8,9 +8,45 @@ export interface UseVoiceRecorderOptions {
   onSilence?: (finalText: string) => void;
   continuous?: boolean;
   autoStopOnSilence?: boolean; // When true, considers any pause/stop after speech as the end of input (default: true)
-  silenceDurationMs?: number; // Duration of silence/pause in ms to consider input ended (default: 1400ms)
-  silenceThreshold?: number; // Audio level threshold (0 to 1) below which is considered silence (default: 0.035)
+  silenceDurationMs?: number; // Duration of silence/pause in ms to consider input ended (default: 2200ms)
+  silenceThreshold?: number; // Audio level threshold (0 to 1) below which is considered silence (default: 0.025)
   initialSilenceTimeoutMs?: number; // Timeout in ms if no speech is detected at all (default: 10000ms)
+}
+
+const HALLUCINATION_PHRASES = new Set([
+  'thank you',
+  'thank you very much',
+  'thanks',
+  'thanks for watching',
+  'thank you for watching',
+  'thanks for listening',
+  'thank you for listening',
+  'please subscribe',
+  'like and subscribe',
+  'subtitles by the amara org community',
+  'subtitles by',
+  'transcribed by',
+  'you',
+  'bye',
+  'bye bye',
+  'mbc',
+]);
+
+function cleanTranscriptionText(raw: string): string {
+  if (!raw) return '';
+  const trimmed = raw.trim();
+  const normalized = trimmed.toLowerCase().replace(/[^\w\s]/g, '').trim();
+  if (!normalized || HALLUCINATION_PHRASES.has(normalized)) {
+    return '';
+  }
+  // Catch repeated Whisper silence hallucinations like "Thank you. Thank you."
+  if (/^(?:(?:thank you(?:\s+(?:very|so)\s+much)?|thanks(?:\s+for\s+(?:watching|listening))?|you|bye)[.,!?\s]*)+$/i.test(trimmed)) {
+    return '';
+  }
+  // Strip leading "Thank you." if Whisper hallucinated it on initial silence before actual speech
+  return trimmed
+    .replace(/^(?:(?:thank you(?:\s+(?:very|so)\s+much)?|thanks(?:\s+for\s+(?:watching|listening))?)[.,!?\s]+)+(?=\w)/i, '')
+    .trim();
 }
 
 export function useVoiceRecorder(
@@ -30,6 +66,10 @@ export function useVoiceRecorder(
   const isStoppingRef = useRef(false);
   const stoppingPromiseRef = useRef<Promise<string> | null>(null);
   const hasSpokenRef = useRef(false);
+  const hasAudioSpeechRef = useRef(false);
+  const webSpeechWorkingRef = useRef(false);
+  const wsBusyRef = useRef(false);
+  const mimeTypeRef = useRef<string>('audio/webm');
   const lastSpeechTimeRef = useRef<number>(0);
   const silenceTimerRef = useRef<any>(null);
   const initialSilenceTimerRef = useRef<any>(null);
@@ -64,6 +104,10 @@ export function useVoiceRecorder(
     isStoppingRef.current = false;
     isRecordingRef.current = false;
     stoppingPromiseRef.current = null;
+    hasSpokenRef.current = false;
+    hasAudioSpeechRef.current = false;
+    webSpeechWorkingRef.current = false;
+    wsBusyRef.current = false;
 
     if (animationFrameId.current) {
       cancelAnimationFrame(animationFrameId.current);
@@ -77,10 +121,18 @@ export function useVoiceRecorder(
     useJarvisStore.getState().setAudioAmplitude(0);
 
     if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch {}
+      const rec = recognitionRef.current;
       recognitionRef.current = null;
+      try {
+        rec.stop();
+      } catch {}
+    }
+
+    if (mediaRecorder.current && mediaRecorder.current.state !== 'inactive') {
+      try {
+        mediaRecorder.current.onstop = null;
+        mediaRecorder.current.stop();
+      } catch {}
     }
 
     if (mediaStreamRef.current) {
@@ -125,10 +177,11 @@ export function useVoiceRecorder(
       useJarvisStore.getState().setAudioAmplitude(0);
 
       if (recognitionRef.current) {
-        try {
-          recognitionRef.current.stop();
-        } catch {}
+        const rec = recognitionRef.current;
         recognitionRef.current = null;
+        try {
+          rec.stop();
+        } catch {}
       }
 
       const finish = async () => {
@@ -139,27 +192,38 @@ export function useVoiceRecorder(
           ws.current = null;
         }
 
-        let finalText = recognizedTextRef.current.trim();
+        let finalText = cleanTranscriptionText(recognizedTextRef.current);
 
-        // If local speech recognition produced nothing, run backend transcribe on audio
-        if (!finalText && chunks.current.length > 0) {
+        // When using backend STT (e.g. Companion App / Tauri / Mobile where WebSpeech doesn't produce full text),
+        // always transcribe the complete recorded audio blob so no words at the end or middle are lost.
+        const shouldTranscribeFullAudio =
+          chunks.current.length > 0 && (!webSpeechWorkingRef.current || !finalText);
+
+        if (shouldTranscribeFullAudio) {
           try {
-            const audioBlob = new Blob(chunks.current, { type: 'audio/webm' });
-            const formData = new FormData();
-            formData.append('file', audioBlob, 'recording.webm');
-            const base = await getBaseUrl();
-            const res = await fetch(`${base}/api/voice/transcribe`, {
-              method: 'POST',
-              headers: { 'X-API-Key': getApiKey() },
-              body: formData,
-            });
-            const data = await res.json();
-            if (data?.text) {
-              finalText = data.text.trim();
-              recognizedTextRef.current = finalText;
+            const activeMime = mimeTypeRef.current || 'audio/webm';
+            const ext = activeMime.includes('mp4') ? 'mp4' : 'webm';
+            const audioBlob = new Blob(chunks.current, { type: activeMime });
+            if (audioBlob.size > 500) {
+              const formData = new FormData();
+              formData.append('file', audioBlob, `recording.${ext}`);
+              const base = await getBaseUrl();
+              const res = await fetch(`${base}/api/voice/transcribe`, {
+                method: 'POST',
+                headers: { 'X-API-Key': getApiKey() },
+                body: formData,
+              });
+              if (res.ok) {
+                const data = await res.json();
+                const cleaned = cleanTranscriptionText(data?.text || '');
+                if (cleaned) {
+                  finalText = cleaned;
+                  recognizedTextRef.current = finalText;
+                }
+              }
             }
           } catch (err) {
-            console.warn("Fallback STT error:", err);
+            console.warn('Full audio STT error:', err);
           }
         }
 
@@ -174,6 +238,7 @@ export function useVoiceRecorder(
         isRecordingRef.current = false;
         isStoppingRef.current = false;
         stoppingPromiseRef.current = null;
+        wsBusyRef.current = false;
         setInterimTranscript('');
         setTranscript(finalText);
 
@@ -206,15 +271,15 @@ export function useVoiceRecorder(
     clearSilenceTimers();
     if (!isRecordingRef.current || isStoppingRef.current) return;
 
-    const currentText = recognizedTextRef.current.trim();
-    if (!hasSpokenRef.current && !currentText) {
+    const currentText = cleanTranscriptionText(recognizedTextRef.current);
+    if (!hasSpokenRef.current && !hasAudioSpeechRef.current && !currentText) {
       cancelRecording();
       return;
     }
 
     try {
       const finalText = await stopRecording();
-      if (optionsRef.current.onSilence) {
+      if (finalText && optionsRef.current.onSilence) {
         optionsRef.current.onSilence(finalText);
       }
     } catch (err) {
@@ -222,12 +287,12 @@ export function useVoiceRecorder(
     }
   }, [clearSilenceTimers, cancelRecording, stopRecording]);
 
-  const notifySpeechActivity = useCallback((hasText: boolean = false) => {
+  const notifySpeechActivity = useCallback((isConfirmedSpeech: boolean = false) => {
     if (!isRecordingRef.current || isStoppingRef.current) return;
 
     lastSpeechTimeRef.current = Date.now();
 
-    if (hasText || recognizedTextRef.current.trim().length > 0) {
+    if (isConfirmedSpeech || recognizedTextRef.current.trim().length > 0) {
       hasSpokenRef.current = true;
       if (initialSilenceTimerRef.current) {
         clearTimeout(initialSilenceTimerRef.current);
@@ -235,7 +300,7 @@ export function useVoiceRecorder(
       }
     }
 
-    // Reset silence timer on active speech
+    // Reset silence timer on active speech so we never cut off mid-sentence
     if (silenceTimerRef.current) {
       clearTimeout(silenceTimerRef.current);
       silenceTimerRef.current = null;
@@ -243,7 +308,7 @@ export function useVoiceRecorder(
 
     const autoStop = optionsRef.current.autoStopOnSilence !== false;
     if (hasSpokenRef.current && autoStop) {
-      const silenceDuration = optionsRef.current.silenceDurationMs ?? 1400;
+      const silenceDuration = optionsRef.current.silenceDurationMs ?? 2200;
       silenceTimerRef.current = setTimeout(() => {
         triggerSilenceEnd();
       }, silenceDuration);
@@ -255,6 +320,9 @@ export function useVoiceRecorder(
     isStoppingRef.current = false;
     stoppingPromiseRef.current = null;
     hasSpokenRef.current = false;
+    hasAudioSpeechRef.current = false;
+    webSpeechWorkingRef.current = false;
+    wsBusyRef.current = false;
     lastSpeechTimeRef.current = Date.now();
     isRecordingRef.current = true;
 
@@ -266,15 +334,24 @@ export function useVoiceRecorder(
     // Initial timeout if user opens mic and never speaks
     const initialTimeout = optionsRef.current.initialSilenceTimeoutMs ?? 10000;
     initialSilenceTimerRef.current = setTimeout(() => {
-      if (isRecordingRef.current && !hasSpokenRef.current && !recognizedTextRef.current.trim()) {
-        console.debug("[useVoiceRecorder] Initial timeout without speech.");
+      if (
+        isRecordingRef.current &&
+        !hasSpokenRef.current &&
+        !hasAudioSpeechRef.current &&
+        !recognizedTextRef.current.trim()
+      ) {
+        console.debug('[useVoiceRecorder] Initial timeout without speech.');
         cancelRecording();
       }
     }, initialTimeout);
 
-    // 1. Native Web Speech API for 0-ms latency local real-time transcription
-    const SpeechRecognitionClass = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    let webSpeechActive = false;
+    // 1. Native Web Speech API for 0-ms latency local real-time transcription (when supported & working)
+    const isTauriEnv =
+      typeof window !== 'undefined' &&
+      ('__TAURI_INTERNALS__' in window || '__TAURI__' in window);
+    const SpeechRecognitionClass =
+      !isTauriEnv &&
+      ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
 
     if (SpeechRecognitionClass) {
       try {
@@ -296,35 +373,50 @@ export function useVoiceRecorder(
             }
           }
 
-          const combined = (final + (interim ? ' ' + interim : '')).trim();
+          const combined = cleanTranscriptionText(
+            (final + (interim ? ' ' + interim : '')).trim()
+          );
+          if (!combined) return;
+
+          webSpeechWorkingRef.current = true;
+          hasAudioSpeechRef.current = true;
           recognizedTextRef.current = combined;
           setInterimTranscript(interim.trim());
           if (final.trim()) {
-            setTranscript(final.trim());
+            setTranscript(cleanTranscriptionText(final));
           }
 
           if (optionsRef.current.onInterim) {
             optionsRef.current.onInterim(interim.trim());
           }
 
-          if (optionsRef.current.onTranscription && combined) {
+          if (optionsRef.current.onTranscription) {
             optionsRef.current.onTranscription(combined, !interim);
           }
 
-          if (combined) {
-            notifySpeechActivity(true);
-          }
+          notifySpeechActivity(true);
         };
 
         recognition.onerror = (e: any) => {
-          // If error is 'no-speech', do not crash
-          if (e.error !== 'no-speech') {
-            console.warn("SpeechRecognition error:", e.error || e);
+          const errCode = e?.error || '';
+          if (
+            errCode === 'network' ||
+            errCode === 'not-allowed' ||
+            errCode === 'service-not-allowed' ||
+            errCode === 'audio-capture'
+          ) {
+            // Disable broken WebSpeech so backend STT handles everything cleanly
+            webSpeechWorkingRef.current = false;
+            recognitionRef.current = null;
+            try {
+              recognition.stop();
+            } catch {}
+          } else if (errCode !== 'no-speech' && errCode !== 'aborted') {
+            console.warn('SpeechRecognition error:', errCode || e);
           }
         };
 
         recognition.onend = () => {
-          // If still recording in continuous mode, restart
           if (isRecordingRef.current && !isStoppingRef.current && recognitionRef.current) {
             try {
               recognition.start();
@@ -334,59 +426,82 @@ export function useVoiceRecorder(
 
         recognition.start();
         recognitionRef.current = recognition;
-        webSpeechActive = true;
       } catch (err) {
-        console.warn("SpeechRecognition init failed, falling back to server STT:", err);
+        console.warn('SpeechRecognition init failed, falling back to server STT:', err);
       }
     }
 
-    // 2. MediaRecorder for live audio visualizer & backend STT fallback
+    // 2. MediaRecorder for live audio visualizer & backend neural STT
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
-        }
+        },
       });
       mediaStreamRef.current = stream;
 
       const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
         ? 'audio/webm;codecs=opus'
-        : (MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4');
+        : MediaRecorder.isTypeSupported('audio/webm')
+        ? 'audio/webm'
+        : 'audio/mp4';
+      mimeTypeRef.current = mimeType;
 
       mediaRecorder.current = new MediaRecorder(stream, { mimeType });
       chunks.current = [];
 
-      // Audio analysis for real-time waveform visualizer
+      // Audio analysis for real-time waveform visualizer & accurate RMS voice detection
       try {
         const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
         audioContext.current = new AudioContextClass();
+        if (audioContext.current.state === 'suspended') {
+          audioContext.current.resume().catch(() => {});
+        }
         const analyser = audioContext.current.createAnalyser();
         const source = audioContext.current.createMediaStreamSource(stream);
         source.connect(analyser);
         analyser.fftSize = 256;
-        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        const freqData = new Uint8Array(analyser.frequencyBinCount);
+        const timeData = new Uint8Array(analyser.fftSize);
+        let activeSpeechFrames = 0;
 
         const updateAmplitude = () => {
           if (!analyser || !isRecordingRef.current) return;
-          analyser.getByteFrequencyData(dataArray);
-          let sum = 0;
-          for (let i = 0; i < dataArray.length; i++) {
-            sum += dataArray[i];
+
+          analyser.getByteFrequencyData(freqData);
+          let freqSum = 0;
+          for (let i = 0; i < freqData.length; i++) {
+            freqSum += freqData[i];
           }
-          const average = sum / dataArray.length;
-          const normalized = Math.min(1, average / 128);
-          setAudioLevel(normalized);
-          useJarvisStore.getState().setAudioAmplitude(normalized);
+          const freqNorm = Math.min(1, freqSum / freqData.length / 128);
 
-          const threshold = optionsRef.current.silenceThreshold ?? 0.035;
+          analyser.getByteTimeDomainData(timeData);
+          let sumSquares = 0;
+          for (let i = 0; i < timeData.length; i++) {
+            const sample = (timeData[i] - 128) / 128;
+            sumSquares += sample * sample;
+          }
+          const rms = Math.sqrt(sumSquares / timeData.length);
+          const visualLevel = Math.min(1, Math.max(freqNorm, rms * 3.2));
 
-          // Sound detected
-          if (normalized > threshold) {
-            if (normalized > 0.06 || recognizedTextRef.current.trim().length > 0) {
-              notifySpeechActivity(false);
+          setAudioLevel(visualLevel);
+          useJarvisStore.getState().setAudioAmplitude(visualLevel);
+
+          const threshold = optionsRef.current.silenceThreshold ?? 0.018;
+
+          if (rms > threshold || freqNorm > threshold * 1.4) {
+            activeSpeechFrames += 1;
+            if (activeSpeechFrames >= 3) {
+              hasAudioSpeechRef.current = true;
             }
+            // Sustained speech (~200ms) arms hasSpoken; once armed, any voice activity keeps resetting silence timer
+            if (activeSpeechFrames >= 12 || (hasSpokenRef.current && activeSpeechFrames >= 2)) {
+              notifySpeechActivity(true);
+            }
+          } else {
+            activeSpeechFrames = 0;
           }
 
           animationFrameId.current = requestAnimationFrame(updateAmplitude);
@@ -394,7 +509,7 @@ export function useVoiceRecorder(
 
         updateAmplitude();
       } catch (err) {
-        console.warn("Could not set up audio context for visualization:", err);
+        console.warn('Could not set up audio context for visualization:', err);
       }
 
       // 3. Connect to backend streaming STT WebSocket
@@ -408,50 +523,66 @@ export function useVoiceRecorder(
         ws.current = socket;
 
         socket.onmessage = (event) => {
+          wsBusyRef.current = false;
           try {
             const data = JSON.parse(event.data);
-            if (data.text) {
-              const text = data.text.trim();
-              // Only override if WebSpeech didn't already produce text
-              if (!webSpeechActive || !recognizedTextRef.current) {
+            if (data.text !== undefined) {
+              const text = cleanTranscriptionText(data.text);
+              if (!text) return;
+
+              // Update whenever local WebSpeech isn't actively driving transcription
+              if (!webSpeechWorkingRef.current) {
                 recognizedTextRef.current = text;
-                setInterimTranscript(text);
+                setTranscript(text);
+                setInterimTranscript('');
                 if (optionsRef.current.onTranscription) {
                   optionsRef.current.onTranscription(text, false);
                 }
-                if (text) {
-                  notifySpeechActivity(true);
-                }
+                notifySpeechActivity(true);
               }
             }
           } catch (e) {
-            console.error("Failed to parse STT websocket message", e);
+            console.error('Failed to parse STT websocket message', e);
           }
         };
 
         socket.onerror = () => {
-          console.debug("STT WebSocket stream unavailable, using native speech engine.");
+          wsBusyRef.current = false;
+          console.debug('STT WebSocket stream unavailable, will transcribe on stop.');
+        };
+
+        socket.onclose = () => {
+          wsBusyRef.current = false;
         };
       } catch {}
 
       mediaRecorder.current.ondataavailable = (e) => {
         if (e.data.size > 0) {
           chunks.current.push(e.data);
-          if (ws.current?.readyState === WebSocket.OPEN) {
+          // Only stream to backend STT after speech energy has been detected, and don't overlap requests
+          if (
+            hasAudioSpeechRef.current &&
+            !isStoppingRef.current &&
+            !webSpeechWorkingRef.current &&
+            !wsBusyRef.current &&
+            ws.current?.readyState === WebSocket.OPEN
+          ) {
             const blob = new Blob(chunks.current, { type: mimeType });
-            ws.current.send(blob);
+            if (blob.size > 1000) {
+              wsBusyRef.current = true;
+              ws.current.send(blob);
+            }
           }
         }
       };
 
-      mediaRecorder.current.start(800); // 800ms chunks for live streaming
+      mediaRecorder.current.start(900); // 900ms chunks for live streaming
       setIsRecording(true);
       isRecordingRef.current = true;
       setError(null);
-
     } catch (err: any) {
-      console.error("Error accessing microphone:", err);
-      setError(err?.message || "Microphone access denied or not available.");
+      console.error('Error accessing microphone:', err);
+      setError(err?.message || 'Microphone access denied or not available.');
       setIsRecording(false);
       isRecordingRef.current = false;
       clearSilenceTimers();
@@ -471,10 +602,14 @@ export function useVoiceRecorder(
         mediaStreamRef.current.getTracks().forEach((t) => t.stop());
       }
       if (recognitionRef.current) {
-        try { recognitionRef.current.stop(); } catch {}
+        try {
+          recognitionRef.current.stop();
+        } catch {}
       }
       if (ws.current) {
-        try { ws.current.close(); } catch {}
+        try {
+          ws.current.close();
+        } catch {}
       }
     };
   }, [clearSilenceTimers]);

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,89 @@ from jarvis.events.bus import get_event_bus
 from jarvis.providers.base import APIKeyRotator
 
 logger = structlog.get_logger(__name__)
+
+# Common Whisper hallucinations produced on silent or low-energy audio chunks
+_WHISPER_HALLUCINATIONS = {
+    "thank you",
+    "thank you very much",
+    "thanks",
+    "thanks for watching",
+    "thank you for watching",
+    "thanks for listening",
+    "thank you for listening",
+    "please subscribe",
+    "like and subscribe",
+    "subtitles by the amara org community",
+    "subtitles by",
+    "transcribed by",
+    "you",
+    "bye",
+    "bye bye",
+    "mbc",
+}
+
+
+def _clean_whisper_output(text: str, segments: list[dict[str, Any]] | None = None) -> str:
+    """Filter out common Whisper silence hallucinations (such as 'Thank you.')."""
+    if segments:
+        kept_parts: list[str] = []
+        for seg in segments:
+            seg_text = (seg.get("text") or "").strip()
+            if not seg_text:
+                continue
+            norm = re.sub(r"[^\w\s]", "", seg_text.lower()).strip()
+            no_speech_prob = float(seg.get("no_speech_prob", 0.0) or 0.0)
+            avg_logprob = float(seg.get("avg_logprob", 0.0) or 0.0)
+
+            # Drop segments with high no-speech probability and low confidence
+            if no_speech_prob > 0.7 and avg_logprob < -0.7:
+                continue
+
+            # Drop known silence hallucinations
+            if norm in _WHISPER_HALLUCINATIONS:
+                continue
+
+            kept_parts.append(seg_text)
+        text = " ".join(kept_parts).strip()
+
+    if not text:
+        return ""
+
+    norm_full = re.sub(r"[^\w\s]", "", text.lower()).strip()
+    if norm_full in _WHISPER_HALLUCINATIONS:
+        return ""
+
+    # Strip leading "Thank you." prefix if Whisper prepended it from initial silence before the command
+    cleaned = re.sub(
+        r"^(?:thank you(?: very much)?|thanks(?: for watching)?)[.,!?\s]+(?=\w)",
+        "",
+        text.strip(),
+        flags=re.IGNORECASE,
+    ).strip()
+    return cleaned or text.strip()
+
+
+def _detect_container_and_prepare(audio_bytes: bytes, filename: str) -> tuple[bytes, str, str]:
+    """Ensure audio bytes have a valid container and matching filename/MIME type."""
+    if not audio_bytes:
+        return audio_bytes, filename, "audio/webm"
+
+    if audio_bytes[:4] == b"RIFF":
+        return audio_bytes, "audio.wav", "audio/wav"
+    if audio_bytes[:4] == b"\x1a\x45\xdf\xa3":
+        return audio_bytes, "audio.webm", "audio/webm"
+    if audio_bytes[:4] == b"OggS":
+        return audio_bytes, "audio.ogg", "audio/ogg"
+    if audio_bytes[:3] == b"ID3" or audio_bytes[:2] in (b"\xff\xfb", b"\xff\xf3", b"\xff\xf2"):
+        return audio_bytes, "audio.mp3", "audio/mpeg"
+    if len(audio_bytes) > 8 and audio_bytes[4:8] == b"ftyp":
+        return audio_bytes, "audio.mp4", "audio/mp4"
+
+    # If filename already has a known extension and we didn't match raw PCM, check if it's raw PCM
+    # Raw PCM from AudioRecorder has no header; wrap it in a WAV container for cloud STT APIs
+    from jarvis.voice.audio import pcm_to_wav
+    wav_bytes = pcm_to_wav(audio_bytes)
+    return wav_bytes, "audio.wav", "audio/wav"
 
 
 class SpeechToText:
@@ -120,13 +204,14 @@ class SpeechToText:
     ) -> str:
         """Transcribe audio bytes using Groq Whisper API (whisper-large-v3-turbo)."""
         url = "https://api.groq.com/openai/v1/audio/transcriptions"
-        mime_type = "audio/webm" if filename.endswith(".webm") else "audio/wav"
+        prepared_bytes, resolved_filename, mime_type = _detect_container_and_prepare(audio_bytes, filename)
         files = {
-            "file": (filename, audio_bytes, mime_type)
+            "file": (resolved_filename, prepared_bytes, mime_type)
         }
         data: dict[str, Any] = {
             "model": "whisper-large-v3-turbo",
-            "response_format": "json",
+            "response_format": "verbose_json",
+            "temperature": "0.0",
         }
         if language:
             data["language"] = language.split("-")[0]
@@ -139,11 +224,13 @@ class SpeechToText:
 
             headers = {"Authorization": f"Bearer {api_key}"}
             try:
-                async with httpx.AsyncClient(timeout=12.0) as client:
+                async with httpx.AsyncClient(timeout=15.0) as client:
                     resp = await client.post(url, headers=headers, files=files, data=data)
                     resp.raise_for_status()
                     result = resp.json()
-                    return result.get("text", "").strip()
+                    raw_text = result.get("text", "").strip()
+                    segments = result.get("segments") if isinstance(result.get("segments"), list) else None
+                    return _clean_whisper_output(raw_text, segments)
             except httpx.HTTPStatusError as e:
                 logger.warning("stt.groq_key_error", status=e.response.status_code, error=e.response.text[:200])
                 if e.response.status_code in (401, 429) and len(self._groq_rotator.keys) > 1:
@@ -154,16 +241,17 @@ class SpeechToText:
                 logger.warning("stt.groq_failed", error=str(e))
                 if len(self._groq_rotator.keys) > 1:
                     self._groq_rotator.rotate()
-                continue
+                    continue
+                raise
         return ""
 
     async def _transcribe_elevenlabs(self, audio_bytes: bytes, language: str | None = None, filename: str = "audio.wav") -> str:
         """Transcribe audio bytes using ElevenLabs STT."""
         url = f"{self._settings.elevenlabs.base_url.rstrip('/')}/v1/speech-to-text"
 
-        mime_type = "audio/webm" if filename.endswith(".webm") else "audio/wav"
+        prepared_bytes, resolved_filename, mime_type = _detect_container_and_prepare(audio_bytes, filename)
         files = {
-            "file": (filename, audio_bytes, mime_type)
+            "file": (resolved_filename, prepared_bytes, mime_type)
         }
 
         data = {
@@ -187,7 +275,7 @@ class SpeechToText:
                     response = await client.post(url, headers=headers, files=files, data=data)
                     response.raise_for_status()
                     result = response.json()
-                    return result.get("text", "")
+                    return _clean_whisper_output(result.get("text", ""))
             except httpx.HTTPStatusError as e:
                 error_msg = e.response.text
                 try:
@@ -213,6 +301,9 @@ class SpeechToText:
         filename: str = "audio.webm",
     ) -> str:
         """Transcribe audio bytes using configured STT provider with multi-tier fallback."""
+        if not audio_bytes or len(audio_bytes) < 200:
+            return ""
+
         preferred = self._settings.stt_provider or "groq"
         providers = [preferred]
         for p in ["groq", "azure", "elevenlabs"]:
@@ -229,8 +320,7 @@ class SpeechToText:
                 )
                 if provider == "groq" and has_groq:
                     text = await self._transcribe_groq(audio_bytes, language, filename)
-                    if text and text.strip():
-                        return text
+                    return text.strip()
                 has_azure = bool(
                     os.environ.get("AZURE_SPEECH_KEY")
                     or (hasattr(self._settings, "azure_speech") and self._settings.azure_speech.key)
@@ -238,11 +328,10 @@ class SpeechToText:
                 if provider == "azure" and has_azure:
                     text = await self._transcribe_azure_bytes(audio_bytes, language)
                     if text and text.strip():
-                        return text
+                        return text.strip()
                 elif provider == "elevenlabs" and self._elevenlabs_rotator.keys:
                     text = await self._transcribe_elevenlabs(audio_bytes, language, filename)
-                    if text and text.strip():
-                        return text
+                    return text.strip()
             except Exception as e:
                 logger.debug("stt.provider_fallback", provider=provider, error=str(e))
                 last_error = e
