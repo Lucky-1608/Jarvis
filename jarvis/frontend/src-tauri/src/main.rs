@@ -51,10 +51,46 @@ fn run_command(command: String, cwd: Option<String>) -> Result<serde_json::Value
 fn open_app(app_name: String, url: Option<String>) -> Result<serde_json::Value, String> {
     #[cfg(target_os = "windows")]
     {
-        let full_cmd = if let Some(target_url) = url {
-            format!("start \"\" \"{}\" \"{}\"", app_name, target_url)
-        } else {
-            format!("start \"\" \"{}\"", app_name)
+        let lower = app_name.trim().to_lowercase();
+        let target_arg = url.unwrap_or_default();
+        let has_arg = !target_arg.trim().is_empty();
+
+        let full_cmd = match lower.as_str() {
+            "terminal" | "windows terminal" | "wt" | "wt.exe" => {
+                if has_arg {
+                    format!("wt.exe cmd.exe /K \"{}\"", target_arg)
+                } else {
+                    "start wt.exe".to_string()
+                }
+            }
+            "cmd" | "cmd.exe" | "command prompt" => {
+                if has_arg {
+                    format!("start cmd.exe /K \"{}\"", target_arg)
+                } else {
+                    "start cmd.exe".to_string()
+                }
+            }
+            "powershell" | "powershell.exe" => {
+                if has_arg {
+                    format!("start powershell.exe -NoExit -Command \"{}\"", target_arg)
+                } else {
+                    "start powershell.exe".to_string()
+                }
+            }
+            "code" | "vscode" | "vs code" => {
+                if has_arg {
+                    format!("start code \"{}\"", target_arg)
+                } else {
+                    "start code".to_string()
+                }
+            }
+            _ => {
+                if has_arg {
+                    format!("start \"\" \"{}\" \"{}\"", app_name, target_arg)
+                } else {
+                    format!("start \"\" \"{}\"", app_name)
+                }
+            }
         };
         let _ = Command::new("cmd").args(["/C", &full_cmd]).spawn();
         Ok(json!({ "status": "success" }))

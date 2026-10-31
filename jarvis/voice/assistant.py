@@ -132,11 +132,27 @@ class VoiceAssistant:
         # Start the wake word listener (this blocks)
         await self._wake_word.start()
 
-    async def _on_wake_word_detected(self) -> None:
+    async def _on_wake_word_detected(self, text: str = "") -> None:
         """Called when the wake word is detected."""
-        logger.info("voice_assistant.wake_word_triggered")
+        logger.info("voice_assistant.wake_word_triggered", text=text)
 
-        # Play a brief acknowledgment sound (or speak)
+        # Check if the user already spoke a command along with the wake word (e.g. "Jarvis open chrome")
+        command = ""
+        if text:
+            cleaned = text.strip()
+            from jarvis.voice.wake_word import WakeWordDetector
+            for ww in WakeWordDetector.WAKE_WORDS:
+                if cleaned.lower().startswith(ww):
+                    command = cleaned[len(ww):].strip(",.!? ")
+                    break
+
+        if command:
+            logger.info("voice_assistant.direct_command", command=command)
+            result = await self._brain.process(command)
+            await self._tts.speak(result.content)
+            return
+
+        # Otherwise play a brief acknowledgment sound and listen for command
         await self._tts.speak("Yes?")
 
         # Listen for the actual command

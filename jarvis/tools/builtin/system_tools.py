@@ -445,9 +445,15 @@ class OpenAppTool(Tool):
                 if cmd_exe:
                     try:
                         if target_url:
-                            os.startfile(cmd_exe, arguments=target_url)
+                            if cmd_exe in ("wt.exe", "cmd.exe"):
+                                subprocess.Popen(f'start {cmd_exe} /K "{target_url}"', shell=True)
+                            else:
+                                os.startfile(cmd_exe, arguments=target_url)
                         else:
-                            os.startfile(cmd_exe)
+                            if cmd_exe in ("wt.exe", "cmd.exe"):
+                                subprocess.Popen(f"start {cmd_exe}", shell=True)
+                            else:
+                                os.startfile(cmd_exe)
                     except Exception as e:
                         return ToolResult(success=False, error=f"Failed to open '{cmd_exe}': {e}")
                 else:
