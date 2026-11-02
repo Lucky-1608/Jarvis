@@ -85,17 +85,17 @@ function convertTablesToReadableFormat(text) {
                     const v = cleanedCells[1];
                     if (cleanedCells.length === 2) {
                         if (v.includes('\n')) {
-                            formattedBullets.push(`• **${cleanK}:**\n    ${v}`);
+                            formattedBullets.push(`• ${cleanK}:\n    ${v}`);
                         } else {
-                            formattedBullets.push(`• **${cleanK}:** ${v}`);
+                            formattedBullets.push(`• ${cleanK}: ${v}`);
                         }
                     } else {
                         const restParts = [];
                         for (let j = 1; j < cleanedCells.length; j++) {
                             const h = rawHeaders[j] || `Col ${j + 1}`;
-                            if (cleanedCells[j]) restParts.push(`*${h}*: ${cleanedCells[j]}`);
+                            if (cleanedCells[j]) restParts.push(`${h}: ${cleanedCells[j]}`);
                         }
-                        formattedBullets.push(`• **${cleanK}** — ${restParts.join(' | ')}`);
+                        formattedBullets.push(`• ${cleanK} — ${restParts.join(' | ')}`);
                     }
                 } else if (cleanedCells.length === 1 && cleanedCells[0]) {
                     formattedBullets.push(`• ${cleanedCells[0]}`);
@@ -113,6 +113,35 @@ function convertTablesToReadableFormat(text) {
     }
 
     return outputLines.join('\n');
+}
+
+/**
+ * Strips markdown stars (bold/italics), headers (#), and cleans up formatting for Telegram
+ */
+function formatMessageForChat(text) {
+    if (!text || typeof text !== 'string') return text;
+
+    // 1. Convert any markdown tables first
+    let formatted = convertTablesToReadableFormat(text);
+
+    // 2. Remove markdown header hashes (e.g. "### Heading" -> "Heading")
+    formatted = formatted.replace(/^#{1,6}\s*(.+)$/gm, '$1');
+
+    // 3. Convert asterisk bullets (e.g. "* Item") to clean bullet "• Item"
+    formatted = formatted.replace(/^[ \t]*\*\s+/gm, '• ');
+
+    // 4. Strip bold and italic markdown asterisks
+    formatted = formatted.replace(/\*\*\*([^*]+)\*\*\*/g, '$1');
+    formatted = formatted.replace(/\*\*([^*]+)\*\*/g, '$1');
+    formatted = formatted.replace(/(^|[\s(])\*([^*]+?)\*([\s).,;:!?]|$)/g, '$1$2$3');
+
+    // 5. Clean up any remaining isolated or dangling double/triple asterisks
+    formatted = formatted.replace(/\*{2,}/g, '');
+
+    // 6. Normalize excessive blank lines
+    formatted = formatted.replace(/\n{3,}/g, '\n\n');
+
+    return formatted.trim();
 }
 
 /**
@@ -165,7 +194,8 @@ function chunkMessage(text, maxLength = 4000) {
  * Sends a message in sequential chunks to avoid Telegram's 4096 character limit
  */
 async function sendTelegramChunks(bot, chatId, text, baseOptions = {}) {
-    const chunks = chunkMessage(text, 4000);
+    const formattedText = formatMessageForChat(text);
+    const chunks = chunkMessage(formattedText, 4000);
     if (chunks.length === 0) return;
 
     for (let i = 0; i < chunks.length; i++) {
@@ -332,7 +362,7 @@ async function connectToTelegram() {
                 reply = "⚠️ Jarvis completed processing, but no text response was produced.";
             }
 
-            reply = convertTablesToReadableFormat(reply);
+            reply = formatMessageForChat(reply);
 
         } catch (error) {
             console.error("Error communicating with Jarvis API:", error.message);
@@ -393,7 +423,7 @@ const server = http.createServer((req, res) => {
                 }
 
                 const targetChatId = data.to || data.chat_id || OWNER_ID;
-                const messageText = convertTablesToReadableFormat(data.message);
+                const messageText = formatMessageForChat(data.message);
                 await sendTelegramChunks(globalBot, targetChatId, messageText);
                 console.log(`[Bridge] Sent message to ${targetChatId}: "${messageText.substring(0, 60)}"`);
                 res.writeHead(200, { 'Content-Type': 'application/json' });

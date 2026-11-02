@@ -201,17 +201,17 @@ function convertTablesToReadableFormat(text) {
                     const v = cleanedCells[1];
                     if (cleanedCells.length === 2) {
                         if (v.includes('\n')) {
-                            formattedBullets.push(`• **${cleanK}:**\n    ${v}`);
+                            formattedBullets.push(`• ${cleanK}:\n    ${v}`);
                         } else {
-                            formattedBullets.push(`• **${cleanK}:** ${v}`);
+                            formattedBullets.push(`• ${cleanK}: ${v}`);
                         }
                     } else {
                         const restParts = [];
                         for (let j = 1; j < cleanedCells.length; j++) {
                             const h = rawHeaders[j] || `Col ${j + 1}`;
-                            if (cleanedCells[j]) restParts.push(`*${h}*: ${cleanedCells[j]}`);
+                            if (cleanedCells[j]) restParts.push(`${h}: ${cleanedCells[j]}`);
                         }
-                        formattedBullets.push(`• **${cleanK}** — ${restParts.join(' | ')}`);
+                        formattedBullets.push(`• ${cleanK} — ${restParts.join(' | ')}`);
                     }
                 } else if (cleanedCells.length === 1 && cleanedCells[0]) {
                     formattedBullets.push(`• ${cleanedCells[0]}`);
@@ -229,6 +229,35 @@ function convertTablesToReadableFormat(text) {
     }
 
     return outputLines.join('\n');
+}
+
+/**
+ * Strips markdown stars (bold/italics), headers (#), and cleans up formatting for WhatsApp
+ */
+function formatMessageForChat(text) {
+    if (!text || typeof text !== 'string') return text;
+
+    // 1. Convert any markdown tables first
+    let formatted = convertTablesToReadableFormat(text);
+
+    // 2. Remove markdown header hashes (e.g. "### Heading" -> "Heading")
+    formatted = formatted.replace(/^#{1,6}\s*(.+)$/gm, '$1');
+
+    // 3. Convert asterisk bullets (e.g. "* Item") to clean bullet "• Item"
+    formatted = formatted.replace(/^[ \t]*\*\s+/gm, '• ');
+
+    // 4. Strip bold and italic markdown asterisks
+    formatted = formatted.replace(/\*\*\*([^*]+)\*\*\*/g, '$1');
+    formatted = formatted.replace(/\*\*([^*]+)\*\*/g, '$1');
+    formatted = formatted.replace(/(^|[\s(])\*([^*]+?)\*([\s).,;:!?]|$)/g, '$1$2$3');
+
+    // 5. Clean up any remaining isolated or dangling double/triple asterisks
+    formatted = formatted.replace(/\*{2,}/g, '');
+
+    // 6. Normalize excessive blank lines
+    formatted = formatted.replace(/\n{3,}/g, '\n\n');
+
+    return formatted.trim();
 }
 
 /**
@@ -277,7 +306,8 @@ function chunkMessage(text, maxLength = 4000) {
  * Sends a message in sequential chunks to avoid buffer drops or socket timeouts in Baileys
  */
 async function sendWhatsAppChunks(sock, targetJid, text, quotedMsg = null) {
-    const chunks = chunkMessage(text, 4000);
+    const formattedText = formatMessageForChat(text);
+    const chunks = chunkMessage(formattedText, 4000);
     if (chunks.length === 0) return;
 
     // Safety: Never quote a fromMe message or self-chat message.
@@ -774,7 +804,7 @@ async function connectToWhatsApp() {
                     reply = `[Jarvis]: ${reply}`;
                 }
 
-                reply = convertTablesToReadableFormat(reply);
+                reply = formatMessageForChat(reply);
             } catch (error) {
                 console.error("Error communicating with Jarvis API:", error.message);
                 reply = "⚠️ Jarvis Backend is unreachable.";
@@ -839,7 +869,7 @@ const server = http.createServer((req, res) => {
                     }
                 }
 
-                const messageToSend = convertTablesToReadableFormat(data.message);
+                const messageToSend = formatMessageForChat(data.message);
                 await sendWhatsAppChunks(globalSock, targetJid, messageToSend);
                 console.log(`[Bridge] Sent message to ${targetJid}: "${messageToSend.substring(0, 60)}"`);
                 res.writeHead(200, { 'Content-Type': 'application/json' });

@@ -76,10 +76,14 @@ JARVIS_SYSTEM_PROMPT = """You are Jarvis, an advanced AI Operating System assist
   (WhatsApp, Telegram) and mobile UIs cannot render tables cleanly, resulting in broken vertical
   bars and ugly text wrapping.
 - NEVER format information into ascii or markdown grid tables. Instead, ALWAYS format structured
-  data using clean bullet points, bold key-value pairs, or numbered lists:
-  • **Field/Item Name:** Description or details
-  • **Another Field:** Value
-- Use clean headings (e.g., `### Summary`), bullet points (`•` or `-`), and clean line breaks.
+  data using clean bullet points or numbered lists without asterisks:
+  • Field/Item Name: Description or details
+  • Another Field: Value
+- STRICTLY DO NOT USE ASTERISKS (*) OR DOUBLE ASTERISKS (**) for bolding or emphasis in messages.
+  Messaging platforms (WhatsApp, Telegram) and mobile apps display raw asterisks as cluttered,
+  unwanted symbols. Keep text clean and unstyled, or use clear capitalisation for section headers.
+- DO NOT use markdown heading hashes (e.g. ### or ####) in conversational messages. Use plain text
+  headings, clean bullet points (• or -), and clean line breaks.
 - DO NOT output any raw JSON, tool call strings, or unnecessary code blocks.
 - Avoid using non-standard unicode characters (e.g. non-breaking hyphens, narrow no-break spaces);
   use regular spaces and hyphens instead.
