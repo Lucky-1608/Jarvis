@@ -212,7 +212,15 @@ export function ToolsPage() {
                 
                 <button 
                   onClick={() => {
-                    api.post('/api/tools/execute', { tool_name: activeTool.name, params: {} })
+                    const confirmed = !activeTool.dangerous || window.confirm(
+                      `Tool '${activeTool.name}' is marked dangerous. Execute the test payload?`,
+                    );
+                    if (!confirmed) return;
+                    api.post('/api/tools/execute', {
+                      tool_name: activeTool.name,
+                      params: {},
+                      confirmed,
+                    })
                       .then(res => {
                         if (res.ok) {
                           toast({ title: 'Tool Executed', description: JSON.stringify(res.data).substring(0, 200) });

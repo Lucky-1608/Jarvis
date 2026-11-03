@@ -26,6 +26,7 @@ export interface DeviceHandsPlugin {
     notificationAccessEnabled: boolean;
   }>;
   setBackendUrl(options: { url: string }): Promise<{ success: boolean }>;
+  setBackendApiKey(options: { apiKey: string }): Promise<{ success: boolean }>;
 }
 
 

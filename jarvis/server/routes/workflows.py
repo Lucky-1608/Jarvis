@@ -7,7 +7,7 @@ GET /api/workflows/stats — Workflow statistics
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from jarvis.server.dependencies import get_brain
 
@@ -39,3 +39,23 @@ async def workflow_stats():
         "running": running,
         "failed": failed,
     }
+
+
+@router.post("/workflows/{workflow_id}/approve")
+async def approve_workflow(workflow_id: str):
+    """Approve and resume one blocked workflow."""
+    brain = get_brain()
+    try:
+        return await brain.approve_workflow(workflow_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Workflow not found or no longer pending")
+
+
+@router.post("/workflows/{workflow_id}/cancel")
+async def cancel_workflow(workflow_id: str):
+    """Cancel one blocked workflow without executing it."""
+    brain = get_brain()
+    try:
+        return brain.cancel_workflow(workflow_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Workflow not found or no longer pending")

@@ -157,7 +157,12 @@ class JarvisBackgroundService : Service() {
         val url = urls[currentUrlIndex]
         Log.d(TAG, "Attempting Companion WebSocket connection to: $url")
 
-        val request = Request.Builder().url(url).build()
+        val prefs = getSharedPreferences("jarvis_prefs", Context.MODE_PRIVATE)
+        val requestBuilder = Request.Builder().url(url)
+        prefs.getString("api_key", null)?.takeIf { it.isNotBlank() }?.let {
+            requestBuilder.addHeader("X-API-Key", it)
+        }
+        val request = requestBuilder.build()
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(ws: WebSocket, response: Response) {
                 Log.d(TAG, "Connected to Jarvis Companion endpoint: $url")

@@ -3,6 +3,7 @@ import json
 import structlog
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from jarvis.server.auth import authenticate_websocket
 from jarvis.server.companion_manager import companion_manager
 
 logger = structlog.get_logger(__name__)
@@ -12,6 +13,8 @@ router = APIRouter()
 @router.websocket("/ws/companion")
 async def companion_websocket(websocket: WebSocket):
     """WebSocket endpoint for local companion apps to connect."""
+    if not await authenticate_websocket(websocket):
+        return
     connection_id = await companion_manager.connect(websocket)
     try:
         while True:

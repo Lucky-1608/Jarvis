@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import base64
 
-from fastapi import APIRouter, File, UploadFile
+from fastapi import APIRouter, File, Query, UploadFile
 from pydantic import BaseModel, Field
 
 router = APIRouter()
@@ -23,12 +23,13 @@ router = APIRouter()
 class AnalyzeRequest(BaseModel):
     query: str = Field(
         "Describe what's in this image.",
+        max_length=2_000,
         description="Question about the image",
     )
 
 
 class FindElementRequest(BaseModel):
-    description: str = Field(..., description="Description of the UI element to find")
+    description: str = Field(..., max_length=2_000, description="Description of the UI element to find")
 
 
 class VisionResponse(BaseModel):
@@ -45,13 +46,15 @@ class VisionResponse(BaseModel):
 # ---------------------------------------------------------------------------
 @router.post("/vision/analyze", response_model=VisionResponse)
 async def analyze_image(
-    query: str = "Describe what's in this image.",
+    query: str = Query("Describe what's in this image.", max_length=2_000),
     file: UploadFile = File(...),
 ):
     """Upload an image and analyze it with AI vision."""
     from jarvis.vision.analyzer import VisionAnalyzer
 
-    content = await file.read()
+    from jarvis.server.limits import read_upload_limited
+
+    content = await read_upload_limited(file)
     image_b64 = base64.b64encode(content).decode("utf-8")
 
     analyzer = VisionAnalyzer()

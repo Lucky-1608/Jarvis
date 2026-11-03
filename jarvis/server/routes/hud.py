@@ -4,12 +4,15 @@ import structlog
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from jarvis.events.bus import EventTypes, get_event_bus
+from jarvis.server.auth import authenticate_websocket
 
 router = APIRouter(prefix="/hud", tags=["HUD"])
 logger = structlog.get_logger(__name__)
 
 @router.websocket("/ws")
 async def hud_websocket(websocket: WebSocket):
+    if not await authenticate_websocket(websocket):
+        return
     await websocket.accept()
     bus = get_event_bus()
 

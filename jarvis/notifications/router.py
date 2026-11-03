@@ -51,9 +51,14 @@ class NotificationRouter:
             async def send_to_bridge(candidate_urls: list[str]):
                 last_err = None
                 async with httpx.AsyncClient(timeout=10.0) as client:
+                    headers = {"X-API-Key": os.getenv("JARVIS_SECRET_KEY", "")}
                     for url in candidate_urls:
                         try:
-                            resp = await client.post(url, json={"message": message})
+                            resp = await client.post(
+                                url,
+                                json={"message": message},
+                                headers=headers,
+                            )
                             if resp.status_code == 200:
                                 return
                             last_err = f"Status {resp.status_code}: {resp.text}"

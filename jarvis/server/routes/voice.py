@@ -16,6 +16,8 @@ from pathlib import Path
 from fastapi import APIRouter, File, UploadFile, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
+from jarvis.server.auth import authenticate_websocket
+
 router = APIRouter()
 
 
@@ -23,7 +25,7 @@ router = APIRouter()
 # Models
 # ---------------------------------------------------------------------------
 class SpeakRequest(BaseModel):
-    text: str = Field(..., description="Text to speak")
+    text: str = Field(..., max_length=10_000, description="Text to speak")
     voice: str = Field("en-US-GuyNeural", description="TTS voice name")
 
 
@@ -48,7 +50,9 @@ async def transcribe_audio(file: UploadFile = File(...)):
     stt = SpeechToText(model_size="base")
 
     # Save uploaded file to temp
-    content = await file.read()
+    from jarvis.server.limits import read_upload_limited
+
+    content = await read_upload_limited(file)
     suffix = Path(file.filename or "audio.wav").suffix or ".wav"
 
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
@@ -123,6 +127,8 @@ async def transcribe_stream(ws: WebSocket):
     Client sends binary audio (webm/mp4/wav) chunks.
     Server processes with ultra-fast STT and streams transcription text back.
     """
+    if not await authenticate_websocket(ws):
+        return
     await ws.accept()
     import json
 
@@ -154,6 +160,10 @@ async def transcribe_stream(ws: WebSocket):
                     pass
 
             if not audio_bytes or len(audio_bytes) < 100:
+                continue
+            from jarvis.server.limits import MAX_UPLOAD_BYTES
+            if len(audio_bytes) > MAX_UPLOAD_BYTES:
+                await ws.send_json({"error": "Audio chunk exceeds the size limit"})
                 continue
 
             try:
@@ -190,6 +200,8 @@ async def tts_stream(ws: WebSocket):
     WebSocket endpoint for real-time TTS streaming.
     Client sends text sentences. Server streams back base64 audio chunks.
     """
+    if not await authenticate_websocket(ws):
+        return
     await ws.accept()
     import structlog
 
@@ -202,6 +214,13 @@ async def tts_stream(ws: WebSocket):
         while True:
             data = await ws.receive_json()
             text = data.get("text", "")
+            from jarvis.server.limits import MAX_TTS_CHARACTERS
+            if not isinstance(text, str):
+                await ws.send_json({"error": "Text must be a string"})
+                continue
+            if len(text) > MAX_TTS_CHARACTERS:
+                await ws.send_json({"error": "Text exceeds the synthesis size limit"})
+                continue
             if not text:
                 continue
 

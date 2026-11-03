@@ -7,6 +7,7 @@ const http = require('http');
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const OWNER_ID = process.env.TELEGRAM_OWNER_ID;
+const BRIDGE_TOKEN = process.env.JARVIS_SECRET_KEY || '';
 
 if (!BOT_TOKEN || BOT_TOKEN === 'YOUR_BOT_TOKEN_HERE') {
     console.error("ERROR: TELEGRAM_BOT_TOKEN is not set correctly in the .env file.");
@@ -33,7 +34,7 @@ async function sendStatus(status, data = null, retries = 15) {
                 type: status,
                 data: data
             }, {
-                headers: { 'X-API-Key': process.env.JARVIS_SECRET_KEY || 'JARVIS_DEV_KEY' }
+                headers: { 'X-API-Key': process.env.JARVIS_SECRET_KEY || '' }
             });
             return;
         } catch (err) {
@@ -308,7 +309,7 @@ async function connectToTelegram() {
         try {
             // Forward to Jarvis API with automatic local loopback retry if primary fails
             let response = null;
-            const apiKeyHeader = { 'X-API-Key': process.env.JARVIS_SECRET_KEY || 'JARVIS_DEV_KEY' };
+            const apiKeyHeader = { 'X-API-Key': process.env.JARVIS_SECRET_KEY || '' };
             try {
                 response = await axios.post(`${JARVIS_BACKEND_URL}/api/chat`, {
                     message: finalMessage,
@@ -394,6 +395,7 @@ async function connectToTelegram() {
 // HTTP Server for Push Notifications & Status
 const server = http.createServer((req, res) => {
     const url = req.url || '';
+    const requestPath = url.split('?')[0];
     if (req.method === 'GET' && (url === '/' || url === '/health' || url.startsWith('/health'))) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
@@ -405,7 +407,13 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    if (req.method === 'POST' && (url === '/send' || url.startsWith('/send'))) {
+    if (req.method === 'POST' && (requestPath === '/send' || requestPath.startsWith('/send/'))) {
+        const suppliedToken = req.headers['x-api-key'] || '';
+        if (!BRIDGE_TOKEN || suppliedToken !== BRIDGE_TOKEN) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Unauthorized' }));
+            return;
+        }
         let body = '';
         req.on('data', chunk => { body += chunk.toString(); });
         req.on('end', async () => {
@@ -423,6 +431,15 @@ const server = http.createServer((req, res) => {
                 }
 
                 const targetChatId = data.to || data.chat_id || OWNER_ID;
+                if (
+                    (data.to || data.chat_id) &&
+                    process.env.BRIDGE_ALLOW_EXTERNAL_RECIPIENTS !== 'true' &&
+                    String(targetChatId) !== String(OWNER_ID)
+                ) {
+                    res.writeHead(403, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'External recipients are disabled' }));
+                    return;
+                }
                 const messageText = formatMessageForChat(data.message);
                 await sendTelegramChunks(globalBot, targetChatId, messageText);
                 console.log(`[Bridge] Sent message to ${targetChatId}: "${messageText.substring(0, 60)}"`);
@@ -445,7 +462,7 @@ server.on('error', (err) => {
 });
 
 const port = parseInt(process.env.TELEGRAM_BRIDGE_PORT || '3003', 10);
-const host = process.env.TELEGRAM_BRIDGE_HOST || '0.0.0.0';
+const host = process.env.TELEGRAM_BRIDGE_HOST || '127.0.0.1';
 server.listen(port, host, () => {
     console.log(`[Bridge] HTTP Server listening on http://${host}:${port} for push notifications`);
 });

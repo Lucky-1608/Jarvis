@@ -1,7 +1,7 @@
-import os
 from pathlib import Path
 
 from jarvis.events.bus import EventBus
+from jarvis.security.files import MAX_READ_BYTES, allowed_file_path
 from jarvis.tools.base import Tool, ToolCategory, ToolMetadata, ToolParameter, ToolResult
 from jarvis.tools.registry import ToolRegistry
 
@@ -31,9 +31,11 @@ class ReadFileTool(Tool):
             return ToolResult(success=False, error="No file path provided.")
 
         try:
-            path = Path(file_path)
+            path = allowed_file_path(file_path)
             if not path.is_file():
                 return ToolResult(success=False, error=f"File not found: {file_path}")
+            if path.stat().st_size > MAX_READ_BYTES:
+                return ToolResult(success=False, error="File exceeds the 1 MiB read limit.")
 
             with open(path, encoding='utf-8') as f:
                 content = f.read()

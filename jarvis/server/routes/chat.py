@@ -13,6 +13,7 @@ import json
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
+from jarvis.server.auth import authenticate_websocket
 from jarvis.server.dependencies import get_brain
 
 router = APIRouter()
@@ -74,6 +75,8 @@ async def chat_stream(ws: WebSocket):
     Server streams: ``{"chunk": "...", "done": false}`` per token,
                     ``{"chunk": "", "done": true}`` at end.
     """
+    if not await authenticate_websocket(ws):
+        return
     await ws.accept()
     brain = get_brain()
 

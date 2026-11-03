@@ -31,6 +31,34 @@ export function WorkflowsPage() {
   
   const activePlan = workflows.find(w => w.id === selectedWorkflow) || null;
 
+  const updateWorkflow = (workflow: any) => {
+    setWorkflows(current => current.map(item => item.id === workflow.id ? workflow : item));
+  };
+
+  const approveActivePlan = () => {
+    if (!activePlan) return;
+    api.post(`/api/workflows/${encodeURIComponent(activePlan.id)}/approve`)
+      .then(res => {
+        if (res.ok) {
+          updateWorkflow(res.data.workflow);
+          toast({ title: 'Workflow approved', description: 'The approved actions have been executed.' });
+        } else {
+          toast({ title: 'Approval failed', description: res.detail || 'Workflow could not be approved.' });
+        }
+      });
+  };
+
+  const cancelActivePlan = () => {
+    if (!activePlan) return;
+    api.post(`/api/workflows/${encodeURIComponent(activePlan.id)}/cancel`)
+      .then(res => {
+        if (res.ok) {
+          updateWorkflow(res.data.workflow);
+          toast({ title: 'Workflow cancelled', description: 'No dangerous action was executed.' });
+        }
+      });
+  };
+
   const formatRelativeTime = (ts: number) => {
     const diff = Math.floor((Date.now() / 1000) - ts);
     if (diff < 60) return 'Just now';
@@ -148,10 +176,10 @@ export function WorkflowsPage() {
                     <p className="text-xs text-yellow-400/80 mb-3">This plan involves dangerous tools that require user authorization.</p>
                     <div className="flex gap-2">
                       <button 
-                        onClick={() => toast({ title: 'Not connected', description: 'Authorization requires a live backend connection.' })}
+                        onClick={approveActivePlan}
                         className="px-4 py-2 bg-yellow-400 text-black text-xs font-bold rounded hover:bg-yellow-500 transition-colors">Authorize Plan</button>
                       <button 
-                        onClick={() => toast({ title: 'Cancelled', description: 'Plan execution cancelled.' })}
+                        onClick={cancelActivePlan}
                         className="px-4 py-2 bg-[rgba(255,255,255,0.1)] text-white text-xs font-medium rounded hover:bg-[rgba(255,255,255,0.15)] transition-colors">Cancel</button>
                     </div>
                   </div>

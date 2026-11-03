@@ -1,3 +1,4 @@
+from jarvis.security.network import fetch_public_url_sync, validate_public_url
 from jarvis.tools.base import Tool, ToolCategory, ToolMetadata, ToolParameter, ToolResult
 
 
@@ -25,6 +26,7 @@ class WebScraperTool(Tool):
 
             # If Jina API is enabled, use the Reader API for clean markdown
             if jina_api_key:
+                validate_public_url(url)
                 with httpx.Client(timeout=30.0) as client:
                     response = client.get(
                         f"https://r.jina.ai/{url}",
@@ -37,12 +39,11 @@ class WebScraperTool(Tool):
                     return ToolResult(success=True, output={"text": response.text[:10000]})
 
             # Fallback to simple HTML parsing
-            import urllib.request
             from html.parser import HTMLParser
 
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req) as response:
-                html = response.read().decode('utf-8')
+            response = fetch_public_url_sync(url, headers={"User-Agent": "Mozilla/5.0"})
+            response.raise_for_status()
+            html = response.text
 
             class TextExtractor(HTMLParser):
                 def __init__(self):

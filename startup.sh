@@ -62,6 +62,15 @@ cd ../..
 echo "Starting Jarvis Backend..."
 # Use $PORT environment variable if Azure provides it, otherwise default to 8000
 PORT="${PORT:-8000}"
-python -m uvicorn jarvis.server.app:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips="*"
+BIND_HOST="${JARVIS_HOST:-0.0.0.0}"
+if [ "$BIND_HOST" != "127.0.0.1" ] && [ "$BIND_HOST" != "localhost" ] && [ "$BIND_HOST" != "::1" ]; then
+    if [ -z "${JARVIS_SECRET_KEY:-}" ] || [ "$JARVIS_SECRET_KEY" = "replace-with-a-long-random-secret" ] || [ "$JARVIS_SECRET_KEY" = "change-this-to-a-random-secret" ]; then
+        echo "JARVIS_SECRET_KEY must be a unique secret when binding beyond loopback."
+        exit 1
+    fi
+    export JARVIS_REQUIRE_AUTH=true
+fi
+export JARVIS_BIND_HOST="$BIND_HOST"
+python -m uvicorn jarvis.server.app:app --host "$BIND_HOST" --port "$PORT" --proxy-headers --forwarded-allow-ips="*"
 
 

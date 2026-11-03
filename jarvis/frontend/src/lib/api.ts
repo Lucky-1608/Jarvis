@@ -16,6 +16,13 @@ import { useJarvisStore } from '../store/jarvisStore';
 export function getApiKey(): string {
   return localStorage.getItem('JARVIS_API_KEY') || 'JARVIS_DEV_KEY';
 }
+
+export async function getWebSocketTicket(): Promise<string | null> {
+  const result = await apiFetch<{ ticket: string }>('/api/auth/ws-ticket', {
+    method: 'POST',
+  });
+  return result.ok ? result.data.ticket : null;
+}
 let activeBaseUrl: string | null = null;
 let isResolving = false;
 let resolveQueue: ((url: string) => void)[] = [];

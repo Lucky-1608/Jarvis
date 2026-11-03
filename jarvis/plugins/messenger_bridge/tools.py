@@ -59,9 +59,10 @@ class WhatsAppSendMessageTool(Tool):
         last_error = None
 
         async with httpx.AsyncClient(timeout=10.0) as client:
+            headers = {"X-API-Key": os.getenv("JARVIS_SECRET_KEY", "")}
             for url in endpoints:
                 try:
-                    resp = await client.post(url, json=payload)
+                    resp = await client.post(url, json=payload, headers=headers)
                     if resp.status_code == 200:
                         return ToolResult(success=True, output="Message sent to WhatsApp.")
                     try:
@@ -125,9 +126,10 @@ class TelegramSendMessageTool(Tool):
         last_error = None
 
         async with httpx.AsyncClient(timeout=10.0) as client:
+            headers = {"X-API-Key": os.getenv("JARVIS_SECRET_KEY", "")}
             for url in endpoints:
                 try:
-                    resp = await client.post(url, json=payload)
+                    resp = await client.post(url, json=payload, headers=headers)
                     if resp.status_code == 200:
                         return ToolResult(success=True, output="Message sent to Telegram.")
                     try:

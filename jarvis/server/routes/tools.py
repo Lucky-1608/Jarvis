@@ -18,6 +18,10 @@ router = APIRouter()
 class ExecuteToolRequest(BaseModel):
     tool_name: str = Field(..., description="Name of the tool to execute")
     params: dict = Field(default_factory=dict, description="Tool parameters")
+    confirmed: bool = Field(
+        False,
+        description="Explicitly confirm execution when the tool is dangerous",
+    )
 
 
 class InstallToolRequest(BaseModel):
@@ -72,15 +76,24 @@ async def execute_tool(request: ExecuteToolRequest):
     if tool is None:
         return {"success": False, "error": f"Tool '{request.tool_name}' not found."}
 
-    # Warn about dangerous tools
-    if tool.is_dangerous:
-        # In production, this would require additional confirmation
-        pass
+    if tool.is_dangerous and not request.confirmed:
+        return {
+            "success": False,
+            "error": (
+                f"Tool '{request.tool_name}' is dangerous and requires explicit confirmation. "
+                "Set 'confirmed' to true after reviewing the requested operation."
+            ),
+            "metadata": {"requires_confirmation": True},
+        }
 
     from jarvis.executor.executor import Executor
     from jarvis.verification.verifier import Verifier
 
     executor = Executor(brain.tools, Verifier())
-    result = await executor.execute_single_tool(request.tool_name, request.params)
+    result = await executor.execute_single_tool(
+        request.tool_name,
+        request.params,
+        confirmed=request.confirmed,
+    )
 
     return result.to_dict()

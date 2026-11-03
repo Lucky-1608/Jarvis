@@ -49,7 +49,10 @@ async def reset_whatsapp_session():
     bridge_notified = False
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(f"{bridge_url}/reset")
+            resp = await client.post(
+                f"{bridge_url}/reset",
+                headers={"X-API-Key": os.getenv("JARVIS_SECRET_KEY", "")},
+            )
             if resp.status_code == 200:
                 bridge_notified = True
     except Exception as e:
@@ -92,7 +95,11 @@ async def request_pairing_code(payload: dict | None = None):
 
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.post(f"{bridge_url}/pairing-code", json=payload or {})
+            resp = await client.post(
+                f"{bridge_url}/pairing-code",
+                json=payload or {},
+                headers={"X-API-Key": os.getenv("JARVIS_SECRET_KEY", "")},
+            )
             if resp.status_code == 200:
                 return resp.json()
             raise HTTPException(status_code=resp.status_code, detail=resp.text)

@@ -7,10 +7,11 @@ Tools for searching the web and fetching URL content.
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urlencode
 
-import httpx
 import structlog
 
+from jarvis.security.network import fetch_public_url
 from jarvis.tools.base import (
     Tool,
     ToolCategory,
@@ -59,17 +60,13 @@ class WebSearchTool(Tool):
 
         try:
             # Use DuckDuckGo HTML lite — no API key required
-            async with httpx.AsyncClient(
+            resp = await fetch_public_url(
+                "https://html.duckduckgo.com/html/?" + urlencode({"q": query}),
                 timeout=15,
-                follow_redirects=True,
                 headers={"User-Agent": "Jarvis-OS/0.1 (AI Assistant)"},
-            ) as client:
-                resp = await client.get(
-                    "https://html.duckduckgo.com/html/",
-                    params={"q": query},
-                )
-                resp.raise_for_status()
-                html = resp.text
+            )
+            resp.raise_for_status()
+            html = resp.text
 
             # Simple extraction of result titles and URLs from DDG HTML
             results = self._parse_ddg_html(html, max_results)
@@ -155,19 +152,21 @@ class FetchURLTool(Tool):
 
     async def execute(self, **params: Any) -> ToolResult:
         url = params.get("url", "").strip()
-        max_length = params.get("max_length", 5000)
+        try:
+            max_length = max(1, min(int(params.get("max_length", 5000)), 100_000))
+        except (TypeError, ValueError):
+            max_length = 5000
 
         if not url:
             return ToolResult(success=False, error="No URL provided.")
 
         try:
-            async with httpx.AsyncClient(
+            resp = await fetch_public_url(
+                url,
                 timeout=15,
-                follow_redirects=True,
                 headers={"User-Agent": "Jarvis-OS/0.1 (AI Assistant)"},
-            ) as client:
-                resp = await client.get(url)
-                resp.raise_for_status()
+            )
+            resp.raise_for_status()
 
             content_type = resp.headers.get("content-type", "")
             text = resp.text

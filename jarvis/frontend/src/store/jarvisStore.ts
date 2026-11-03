@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { getBaseUrl } from '../lib/api';
+import { getBaseUrl, getWebSocketTicket } from '../lib/api';
 
 export type AIState = 'idle' | 'listening' | 'thinking' | 'executing' | 'speaking' | 'error' | 'success';
 
@@ -198,9 +198,10 @@ export const useJarvisStore = create<JarvisStore>((set, get) => ({
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = base ? base.replace(/^http/, 'ws') : `${wsProtocol}//${window.location.host}`;
     
-    // Use the actual API key from local storage
-    const token = localStorage.getItem('JARVIS_API_KEY') || 'JARVIS_DEV_KEY';
-    wsInstance = new WebSocket(`${host}/api/hud/ws?token=${token}`);
+    const ticket = await getWebSocketTicket();
+    const wsUrl = new URL(`${host}/api/hud/ws`);
+    if (ticket) wsUrl.searchParams.set('ticket', ticket);
+    wsInstance = new WebSocket(wsUrl.toString());
     
     wsInstance.onopen = () => {
       set({ backendConnected: true });

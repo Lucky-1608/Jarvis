@@ -10,14 +10,12 @@ Commands:
 
 from __future__ import annotations
 
-from dotenv import load_dotenv
-
-load_dotenv()
-
 import asyncio
+import os
 from pathlib import Path
 
 import click
+from dotenv import load_dotenv
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
@@ -25,6 +23,8 @@ from rich.table import Table
 from rich.text import Text
 
 console = Console()
+
+load_dotenv()
 
 
 # ---------------------------------------------------------------------------
@@ -111,7 +111,7 @@ async def _chat_loop():
             continue
 
         if user_input.lower() == "/memory":
-            _show_memory(brain)
+            await _show_memory(brain)
             continue
 
         if user_input.lower() == "/clear":
@@ -197,9 +197,9 @@ async def _show_status(brain):
     console.print()
 
 
-def _show_memory(brain):
+async def _show_memory(brain):
     """Display memory statistics."""
-    stats = brain.memory.get_stats()
+    stats = await brain.memory.get_stats()
     console.print(Panel(
         f"[bold]Working Memory:[/bold] {stats['working_memory_keys']} keys\n"
         f"[bold]Conversation:[/bold]   {stats['conversation_buffer_size']} messages\n"
@@ -218,13 +218,31 @@ def _show_memory(brain):
 # jarvis serve
 # ---------------------------------------------------------------------------
 @main.command()
-@click.option("--host", default="0.0.0.0", help="Server host")
+@click.option("--host", default="127.0.0.1", help="Server host")
 @click.option("--port", default=8000, type=int, help="Server port")
 @click.option("--reload", is_flag=True, help="Enable auto-reload for development")
 @click.option("--wake-word", is_flag=True, help="Enable background wake-word listening on PC")
 def serve(host: str, port: int, reload: bool, wake_word: bool):
     """Start the Jarvis OS API server."""
     import uvicorn
+
+    loopback_hosts = {"127.0.0.1", "localhost", "::1"}
+    auth_enabled = os.getenv("JARVIS_REQUIRE_AUTH", "false").lower() in {
+        "1", "true", "yes", "on"
+    }
+    secret = os.getenv("JARVIS_SECRET_KEY", "")
+    placeholder_secret = secret in {
+        "",
+        "change-this-to-a-random-secret",
+        "replace-with-a-long-random-secret",
+        "JARVIS_DEV_KEY",
+    }
+    if host.lower() not in loopback_hosts and (not auth_enabled or placeholder_secret):
+        raise click.ClickException(
+            "Refusing to expose Jarvis beyond loopback without "
+            "JARVIS_REQUIRE_AUTH=true and a configured JARVIS_SECRET_KEY."
+        )
+    os.environ["JARVIS_BIND_HOST"] = host
 
     if wake_word:
         os.environ["JARVIS_ENABLE_WAKE_WORD"] = "true"

@@ -45,6 +45,7 @@ class Executor:
         plan: ExecutionPlan,
         *,
         on_step_complete: Any | None = None,
+        confirmed: bool = False,
     ) -> ExecutionPlan:
         """
         Execute all steps in *plan* in dependency order.
@@ -63,7 +64,7 @@ class Executor:
             if step is None:
                 break  # All done (or deadlocked)
 
-            await self._execute_step(step)
+            await self._execute_step(step, confirmed=confirmed)
 
             if on_step_complete:
                 await on_step_complete(step)
@@ -82,7 +83,7 @@ class Executor:
 
         return plan
 
-    async def _execute_step(self, step: PlanStep) -> None:
+    async def _execute_step(self, step: PlanStep, *, confirmed: bool = False) -> None:
         """Execute a single plan step."""
         step.status = StepStatus.RUNNING
 
@@ -113,6 +114,19 @@ class Executor:
                 data={"step_id": step.id, "tool": step.tool_name, "error": step.error},
                 source="executor",
             ))
+            return
+
+        if tool.metadata.dangerous and not confirmed:
+            step.status = StepStatus.FAILED
+            step.error = (
+                f"Tool '{tool.name}' is dangerous and requires explicit confirmation."
+            )
+            await self._bus.publish(Event(
+                type=EventTypes.TOOL_FAILED,
+                data={"step_id": step.id, "tool": step.tool_name, "error": step.error},
+                source="executor",
+            ))
+            logger.warning("executor.dangerous_tool_confirmation_required", tool=tool.name)
             return
 
         # Execute the tool
@@ -164,11 +178,20 @@ class Executor:
         self,
         tool_name: str,
         params: dict[str, Any] | None = None,
+        *,
+        confirmed: bool = False,
     ) -> ToolResult:
         """Execute a single tool directly (bypassing the planner)."""
         tool = self._tools.get(tool_name)
         if tool is None:
             return ToolResult(success=False, error=f"Tool '{tool_name}' not found.")
+
+        if tool.metadata.dangerous and not confirmed:
+            return ToolResult(
+                success=False,
+                error=f"Tool '{tool.name}' is dangerous and requires explicit confirmation.",
+                metadata={"requires_confirmation": True},
+            )
 
         try:
             result = await tool.execute(**(params or {}))

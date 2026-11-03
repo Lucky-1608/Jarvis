@@ -34,11 +34,12 @@ export class CompanionService {
   private readonly HEARTBEAT_INTERVAL = 25000; // 25s — under typical 30s proxy timeout
   private readonly HEARTBEAT_TIMEOUT = 10000;  // 10s to receive pong
 
-  constructor(backendUrl: string) {
+  constructor(backendUrl: string, ticket: string | null) {
     // If the url is http(s), convert it to ws(s)
     const url = new URL(backendUrl);
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     url.pathname = '/api/ws/companion';
+    if (ticket) url.searchParams.set('ticket', ticket);
     this.backendUrl = url.toString();
   }
 
@@ -48,7 +49,7 @@ export class CompanionService {
 
     if (this.intentionalDisconnect) return;
 
-    console.log('[Companion] Connecting to backend...', this.backendUrl);
+    console.log('[Companion] Connecting to backend companion endpoint');
 
     try {
       this.ws = new WebSocket(this.backendUrl);

@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useJarvisStore } from '../store/jarvisStore';
-import { getBaseUrl, getApiKey } from '../lib/api';
+import { getBaseUrl, getApiKey, getWebSocketTicket } from '../lib/api';
 
 export interface UseVoiceRecorderOptions {
   onTranscription?: (text: string, isFinal?: boolean) => void;
@@ -517,9 +517,10 @@ export function useVoiceRecorder(
         const base = await getBaseUrl();
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const host = base ? base.replace(/^http/, 'ws') : `${protocol}//${window.location.host}`;
-        const token = getApiKey() || localStorage.getItem('JARVIS_API_KEY') || 'JARVIS_DEV_KEY';
-
-        const socket = new WebSocket(`${host}/api/voice/stream?token=${token}`);
+        const ticket = await getWebSocketTicket();
+        const wsUrl = new URL(`${host}/api/voice/stream`);
+        if (ticket) wsUrl.searchParams.set('ticket', ticket);
+        const socket = new WebSocket(wsUrl.toString());
         ws.current = socket;
 
         socket.onmessage = (event) => {

@@ -7,6 +7,7 @@ const axios = require('axios');
 const http = require('http');
 
 const OWNER_NUMBER = process.env.WHATSAPP_OWNER_NUMBER;
+const BRIDGE_TOKEN = process.env.JARVIS_SECRET_KEY || '';
 
 if (!OWNER_NUMBER || OWNER_NUMBER === 'YOUR_NUMBER_HERE') {
     console.error("ERROR: WHATSAPP_OWNER_NUMBER is not set correctly in the .env file.");
@@ -149,7 +150,7 @@ async function sendStatus(status, data = null, retries = 15) {
                 type: status,
                 data: data
             }, {
-                headers: { 'X-API-Key': process.env.JARVIS_SECRET_KEY || 'JARVIS_DEV_KEY' }
+                headers: { 'X-API-Key': process.env.JARVIS_SECRET_KEY || '' }
             });
             return;
         } catch (err) {
@@ -755,7 +756,7 @@ async function connectToWhatsApp() {
             try {
                 // Forward to Jarvis API with automatic local loopback retry if primary fails
                 let response = null;
-                const apiKeyHeader = { 'X-API-Key': process.env.JARVIS_SECRET_KEY || 'JARVIS_DEV_KEY' };
+                const apiKeyHeader = { 'X-API-Key': process.env.JARVIS_SECRET_KEY || '' };
                 try {
                     response = await axios.post(`${JARVIS_BACKEND_URL}/api/chat`, {
                         message: finalMessage,
@@ -831,6 +832,7 @@ async function connectToWhatsApp() {
 // HTTP Server for Push Notifications & Status
 const server = http.createServer((req, res) => {
     const url = req.url || '';
+    const requestPath = url.split('?')[0];
     if (req.method === 'GET' && (url === '/' || url === '/health' || url.startsWith('/health'))) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
@@ -842,7 +844,13 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    if (req.method === 'POST' && (url === '/send' || url.startsWith('/send'))) {
+    if (req.method === 'POST' && (requestPath === '/send' || requestPath.startsWith('/send/'))) {
+        const suppliedToken = req.headers['x-api-key'] || '';
+        if (!BRIDGE_TOKEN || suppliedToken !== BRIDGE_TOKEN) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Unauthorized' }));
+            return;
+        }
         let body = '';
         req.on('data', chunk => { body += chunk.toString(); });
         req.on('end', async () => {
@@ -864,6 +872,14 @@ const server = http.createServer((req, res) => {
                 const recipient = data.to || data.recipient || data.phone_number;
                 if (recipient) {
                     const cleanNum = String(recipient).replace(/[^0-9]/g, '');
+                    if (
+                        process.env.BRIDGE_ALLOW_EXTERNAL_RECIPIENTS !== 'true' &&
+                        cleanNum !== OWNER_NUMBER.replace(/[^0-9]/g, '')
+                    ) {
+                        res.writeHead(403, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ error: 'External recipients are disabled' }));
+                        return;
+                    }
                     if (cleanNum) {
                         targetJid = formatNumber(cleanNum);
                     }
@@ -880,7 +896,13 @@ const server = http.createServer((req, res) => {
                 res.end(JSON.stringify({ error: err.message || 'Internal server error' }));
             }
         });
-    } else if (req.method === 'POST' && (url === '/reset' || url.startsWith('/reset'))) {
+    } else if (req.method === 'POST' && (requestPath === '/reset' || requestPath.startsWith('/reset/'))) {
+        const suppliedToken = req.headers['x-api-key'] || '';
+        if (!BRIDGE_TOKEN || suppliedToken !== BRIDGE_TOKEN) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Unauthorized' }));
+            return;
+        }
         console.log("[Bridge] Manual session reset requested via HTTP /reset");
         try {
             if (reconnectTimeout) {
@@ -909,7 +931,13 @@ const server = http.createServer((req, res) => {
             res.writeHead(500, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: err.message }));
         }
-    } else if (req.method === 'POST' && (url === '/pairing-code' || url.startsWith('/pairing-code'))) {
+    } else if (req.method === 'POST' && (requestPath === '/pairing-code' || requestPath.startsWith('/pairing-code/'))) {
+        const suppliedToken = req.headers['x-api-key'] || '';
+        if (!BRIDGE_TOKEN || suppliedToken !== BRIDGE_TOKEN) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Unauthorized' }));
+            return;
+        }
         let body = '';
         req.on('data', chunk => { body += chunk.toString(); });
         req.on('end', async () => {
@@ -924,6 +952,14 @@ const server = http.createServer((req, res) => {
                 if (!targetNumber) {
                     res.writeHead(400, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({ error: 'Valid phone number is required' }));
+                    return;
+                }
+                if (
+                    process.env.BRIDGE_ALLOW_EXTERNAL_RECIPIENTS !== 'true' &&
+                    targetNumber !== OWNER_NUMBER.replace(/[^0-9]/g, '')
+                ) {
+                    res.writeHead(403, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'External recipients are disabled' }));
                     return;
                 }
                 if (!globalSock || !globalSock.requestPairingCode) {
@@ -954,7 +990,7 @@ server.on('error', (err) => {
 });
 
 const port = parseInt(process.env.WHATSAPP_BRIDGE_PORT || '3002', 10);
-const host = process.env.WHATSAPP_BRIDGE_HOST || '0.0.0.0';
+const host = process.env.WHATSAPP_BRIDGE_HOST || '127.0.0.1';
 server.listen(port, host, () => {
     console.log(`[Bridge] HTTP Server listening on http://${host}:${port} for push notifications`);
 });

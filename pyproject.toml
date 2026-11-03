@@ -33,6 +33,7 @@ dependencies = [
 
     # --- Database & Security ---
     "SQLAlchemy[asyncio]>=2.0",
+    "aiosqlite>=0.19",
     "asyncpg>=0.29.0",
     "alembic>=1.13",
     "cryptography>=42.0",

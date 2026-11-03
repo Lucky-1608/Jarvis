@@ -8,6 +8,8 @@ and all API routes mounted. Also serves the built frontend.
 from __future__ import annotations
 
 import os
+import secrets
+import time
 
 from dotenv import load_dotenv
 
@@ -23,6 +25,11 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from jarvis.brain.jarvis_brain import JarvisBrain
+from jarvis.server.auth import (
+    authentication_required,
+    issue_websocket_ticket,
+    secret_is_configured,
+)
 from jarvis.server.dependencies import set_brain
 from jarvis.server.routes import (
     agents,
@@ -141,6 +148,11 @@ async def lifespan(app: FastAPI):
 # ---------------------------------------------------------------------------
 from starlette.middleware.sessions import SessionMiddleware
 
+SESSION_SECRET = os.getenv("JARVIS_SECRET_KEY") or secrets.token_urlsafe(32)
+_EXPENSIVE_REQUESTS: dict[tuple[str, str], list[float]] = {}
+_EXPENSIVE_REQUEST_LIMIT = 30
+_EXPENSIVE_REQUEST_WINDOW = 60.0
+
 
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
@@ -161,13 +173,44 @@ def create_app() -> FastAPI:
     )
 
     # Session Middleware is required for Authlib OAuth
-    app.add_middleware(SessionMiddleware, secret_key=os.getenv("JARVIS_SECRET_KEY", "fallback-secret-for-oauth"))
+    app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET)
 
     # --- Security Middleware ---
 
     @app.middleware("http")
     async def api_key_auth(request: Request, call_next):
         path = request.url.path
+
+        if request.method == "POST" and (
+            path.startswith("/api/voice/") or path.startswith("/api/vision/")
+        ):
+            from jarvis.server.limits import MAX_REQUEST_BYTES
+
+            content_length = request.headers.get("content-length")
+            if content_length:
+                try:
+                    if int(content_length) > MAX_REQUEST_BYTES:
+                        return JSONResponse(
+                            status_code=413,
+                            content={"detail": "Request body is too large"},
+                        )
+                except ValueError:
+                    return JSONResponse(
+                        status_code=400,
+                        content={"detail": "Invalid Content-Length"},
+                    )
+            client_host = request.client.host if request.client else "unknown"
+            rate_key = (client_host, path)
+            now = time.monotonic()
+            recent = [
+                timestamp
+                for timestamp in _EXPENSIVE_REQUESTS.get(rate_key, [])
+                if now - timestamp < _EXPENSIVE_REQUEST_WINDOW
+            ]
+            if len(recent) >= _EXPENSIVE_REQUEST_LIMIT:
+                return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded"})
+            recent.append(now)
+            _EXPENSIVE_REQUESTS[rate_key] = recent
 
         # Allow CORS preflight requests
         if request.method == "OPTIONS":
@@ -178,22 +221,45 @@ def create_app() -> FastAPI:
         if not path.startswith("/api/"):
             return await call_next(request)
 
-        # Whitelist public API routes
-        if path in ("/api/health", "/api/system/stats") or path.startswith("/api/oauth"):
+        # Health and system metrics are intentionally public for readiness
+        # checks. OAuth login/callback routes must remain public so the
+        # provider can redirect back, but account management must authenticate.
+        public_oauth_route = (
+            path.startswith("/api/oauth/login/")
+            or path.startswith("/api/oauth/auth/")
+        )
+        if path in ("/api/health", "/api/system/stats") or public_oauth_route:
             return await call_next(request)
 
-        # Check header or query param
-        client_key = request.headers.get("X-API-Key") or request.query_params.get("token")
+        if "token" in request.query_params:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "API keys must be sent in the X-API-Key header"},
+            )
+        client_key = request.headers.get("X-API-Key")
 
         from jarvis.config.settings import get_settings
         settings = get_settings()
 
         # Actively enforce authentication if enabled
-        if settings.server.require_auth:
+        if authentication_required():
+            if not secret_is_configured(settings.server.secret_key):
+                return JSONResponse(
+                    status_code=503,
+                    content={"detail": "Authentication is enabled but JARVIS_SECRET_KEY is not configured"},
+                )
             if not client_key or client_key != settings.server.secret_key:
-                return JSONResponse(status_code=403, content={"detail": "Forbidden: Invalid or missing API Key"})
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "Forbidden: Invalid or missing API Key"},
+                )
 
         return await call_next(request)
+
+    @app.post("/api/auth/ws-ticket")
+    async def websocket_ticket():
+        """Create a one-use ticket for a browser WebSocket handshake."""
+        return issue_websocket_ticket()
 
     # Mount route modules
     app.include_router(chat.router, prefix="/api", tags=["Chat"])

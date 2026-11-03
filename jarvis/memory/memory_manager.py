@@ -14,6 +14,8 @@ with BAAI/bge-small-en-v1.5 embeddings.
 
 from __future__ import annotations
 
+import json
+import math
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -24,7 +26,7 @@ import structlog
 from sqlalchemy import String, cast, delete, func, select
 
 from jarvis.config.settings import get_settings
-from jarvis.database.core import AsyncSessionLocal
+from jarvis.database.core import AsyncSessionLocal, is_sqlite
 from jarvis.database.models import MemoryNode
 from jarvis.events.bus import Event, EventTypes, get_event_bus
 from jarvis.memory.embeddings import JarvisEmbeddingFunction, chunk_text
@@ -215,35 +217,79 @@ class MemoryManager:
         query_vector = self._embedding_fn([query])[0]
 
         async with AsyncSessionLocal() as session:
-            # calculate cosine distance
-            distance_col = MemoryNode.embedding.cosine_distance(query_vector).label("distance")
+            if is_sqlite:
+                # SQLite has no pgvector cosine-distance operator. Load the
+                # filtered rows and calculate cosine similarity in Python.
+                stmt = select(MemoryNode)
+                if memory_type:
+                    stmt = stmt.where(MemoryNode.memory_type == memory_type.value)
+                if project_id is not None:
+                    stmt = stmt.where(
+                        cast(MemoryNode.metadata_["project_id"].as_string(), String)
+                        == str(project_id)
+                    )
+                rows = (await session.execute(stmt)).scalars().all()
+                for node in rows:
+                    embedding = node.embedding
+                    if isinstance(embedding, str):
+                        try:
+                            embedding = json.loads(embedding)
+                        except json.JSONDecodeError:
+                            embedding = [float(v) for v in embedding.strip("[]").split(",") if v]
+                    if not embedding:
+                        continue
+                    dot = sum(a * b for a, b in zip(query_vector, embedding))
+                    query_norm = math.sqrt(sum(value * value for value in query_vector))
+                    node_norm = math.sqrt(sum(value * value for value in embedding))
+                    relevance = (
+                        max(0.0, dot / (query_norm * node_norm))
+                        if query_norm and node_norm
+                        else 0.0
+                    )
+                    if relevance < min_relevance:
+                        continue
+                    entry = MemoryEntry(
+                        id=node.id,
+                        content=node.content,
+                        memory_type=MemoryType(node.memory_type),
+                        metadata=node.metadata_,
+                        timestamp=node.timestamp,
+                        importance=node.importance,
+                    )
+                    results.append(
+                        SearchResult(entry=entry, score=relevance, distance=1.0 - relevance)
+                    )
+                results.sort(key=lambda result: result.score, reverse=True)
+                results = results[:fetch_limit]
+            else:
+                # PostgreSQL/pgvector performs the distance calculation in SQL.
+                distance_col = MemoryNode.embedding.cosine_distance(query_vector).label("distance")
+                stmt = select(MemoryNode, distance_col).order_by(distance_col).limit(fetch_limit)
 
-            stmt = select(MemoryNode, distance_col).order_by(distance_col).limit(fetch_limit)
+                if memory_type:
+                    stmt = stmt.where(MemoryNode.memory_type == memory_type.value)
 
-            if memory_type:
-                stmt = stmt.where(MemoryNode.memory_type == memory_type.value)
+                if project_id is not None:
+                    stmt = stmt.where(
+                        cast(MemoryNode.metadata_["project_id"].as_string(), String)
+                        == str(project_id)
+                    )
 
-            if project_id is not None:
-                # filter by project_id in JSON metadata
-                stmt = stmt.where(cast(MemoryNode.metadata_["project_id"].as_string(), String) == str(project_id))
+                db_result = await session.execute(stmt)
+                for node, dist in db_result.all():
+                    relevance = max(0.0, 1.0 - dist)
+                    if relevance < min_relevance:
+                        continue
 
-            db_result = await session.execute(stmt)
-            rows = db_result.all()
-
-            for node, dist in rows:
-                relevance = max(0.0, 1.0 - dist)
-                if relevance < min_relevance:
-                    continue
-
-                entry = MemoryEntry(
-                    id=node.id,
-                    content=node.content,
-                    memory_type=MemoryType(node.memory_type),
-                    metadata=node.metadata_,
-                    timestamp=node.timestamp,
-                    importance=node.importance,
-                )
-                results.append(SearchResult(entry=entry, score=relevance, distance=dist))
+                    entry = MemoryEntry(
+                        id=node.id,
+                        content=node.content,
+                        memory_type=MemoryType(node.memory_type),
+                        metadata=node.metadata_,
+                        timestamp=node.timestamp,
+                        importance=node.importance,
+                    )
+                    results.append(SearchResult(entry=entry, score=relevance, distance=dist))
 
         # Rerank (Stage 2)
         if jina_api_key and len(results) > 1:

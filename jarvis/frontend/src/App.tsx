@@ -14,7 +14,7 @@ import { WorkflowsPage } from './pages/WorkflowsPage';
 import { SettingsPage } from './pages/SettingsPage';
 
 import { CompanionService } from './services/CompanionService';
-import { getBaseUrl } from './lib/api';
+import { getBaseUrl, getApiKey, getWebSocketTicket } from './lib/api';
 import { Capacitor } from '@capacitor/core';
 import { DeviceHands } from './lib/device-bridge';
 
@@ -81,14 +81,16 @@ function App() {
     };
 
     if (hasKey) {
-      getBaseUrl().then((baseUrl) => {
+      getBaseUrl().then(async (baseUrl) => {
         if (!isMounted) return;
         const targetUrl = baseUrl || window.location.origin;
-        companion = new CompanionService(targetUrl);
+        const ticket = await getWebSocketTicket();
+        companion = new CompanionService(targetUrl, ticket);
         companion.connect();
 
         if (Capacitor.isNativePlatform() && targetUrl) {
           DeviceHands.setBackendUrl({ url: targetUrl }).catch(() => {});
+          DeviceHands.setBackendApiKey({ apiKey: getApiKey() }).catch(() => {});
         }
 
         // Listen for app resume events (mobile backgrounding, desktop tray restore)

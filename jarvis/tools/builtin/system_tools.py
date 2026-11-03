@@ -22,12 +22,14 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+import re
 from typing import Any
 
 import psutil
 import structlog
 
 from jarvis.server.companion_manager import companion_manager
+from jarvis.security.files import MAX_READ_BYTES, allowed_file_path
 
 from jarvis.tools.base import (
     Tool,
@@ -173,6 +175,16 @@ class OpenAppTool(Tool):
         "excel": "excel.exe",
         "powerpoint": "powerpnt.exe",
         "spotify": "spotify.exe",
+    }
+
+    _APP_MAP_UNIX = {
+        "chrome": ["google-chrome"],
+        "firefox": ["firefox"],
+        "edge": ["microsoft-edge"],
+        "brave": ["brave-browser"],
+        "terminal": ["x-terminal-emulator"],
+        "vscode": ["code"],
+        "spotify": ["spotify"],
     }
 
     @staticmethod
@@ -444,54 +456,39 @@ class OpenAppTool(Tool):
 
                 if cmd_exe:
                     try:
+                        if target_url and cmd_exe in ("wt.exe", "cmd.exe"):
+                            return ToolResult(
+                                success=False,
+                                error="Opening a URL in a terminal application is not supported.",
+                            )
                         if target_url:
-                            if cmd_exe in ("wt.exe", "cmd.exe"):
-                                subprocess.Popen(f'start {cmd_exe} /K "{target_url}"', shell=True)
-                            else:
-                                os.startfile(cmd_exe, arguments=target_url)
+                            subprocess.Popen([cmd_exe, target_url])
                         else:
-                            if cmd_exe in ("wt.exe", "cmd.exe"):
-                                subprocess.Popen(f"start {cmd_exe}", shell=True)
-                            else:
-                                os.startfile(cmd_exe)
+                            subprocess.Popen([cmd_exe])
                     except Exception as e:
                         return ToolResult(success=False, error=f"Failed to open '{cmd_exe}': {e}")
                 else:
                     if app_name.startswith("http"):
                         os.startfile(app_name)
                     else:
-                        shortcut = self._find_app_shortcut(app_name)
-                        if shortcut:
-                            if target_url:
-                                os.startfile(shortcut, arguments=target_url)
-                            else:
-                                os.startfile(shortcut)
-                        else:
-                            app_name_clean = "".join(c for c in app_name.lower() if c.isalnum())
-                            ps_cmd = f"Get-StartApps | Where-Object {{ ($_.Name -replace '[^a-zA-Z0-9]', '') -match '{app_name_clean}' }} | Select-Object -ExpandProperty AppID"
-                            proc = subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd], capture_output=True, text=True, creationflags=0x08000000)
-                            app_ids = [line.strip() for line in proc.stdout.strip().split("\n") if line.strip()]
-
-                            if app_ids:
-                                subprocess.Popen(f'explorer.exe shell:AppsFolder\\{app_ids[0]}', shell=True)
-                            else:
-                                try:
-                                    if target_url:
-                                        os.startfile(app_name, arguments=target_url)
-                                    else:
-                                        os.startfile(app_name)
-                                except OSError:
-                                    return ToolResult(success=False, error=f"Could not find or open application '{app_name}'.")
+                        return ToolResult(
+                            success=False,
+                            error=f"Application '{app_name}' is not in the supported application allowlist.",
+                        )
             elif platform.system() == "Darwin":
                 if app_name.startswith("http"):
                     subprocess.Popen(["open", app_name])
-                else:
+                elif app_name in self._APP_MAP_UNIX:
                     subprocess.Popen(["open", "-a", app_name])
+                else:
+                    return ToolResult(success=False, error="Application is not in the supported allowlist.")
             else:  # Linux
                 if app_name.startswith("http"):
-                    subprocess.Popen(f"xdg-open {app_name} &", shell=True)
+                    subprocess.Popen(["xdg-open", app_name])
+                elif app_name in self._APP_MAP_UNIX:
+                    subprocess.Popen(self._APP_MAP_UNIX[app_name])
                 else:
-                    subprocess.Popen(f"{app_name} &", shell=True)
+                    return ToolResult(success=False, error="Application is not in the supported allowlist.")
             
             results.append(f"Launched '{app_name}' successfully on PC.")
         except Exception as exc:
@@ -519,6 +516,7 @@ class CloseAppTool(Tool):
             name="close_app",
             description="Close a desktop application by name, or close the current active app/window when app_name is 'current', 'active', or 'this app'. CRITICAL: You MUST call this tool EVERY SINGLE TIME the user asks to close an app, even if you just closed it in the previous turn. Do NOT rely on chat history to skip calling this tool, and NEVER say you closed it without actually emitting this tool call.",
             category=ToolCategory.SYSTEM,
+            dangerous=True,
             parameters=[
                 ToolParameter(
                     name="app_name",
@@ -671,13 +669,17 @@ class CloseAppTool(Tool):
                 )
 
             elif platform.system() == "Darwin":
-                proc = await asyncio.create_subprocess_shell(f'killall "{app_name}"', stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+                if not re.fullmatch(r"[a-zA-Z0-9 ._-]{1,64}", app_name) or app_name.startswith("-"):
+                    return ToolResult(success=False, error="Invalid application name.")
+                proc = await asyncio.create_subprocess_exec("killall", app_name, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
                 stdout, stderr = await proc.communicate()
                 if proc.returncode == 0:
                     return ToolResult(success=True, output=f"Closed '{app_name}' successfully.")
                 return ToolResult(success=False, error=f"Failed to close '{app_name}'.")
             else:  # Linux
-                proc = await asyncio.create_subprocess_shell(f'pkill -f "{app_name}"', stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+                if not re.fullmatch(r"[a-zA-Z0-9 ._-]{1,64}", app_name) or app_name.startswith("-"):
+                    return ToolResult(success=False, error="Invalid application name.")
+                proc = await asyncio.create_subprocess_exec("pkill", "-f", "--", app_name, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
                 stdout, stderr = await proc.communicate()
                 if proc.returncode == 0:
                     return ToolResult(success=True, output=f"Closed '{app_name}' successfully.")
@@ -955,7 +957,6 @@ class KeyboardActionTool(Tool):
 
         try:
             import pyautogui
-            import pygetwindow as gw
 
             # Briefly sleep to ensure any previous window activations are processed
             time.sleep(0.5)
@@ -1162,11 +1163,16 @@ class ReadFileTool(Tool):
         path_str = params.get("path", "").strip()
         max_lines = params.get("max_lines", 200)
 
-        path = Path(path_str).expanduser().resolve()
+        try:
+            path = allowed_file_path(path_str)
+        except ValueError as exc:
+            return ToolResult(success=False, error=str(exc))
         if not path.exists():
             return ToolResult(success=False, error=f"File not found: {path}")
         if not path.is_file():
             return ToolResult(success=False, error=f"Not a file: {path}")
+        if path.stat().st_size > MAX_READ_BYTES:
+            return ToolResult(success=False, error="File exceeds the 1 MiB read limit.")
 
         try:
             with open(path, encoding="utf-8", errors="replace") as f:
@@ -1367,15 +1373,29 @@ class StageSkillForReviewTool(Tool):
         if not file_path or not skill_name:
             return ToolResult(success=False, error="file_path and skill_name are required.")
 
+        repo_root = Path(__file__).resolve().parents[2]
+        candidate_path = Path(file_path).expanduser().resolve()
+        try:
+            relative_path = candidate_path.relative_to(repo_root)
+        except ValueError:
+            return ToolResult(success=False, error="file_path must be inside the Jarvis repository.")
+        if candidate_path.suffix != ".py" or ".git" in candidate_path.parts or not candidate_path.is_file():
+            return ToolResult(success=False, error="file_path must be an existing Python file in the repository.")
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 _.-]{0,79}", skill_name):
+            return ToolResult(success=False, error="skill_name contains unsupported characters.")
+        if len(description) > 4_000:
+            return ToolResult(success=False, error="description is too long.")
+
         import time
         branch_name = f"learned-skill/{skill_name.replace(' ', '-')}-{int(time.time())}"
         
         try:
             # 1. Get repo owner/name from git remote
-            proc = await asyncio.create_subprocess_shell(
-                "git config --get remote.origin.url",
+            proc = await asyncio.create_subprocess_exec(
+                "git", "config", "--get", "remote.origin.url",
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
+                cwd=str(repo_root),
             )
             stdout, _ = await proc.communicate()
             remote_url = stdout.decode('utf-8').strip()
@@ -1395,13 +1415,27 @@ class StageSkillForReviewTool(Tool):
                 repo_path = repo_path[:-4]
 
             # 2. Git operations
-            await self._run_cmd(f"git checkout -b {branch_name}")
-            await self._run_cmd(f"git add {file_path}")
-            await self._run_cmd(f'git commit -m "feat(skills): Jarvis learned {skill_name}"')
+            await self._run_cmd(["git", "checkout", "-b", branch_name], cwd=repo_root)
+            await self._run_cmd(["git", "add", str(relative_path)], cwd=repo_root)
+            await self._run_cmd(
+                ["git", "commit", "-m", f"feat(skills): Jarvis learned {skill_name}"],
+                cwd=repo_root,
+            )
             
-            # Push using the token in the URL so the server doesn\'t prompt for credentials
-            push_url = f"https://x-access-token:{token}@github.com/{repo_path}.git"
-            await self._run_cmd(f"git push -u {push_url} {branch_name}")
+            # Pass the token through Git's environment-backed config instead
+            # of putting it in the remote URL or process arguments.
+            git_env = os.environ.copy()
+            git_env.update({
+                "GIT_CONFIG_COUNT": "1",
+                "GIT_CONFIG_KEY_0": "http.extraheader",
+                "GIT_CONFIG_VALUE_0": f"AUTHORIZATION: bearer {token}",
+            })
+            push_url = f"https://github.com/{repo_path}.git"
+            await self._run_cmd(
+                ["git", "push", "-u", push_url, branch_name],
+                cwd=repo_root,
+                env=git_env,
+            )
 
             # 3. Create PR via GitHub API
             import urllib.request
@@ -1427,28 +1461,37 @@ class StageSkillForReviewTool(Tool):
                     pr_url = res_data.get("html_url", "Unknown URL")
             except urllib.error.HTTPError as e:
                 error_body = e.read().decode('utf-8')
-                await self._run_cmd("git checkout main", check=False)
+                await self._run_cmd(["git", "checkout", "main"], cwd=repo_root, check=False)
                 return ToolResult(success=False, error=f"Failed to create PR via API: {e.code} - {error_body}")
 
             # 4. Return to main
-            await self._run_cmd("git checkout main", check=False)
+            await self._run_cmd(["git", "checkout", "main"], cwd=repo_root, check=False)
             
             return ToolResult(success=True, output=f"Successfully staged '{skill_name}' for review. PR created: {pr_url}")
 
         except Exception as e:
             # Attempt recovery
-            await self._run_cmd("git checkout main", check=False)
+            await self._run_cmd(["git", "checkout", "main"], cwd=repo_root, check=False)
             return ToolResult(success=False, error=f"Failed to stage skill: {e}")
 
-    async def _run_cmd(self, cmd: str, check: bool = True):
-        proc = await asyncio.create_subprocess_shell(
-            cmd,
+    async def _run_cmd(
+        self,
+        cmd: list[str],
+        *,
+        cwd: Path,
+        env: dict[str, str] | None = None,
+        check: bool = True,
+    ):
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            stderr=asyncio.subprocess.PIPE,
+            cwd=str(cwd),
+            env=env,
         )
         stdout, stderr = await proc.communicate()
         if check and proc.returncode != 0:
-            raise RuntimeError(f"Command '{cmd}' failed: {stderr.decode('utf-8')}")
+            raise RuntimeError(f"Command '{cmd[0]}' failed: {stderr.decode('utf-8')}")
 
 
 class ClaudeCodeTool(Tool):

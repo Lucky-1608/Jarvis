@@ -306,5 +306,18 @@ class DeviceHandsPlugin : Plugin() {
             call.reject("Missing url")
         }
     }
+
+    @PluginMethod
+    fun setBackendApiKey(call: PluginCall) {
+        val apiKey = call.getString("apiKey") ?: ""
+        if (apiKey.isNotBlank()) {
+            val prefs = context.getSharedPreferences("jarvis_prefs", Context.MODE_PRIVATE)
+            prefs.edit().putString("api_key", apiKey).apply()
+            val ret = JSObject().apply { put("success", true) }
+            call.resolve(ret)
+        } else {
+            call.reject("Missing api key")
+        }
+    }
 }
 

@@ -151,10 +151,14 @@ class ServerSettings(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="JARVIS_")
 
-    host: str = "0.0.0.0"
+    # Keep a fresh installation private.  Set JARVIS_HOST explicitly when a
+    # reverse proxy or another trusted network boundary is configured.
+    host: str = "127.0.0.1"
     port: int = 8000
     debug: bool = True
-    secret_key: str = "change-this-to-a-random-secret"
+    # Empty means no shared secret was configured. Authentication then fails
+    # closed whenever it is required (for example, for a non-loopback host).
+    secret_key: str = ""
     require_auth: bool = False
 
 
