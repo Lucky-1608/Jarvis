@@ -72,11 +72,17 @@ class ScreenCapture:
                 "Install with: pip install 'jarvis-os[vision]'"
             )
 
-        import asyncio
-        loop = asyncio.get_event_loop()
-
-        # Capture (CPU-bound, run in executor)
-        screenshot = await loop.run_in_executor(None, ImageGrab.grab)
+        # Capture screen (direct call preferred on Windows to avoid GDI thread affinity blocks)
+        try:
+            screenshot = ImageGrab.grab()
+        except Exception:
+            import asyncio
+            try:
+                loop = asyncio.get_running_loop()
+                screenshot = await loop.run_in_executor(None, ImageGrab.grab)
+            except Exception as e:
+                logger.error("screenshot.grab_failed", error=str(e))
+                raise
 
         # Convert to base64 PNG
         buffer = io.BytesIO()

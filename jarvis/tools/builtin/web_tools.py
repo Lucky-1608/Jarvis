@@ -200,6 +200,127 @@ class FetchURLTool(Tool):
 
 
 # ---------------------------------------------------------------------------
+# Image Search (DuckDuckGo + Wikimedia Commons fallback)
+# ---------------------------------------------------------------------------
+class ImageSearchTool(Tool):
+    """Search for images on the web."""
+
+    @property
+    def metadata(self) -> ToolMetadata:
+        return ToolMetadata(
+            name="image_search",
+            description=(
+                "Search the web for images matching a query. Returns direct image URLs. "
+                "CRITICAL: Always include the retrieved image URLs in markdown format "
+                "![title](url) in your final response so companion apps, WhatsApp, and "
+                "Telegram can display and render the images for the user."
+            ),
+            category=ToolCategory.WEB,
+            parameters=[
+                ToolParameter(
+                    name="query",
+                    type="string",
+                    description="The image search query (e.g. 'iron man suit', 'golden retriever puppy').",
+                ),
+                ToolParameter(
+                    name="max_results",
+                    type="integer",
+                    description="Maximum number of images to return (default: 5).",
+                    required=False,
+                    default=5,
+                ),
+            ],
+        )
+
+    async def execute(self, **params: Any) -> ToolResult:
+        import json
+        import re
+        from urllib.parse import quote
+
+        query = params.get("query", "").strip()
+        try:
+            max_results = max(1, min(int(params.get("max_results", 5)), 20))
+        except (TypeError, ValueError):
+            max_results = 5
+
+        if not query:
+            return ToolResult(success=False, error="No search query provided.")
+
+        results: list[dict[str, str]] = []
+        ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+        # Strategy 1: DuckDuckGo image search
+        try:
+            ddg_init_url = f"https://duckduckgo.com/?q={quote(query)}"
+            init_resp = await fetch_public_url(ddg_init_url, timeout=12, headers={"User-Agent": ua})
+            if init_resp.status_code == 200:
+                html = init_resp.text
+                vqd_match = re.search(r'vqd=([0-9-]+)', html) or re.search(r'vqd="([^"]+)"', html)
+                if vqd_match:
+                    vqd = vqd_match.group(1)
+                    api_url = f"https://duckduckgo.com/i.js?l=us-en&o=json&q={quote(query)}&vqd={vqd}&f=,,,"
+                    img_resp = await fetch_public_url(api_url, timeout=12, headers={"User-Agent": ua})
+                    if img_resp.status_code == 200:
+                        data = json.loads(img_resp.text)
+                        for item in data.get("results", []):
+                            img_url = item.get("image")
+                            title = item.get("title", query)
+                            if img_url and img_url.startswith("http"):
+                                results.append({
+                                    "title": title,
+                                    "url": img_url,
+                                    "thumbnail": item.get("thumbnail") or img_url,
+                                })
+                            if len(results) >= max_results:
+                                break
+        except Exception as exc:
+            logger.debug("image_search.ddg_error", query=query, error=str(exc))
+
+        # Strategy 2: Wikimedia Commons / Wikipedia API fallback
+        if len(results) < max_results:
+            try:
+                wiki_limit = max_results - len(results)
+                wiki_url = (
+                    f"https://en.wikipedia.org/w/api.php?action=query&generator=search"
+                    f"&gsrsearch={quote(query)}&gsrlimit={wiki_limit * 2}&prop=pageimages"
+                    f"&piprop=original|thumbnail&pithumbsize=1000&format=json"
+                )
+                wiki_resp = await fetch_public_url(wiki_url, timeout=12, headers={"User-Agent": "Jarvis-OS/0.1 (AI Assistant)"})
+                if wiki_resp.status_code == 200:
+                    wiki_data = json.loads(wiki_resp.text)
+                    pages = wiki_data.get("query", {}).get("pages", {}).values()
+                    for page in pages:
+                        img_info = page.get("original") or page.get("thumbnail")
+                        if img_info and img_info.get("source"):
+                            results.append({
+                                "title": page.get("title", query),
+                                "url": img_info["source"],
+                                "thumbnail": (page.get("thumbnail") or {}).get("source", img_info["source"]),
+                            })
+                        if len(results) >= max_results:
+                            break
+            except Exception as exc:
+                logger.debug("image_search.wiki_error", query=query, error=str(exc))
+
+        if not results:
+            return ToolResult(
+                success=False,
+                error=f"No images found on the web for query: '{query}'. Try a broader search term.",
+            )
+
+        markdown = "\n".join([f"![{r['title']}]({r['url']})" for r in results])
+        return ToolResult(
+            success=True,
+            output={
+                "query": query,
+                "count": len(results),
+                "images": results,
+                "markdown": markdown,
+            },
+        )
+
+
+# ---------------------------------------------------------------------------
 # Factory
 # ---------------------------------------------------------------------------
 def get_web_tools() -> list[Tool]:
@@ -207,4 +328,5 @@ def get_web_tools() -> list[Tool]:
     return [
         WebSearchTool(),
         FetchURLTool(),
+        ImageSearchTool(),
     ]

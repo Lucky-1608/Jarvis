@@ -66,6 +66,17 @@ const TypewriterText = ({ text, shouldAnimate, onUpdate }: { text: string, shoul
   return <>{displayedText}</>;
 };
 
+const extractImagesFromText = (text: string) => {
+  const images: { alt: string; url: string }[] = [];
+  const mdRegex = /!\[([^\]]*)\]\((https?:\/\/[^\s\)]+)\)/g;
+  let match;
+  while ((match = mdRegex.exec(text)) !== null) {
+    images.push({ alt: match[1] || 'Image', url: match[2] });
+  }
+  const cleanText = text.replace(mdRegex, '').trim();
+  return { cleanText, images };
+};
+
 export function ChatHistory() {
   const messages = useJarvisStore(s => s.messages);
   const aiState = useJarvisStore(s => s.aiState);
@@ -116,11 +127,46 @@ export function ChatHistory() {
                 </div>
                 <div className="break-words leading-relaxed whitespace-pre-wrap">
                   {msg.role === 'jarvis' ? (
-                    <TypewriterText 
-                      text={msg.text} 
-                      shouldAnimate={idx === messages.length - 1} 
-                      onUpdate={scrollToBottom} 
-                    />
+                    (() => {
+                      const { cleanText, images } = extractImagesFromText(msg.text);
+                      return (
+                        <div className="flex flex-col gap-2">
+                          {cleanText ? (
+                            <TypewriterText 
+                              text={cleanText} 
+                              shouldAnimate={idx === messages.length - 1} 
+                              onUpdate={scrollToBottom} 
+                            />
+                          ) : null}
+                          {images.length > 0 && (
+                            <div className="flex flex-wrap gap-2 mt-2">
+                              {images.map((img, imgIdx) => (
+                                <a 
+                                  key={imgIdx} 
+                                  href={img.url} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="group/img relative block overflow-hidden rounded-lg border border-[rgba(255,255,255,0.1)] hover:border-[var(--accent-cyan)] transition-all max-w-[280px]"
+                                >
+                                  <img 
+                                    src={img.url} 
+                                    alt={img.alt} 
+                                    className="max-h-52 w-auto object-cover rounded-lg group-hover/img:scale-105 transition-transform duration-300" 
+                                    loading="lazy"
+                                    onLoad={scrollToBottom}
+                                  />
+                                  {img.alt && img.alt !== 'Image' && (
+                                    <div className="absolute bottom-0 inset-x-0 bg-black/70 backdrop-blur-sm px-2 py-1 text-[11px] text-zinc-300 truncate">
+                                      {img.alt}
+                                    </div>
+                                  )}
+                                </a>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()
                   ) : (
                     msg.text
                   )}

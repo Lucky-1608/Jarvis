@@ -367,168 +367,171 @@ class JarvisBrain:
         # 1. Add to conversation buffer
         self._memory.add_to_conversation("user", user_input_db)
 
-
-        # 2. Build context (using the DB-safe string version for semantic search)
-        messages = await self._context.build_messages(user_input_db)
-        
-        # Override the last message's content to use the rich LLM-ready format (for vision)
-        if messages and messages[-1].role == "user":
-            messages[-1].content = user_input_llm
-
-
-        # 3. Get AI response with tools (multi-step loop)
-        openai_tools = None
-        if self._tools and self._tools.count > 0:
-            if self._settings.ai_tool_selector_enabled:
-                from jarvis.router.tool_selector import ToolSelector
-                if not hasattr(self, "_tool_selector"):
-                    self._tool_selector = ToolSelector(self._router, self._tools)
-
-                selected_names = await self._tool_selector.select_tools(user_input)
-                # Keep only tools that exist in the registry
-                selected_tools = [self._tools.get(name) for name in selected_names if self._tools.get(name)]
-
-                # If for some reason the selector failed to pick any tools, fallback to all tools
-                if selected_tools:
-                    openai_tools = [t.metadata.to_openai_schema() for t in selected_tools]
+        try:
+            # 2. Build context (using the DB-safe string version for semantic search)
+            messages = await self._context.build_messages(user_input_db)
+            
+            # Override the last message's content to use the rich LLM-ready format (for vision)
+            if messages and messages[-1].role == "user":
+                messages[-1].content = user_input_llm
+    
+    
+            # 3. Get AI response with tools (multi-step loop)
+            openai_tools = None
+            if self._tools and self._tools.count > 0:
+                if self._settings.ai_tool_selector_enabled:
+                    from jarvis.router.tool_selector import ToolSelector
+                    if not hasattr(self, "_tool_selector"):
+                        self._tool_selector = ToolSelector(self._router, self._tools)
+    
+                    selected_names = await self._tool_selector.select_tools(user_input)
+                    # Keep only tools that exist in the registry
+                    selected_tools = [self._tools.get(name) for name in selected_names if self._tools.get(name)]
+    
+                    # If for some reason the selector failed to pick any tools, fallback to all tools
+                    if selected_tools:
+                        openai_tools = [t.metadata.to_openai_schema() for t in selected_tools]
+                    else:
+                        openai_tools = self._tools.to_openai_tools()
                 else:
                     openai_tools = self._tools.to_openai_tools()
-            else:
-                openai_tools = self._tools.to_openai_tools()
-
-        MAX_STEPS = 5
-        tool_results: list[dict[str, Any]] = []
-        plan_dict = None
-        approval_message = None
-
-
-        for step_idx in range(MAX_STEPS):
-            ai_response = await self._router.chat(messages, tools=openai_tools)
-
-            if not ai_response.tool_calls:
-                # If the model emits a generic tool-calling fallback message,
-                # re-run the chat without tools so it answers conversationally.
-                if ai_response.content and "I don't have a specific function to call" in ai_response.content:
-                    ai_response = await self._router.chat(messages)
-                break
-
-            messages.append(Message(
-                role="assistant",
-                content=ai_response.content or "",
-                tool_calls=ai_response.tool_calls
-            ))
-
-            import json
-            import time as _time
-
-            from jarvis.planner.planner import ExecutionPlan, PlanStep
-
-            steps = []
-            requires_confirmation = False
-            for i, tc in enumerate(ai_response.tool_calls):
-                func = tc.get("function", {})
-                tool_name = func.get("name")
-
-                tool = self._tools.get(tool_name)
-                if tool and tool.is_dangerous:
-                    requires_confirmation = True
-
-                try:
-                    raw_args = func.get("arguments", "{}")
-                    params = raw_args if isinstance(raw_args, dict) else json.loads(raw_args)
-                except (json.JSONDecodeError, TypeError):
-                    params = {}
-
-                steps.append(PlanStep(
-                    id=i,
-                    description=f"Run {tool_name}",
-                    tool_name=tool_name,
-                    tool_params=params,
-                    tool_call_id=tc.get("id"),
-                    depends_on=[],
-                ))
-
-            plan = ExecutionPlan(
-                goal=user_input,
-                steps=steps,
-                requires_confirmation=requires_confirmation,
-                reasoning=f"Determined via native tool calling (step {step_idx + 1})",
-            )
-
-            workflow_entry = {
-                "id": f"plan_{uuid.uuid4().hex[:12]}",
-                "goal": user_input,
-                "status": "running",
-                "requires_confirmation": plan.requires_confirmation,
-                "reasoning": plan.reasoning,
-                "timestamp": _time.time(),
-                "steps": [{
-                    "id": s.id,
-                    "description": s.description,
-                    "tool": s.tool_name,
-                    "status": s.status.value,
-                } for s in plan.steps],
-            }
-            self._workflow_history.insert(0, workflow_entry)
-
-            if plan.requires_confirmation:
-                workflow_entry["status"] = "blocked"
-                workflow_entry["approval_required"] = True
-                self._pending_plans[workflow_entry["id"]] = plan
-                plan_dict = plan.to_dict()
-                plan_dict["workflow_id"] = workflow_entry["id"]
-                approval_message = (
-                    "This request includes dangerous actions. Review the workflow "
-                    f"'{workflow_entry['id']}' and approve it from the Workflows page "
-                    "before execution."
-                )
-                break
-
-            executed_plan = await self._executor.execute_plan(plan)
-            for step in executed_plan.steps:
-                tool_results.append({
-                    "step": step.id,
-                    "tool": step.tool_name,
-                    "description": step.description,
-                    "status": step.status.value,
-                    "result": step.result,
-                    "error": step.error,
-                })
-
-                result_str = str(step.result) if step.status.value == "completed" else str(step.error)
+    
+            MAX_STEPS = 5
+            tool_results: list[dict[str, Any]] = []
+            plan_dict = None
+            approval_message = None
+    
+    
+            for step_idx in range(MAX_STEPS):
+                ai_response = await self._router.chat(messages, tools=openai_tools)
+    
+                if not ai_response.tool_calls:
+                    # If the model emits a generic tool-calling fallback message,
+                    # re-run the chat without tools so it answers conversationally.
+                    if ai_response.content and "I don't have a specific function to call" in ai_response.content:
+                        ai_response = await self._router.chat(messages)
+                    break
+    
                 messages.append(Message(
-                    role="tool",
-                    content=result_str,
-                    name=step.tool_name,
-                    tool_call_id=step.tool_call_id
+                    role="assistant",
+                    content=ai_response.content or "",
+                    tool_calls=ai_response.tool_calls
                 ))
-
-            if self._workflow_history:
-                wf = self._workflow_history[0]
-                wf["status"] = "failed" if plan.has_failures else "completed"
-                wf["steps"] = [{
-                    "id": s.id,
-                    "description": s.description,
-                    "tool": s.tool_name,
-                    "status": s.status.value,
-                } for s in plan.steps]
-
-                if wf["status"] == "completed" and len(plan.steps) > 1:
-                    asyncio.create_task(self._distill_skill(user_input, plan, tool_results))
-
-            plan_dict = plan.to_dict()
-
-        # 5. Verify AI response
-        response_content = approval_message or ai_response.content
-        verification = await self._verifier.verify_ai_response(response_content)
-        if not verification["valid"]:
-            logger.warning("brain.response_verification_issues", issues=verification["issues"])
-
-        # Convert any markdown tables to clean, readable bullet points
-        final_content = convert_tables_to_readable_format(response_content)
-
-        # 6. Store in memory
-        self._memory.add_to_conversation("assistant", final_content)
+    
+                import json
+                import time as _time
+    
+                from jarvis.planner.planner import ExecutionPlan, PlanStep
+    
+                steps = []
+                requires_confirmation = False
+                for i, tc in enumerate(ai_response.tool_calls):
+                    func = tc.get("function", {})
+                    tool_name = func.get("name")
+    
+                    tool = self._tools.get(tool_name)
+                    if tool and tool.is_dangerous:
+                        requires_confirmation = True
+    
+                    try:
+                        raw_args = func.get("arguments", "{}")
+                        params = raw_args if isinstance(raw_args, dict) else json.loads(raw_args)
+                    except (json.JSONDecodeError, TypeError):
+                        params = {}
+    
+                    steps.append(PlanStep(
+                        id=i,
+                        description=f"Run {tool_name}",
+                        tool_name=tool_name,
+                        tool_params=params,
+                        tool_call_id=tc.get("id"),
+                        depends_on=[],
+                    ))
+    
+                plan = ExecutionPlan(
+                    goal=user_input,
+                    steps=steps,
+                    requires_confirmation=requires_confirmation,
+                    reasoning=f"Determined via native tool calling (step {step_idx + 1})",
+                )
+    
+                workflow_entry = {
+                    "id": f"plan_{uuid.uuid4().hex[:12]}",
+                    "goal": user_input,
+                    "status": "running",
+                    "requires_confirmation": plan.requires_confirmation,
+                    "reasoning": plan.reasoning,
+                    "timestamp": _time.time(),
+                    "steps": [{
+                        "id": s.id,
+                        "description": s.description,
+                        "tool": s.tool_name,
+                        "status": s.status.value,
+                    } for s in plan.steps],
+                }
+                self._workflow_history.insert(0, workflow_entry)
+    
+                if plan.requires_confirmation:
+                    workflow_entry["status"] = "blocked"
+                    workflow_entry["approval_required"] = True
+                    self._pending_plans[workflow_entry["id"]] = plan
+                    plan_dict = plan.to_dict()
+                    plan_dict["workflow_id"] = workflow_entry["id"]
+                    approval_message = (
+                        "This request includes dangerous actions. Review the workflow "
+                        f"'{workflow_entry['id']}' and approve it from the Workflows page "
+                        "before execution."
+                    )
+                    break
+    
+                executed_plan = await self._executor.execute_plan(plan)
+                for step in executed_plan.steps:
+                    tool_results.append({
+                        "step": step.id,
+                        "tool": step.tool_name,
+                        "description": step.description,
+                        "status": step.status.value,
+                        "result": step.result,
+                        "error": step.error,
+                    })
+    
+                    result_str = str(step.result) if step.status.value == "completed" else str(step.error)
+                    messages.append(Message(
+                        role="tool",
+                        content=result_str,
+                        name=step.tool_name,
+                        tool_call_id=step.tool_call_id
+                    ))
+    
+                if self._workflow_history:
+                    wf = self._workflow_history[0]
+                    wf["status"] = "failed" if plan.has_failures else "completed"
+                    wf["steps"] = [{
+                        "id": s.id,
+                        "description": s.description,
+                        "tool": s.tool_name,
+                        "status": s.status.value,
+                    } for s in plan.steps]
+    
+                    if wf["status"] == "completed" and len(plan.steps) > 1:
+                        asyncio.create_task(self._distill_skill(user_input, plan, tool_results))
+    
+                plan_dict = plan.to_dict()
+    
+            # 5. Verify AI response
+            response_content = approval_message or ai_response.content
+            verification = await self._verifier.verify_ai_response(response_content)
+            if not verification["valid"]:
+                logger.warning("brain.response_verification_issues", issues=verification["issues"])
+    
+            # Convert any markdown tables to clean, readable bullet points
+            final_content = convert_tables_to_readable_format(response_content)
+    
+            # 6. Store in memory
+            self._memory.add_to_conversation("assistant", final_content)
+        except Exception:
+            self._memory.remove_last_if_user()
+            raise
 
         # Store significant interactions in long-term memory
         if len(user_input) > 20:  # Skip trivial inputs
@@ -608,13 +611,19 @@ class JarvisBrain:
             messages[-1].content = user_input_llm
 
         full_response = ""
-        async for chunk in self._router.chat_stream(messages):
-            full_response += chunk.content
-            yield chunk
+        try:
+            async for chunk in self._router.chat_stream(messages):
+                full_response += chunk.content
+                yield chunk
 
-        # Store in memory after stream completes
-        if full_response:
-            self._memory.add_to_conversation("assistant", full_response)
+            # Store in memory after stream completes
+            if full_response:
+                self._memory.add_to_conversation("assistant", full_response)
+            else:
+                self._memory.remove_last_if_user()
+        except Exception:
+            self._memory.remove_last_if_user()
+            raise
 
     async def _distill_skill(self, goal: str, plan, tool_results: list) -> None:
         """Run DistillationAgent in the background to learn from a successful workflow."""

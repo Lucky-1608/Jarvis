@@ -10,7 +10,10 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Any
 
-import httpx
+try:
+    import httpx
+except ImportError:
+    httpx = None
 import structlog
 
 from jarvis.config.settings import get_settings

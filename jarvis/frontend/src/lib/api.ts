@@ -28,8 +28,8 @@ let isResolving = false;
 let resolveQueue: ((url: string) => void)[] = [];
 
 /**
- * Dynamically resolves the active backend URL by pinging the list of URLs
- * provided in VITE_API_BASE_URL (comma-separated).
+ * Dynamically resolves the active backend URL by pinging candidate URLs
+ * (local backend, env-configured, or relative paths).
  */
 export async function getBaseUrl(forceRefresh = false): Promise<string> {
   if (activeBaseUrl !== null && !forceRefresh) {
@@ -41,35 +41,63 @@ export async function getBaseUrl(forceRefresh = false): Promise<string> {
   }
 
   isResolving = true;
-  const envStr = import.meta.env.VITE_API_BASE_URL || '';
-  const urls = envStr.split(',').map((u: string) => u.trim()).filter(Boolean);
 
-  // Always append relative path as the final fallback
-  if (!urls.includes('')) {
-    urls.push(''); 
+  const isTauri = typeof window !== 'undefined' && (
+    '__TAURI_INTERNALS__' in window ||
+    '__TAURI__' in window ||
+    window.location.protocol.startsWith('tauri') ||
+    window.location.protocol === 'file:'
+  );
+
+  const isLocalHost = typeof window !== 'undefined' && (
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1' ||
+    window.location.hostname === '0.0.0.0'
+  );
+
+  const customUrl = typeof localStorage !== 'undefined' ? localStorage.getItem('JARVIS_BACKEND_URL')?.trim() : null;
+  const envStr = import.meta.env.VITE_API_BASE_URL || '';
+  const envUrls = envStr.split(',').map((u: string) => u.trim()).filter(Boolean);
+
+  const candidateUrls: string[] = [];
+  if (customUrl) candidateUrls.push(customUrl);
+
+  if (isTauri || isLocalHost) {
+    if (!candidateUrls.includes('http://127.0.0.1:8000')) candidateUrls.push('http://127.0.0.1:8000');
+    if (!candidateUrls.includes('http://localhost:8000')) candidateUrls.push('http://localhost:8000');
+    if (!isTauri && !candidateUrls.includes('')) candidateUrls.push('');
   }
 
-  let found = urls[0];
-  for (const url of urls) {
-    if (!url) {
-      found = '';
-      break; // relative path is assumed to work
-    }
+  for (const u of envUrls) {
+    if (!candidateUrls.includes(u)) candidateUrls.push(u);
+  }
+
+  if (!isTauri && !candidateUrls.includes('')) candidateUrls.push('');
+  if (isTauri && !candidateUrls.includes('http://127.0.0.1:8000')) candidateUrls.push('http://127.0.0.1:8000');
+
+  let found: string | null = null;
+  for (const url of candidateUrls) {
     try {
-      // Ping the specific health endpoint so we don't accidentally get 200 OK from the frontend's own index.html
-      const res = await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(5000) });
+      const pingUrl = url ? `${url}/api/health` : '/api/health';
+      const res = await fetch(pingUrl, { signal: AbortSignal.timeout(1500) });
       if (res.ok) {
         found = url;
         break;
       }
     } catch {
-      continue; // ping failed, try next
+      continue;
     }
+  }
+
+  if (found === null) {
+    found = isTauri
+      ? 'http://127.0.0.1:8000'
+      : (candidateUrls.includes('') ? '' : candidateUrls[0] || 'http://127.0.0.1:8000');
   }
 
   activeBaseUrl = found;
   isResolving = false;
-  resolveQueue.forEach(resolve => resolve(found));
+  resolveQueue.forEach(resolve => resolve(found as string));
   resolveQueue = [];
 
   return activeBaseUrl || '';
@@ -136,7 +164,11 @@ export async function apiFetch<T = any>(
       let detail = '';
       try {
         const body = await res.json();
-        detail = body.detail || body.message || res.statusText;
+        if (Array.isArray(body.detail)) {
+          detail = body.detail.map((e: any) => e.msg || JSON.stringify(e)).join('; ');
+        } else {
+          detail = body.detail || body.message || res.statusText;
+        }
       } catch {
         detail = res.statusText;
       }

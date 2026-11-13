@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
 from jarvis.server.auth import authenticate_websocket
@@ -53,13 +53,45 @@ async def chat(request: ChatRequest):
             plan=result.plan,
             tool_results=result.tool_results,
         )
+    except ConnectionError as e:
+        # All AI providers failed (rate-limit, timeout, network)
+        error_str = str(e).lower()
+        if "rate" in error_str or "cooldown" in error_str or "429" in error_str:
+            raise HTTPException(
+                status_code=429,
+                detail="All AI providers are currently rate-limited. Please wait a moment and try again.",
+            )
+        elif "timeout" in error_str:
+            raise HTTPException(
+                status_code=504,
+                detail="AI provider request timed out. The service may be overloaded — please try again.",
+            )
+        else:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Could not reach any AI provider. Check your network and provider configuration. ({e})",
+            )
+    except RuntimeError as e:
+        error_str = str(e)
+        if "not available" in error_str:
+            raise HTTPException(
+                status_code=503,
+                detail=f"No AI provider is configured. Please add a valid provider and API key in your .env file. ({e})",
+            )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal error: {e}",
+        )
     except Exception as e:
-        # Fallback for demo purposes if no API key is configured
-        return ChatResponse(
-            content=f"I am JARVIS. (Demo Mode: {str(e)}) Please configure a valid API key in .env to enable my AI capabilities.",
-            provider="demo_fallback",
-            model="offline",
-            latency_ms=0.0
+        error_str = str(e).lower()
+        if "api" in error_str and ("key" in error_str or "auth" in error_str or "401" in error_str or "403" in error_str):
+            raise HTTPException(
+                status_code=401,
+                detail="AI provider authentication failed. Please check your API key in the .env file.",
+            )
+        raise HTTPException(
+            status_code=500,
+            detail=f"An unexpected error occurred while processing your request: {e}",
         )
 
 

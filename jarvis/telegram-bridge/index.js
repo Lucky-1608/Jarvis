@@ -213,6 +213,55 @@ async function sendTelegramChunks(bot, chatId, text, baseOptions = {}) {
     }
 }
 
+/**
+ * Resolves user-friendly error messages based on HTTP status and error details
+ */
+function getApiErrorMessage(error) {
+    if (!error.response) {
+        if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+            return '⚠️ Request to Jarvis backend timed out. Please try again.';
+        }
+        return '⚠️ Unable to reach the Jarvis backend server. Please ensure it is running and try again.';
+    }
+
+    const status = error.response.status;
+    const data = error.response.data;
+    const detail = typeof data === 'object' && data !== null
+        ? (data.detail || data.message || '')
+        : (typeof data === 'string' ? data : '');
+
+    if (status === 401) {
+        return '⚠️ AI provider authentication failed. Please check your API key configuration in the .env file.';
+    } else if (status === 429) {
+        return '⚠️ All AI providers are currently rate-limited. Please wait a moment before trying again.';
+    } else if (status === 502) {
+        return `⚠️ Could not connect to any AI provider. Please check your network and provider settings.${detail ? ` (${detail})` : ''}`;
+    } else if (status === 503) {
+        return `⚠️ No AI provider is configured. Please set up a provider and API key in the .env file.${detail ? ` (${detail})` : ''}`;
+    } else if (status === 504) {
+        return '⚠️ The AI provider took too long to respond. Please try again.';
+    } else if (status >= 500) {
+        return `⚠️ An internal error occurred: ${detail || error.message}`;
+    } else {
+        return `⚠️ Request failed (${status}): ${detail || error.message}`;
+    }
+}
+
+/**
+ * Extracts markdown image URLs and clean text for Telegram media sending
+ */
+function extractImageUrls(text) {
+    if (!text || typeof text !== 'string') return { text: '', images: [] };
+    const images = [];
+    const mdRegex = /!\[([^\]]*)\]\((https?:\/\/[^\s\)]+)\)/g;
+    let match;
+    while ((match = mdRegex.exec(text)) !== null) {
+        images.push({ caption: match[1], url: match[2] });
+    }
+    let cleanedText = text.replace(mdRegex, '').trim();
+    return { text: cleanedText, images };
+}
+
 async function connectToTelegram() {
     console.log('[Bridge] Starting Jarvis Telegram Bridge...');
 
@@ -320,7 +369,7 @@ async function connectToTelegram() {
                 });
             } catch (primaryErr) {
                 const fallbackUrl = `http://127.0.0.1:${localPort}/api/chat`;
-                if (`${JARVIS_BACKEND_URL}/api/chat` !== fallbackUrl) {
+                if (!primaryErr.response && `${JARVIS_BACKEND_URL}/api/chat` !== fallbackUrl) {
                     console.warn(`[Bridge] Primary backend failed (${primaryErr.message}). Retrying via loopback ${fallbackUrl}...`);
                     response = await axios.post(fallbackUrl, {
                         message: finalMessage,
@@ -367,26 +416,59 @@ async function connectToTelegram() {
 
         } catch (error) {
             console.error("Error communicating with Jarvis API:", error.message);
+            const errorMsg = getApiErrorMessage(error);
             try {
-                await bot.sendMessage(chatId, "⚠️ Jarvis Backend is unreachable.", {
+                await bot.sendMessage(chatId, errorMsg, {
                     reply_to_message_id: msg.message_id
                 });
             } catch (alertErr) {
-                console.error("Failed to send unreachable alert to Telegram:", alertErr.message);
+                console.error("Failed to send error alert to Telegram:", alertErr.message);
             }
             return;
         }
 
-        // Send reply back via Telegram as plain text with chunking
+        // Send reply back via Telegram with media or plain text chunking
         if (reply) {
-            try {
-                await sendTelegramChunks(bot, chatId, reply, {
-                    reply_to_message_id: msg.message_id,
-                    parse_mode: undefined
-                });
+            const { text: cleanedText, images } = extractImageUrls(reply);
+            if (images.length > 0) {
+                let imagesSent = false;
+                for (let i = 0; i < images.length; i++) {
+                    try {
+                        const img = images[i];
+                        const caption = i === 0 
+                            ? (cleanedText ? cleanedText.substring(0, 1024) : (img.caption || undefined))
+                            : (img.caption || undefined);
+
+                        await bot.sendPhoto(chatId, img.url, {
+                            caption: caption,
+                            reply_to_message_id: i === 0 ? msg.message_id : undefined,
+                        });
+                        imagesSent = true;
+                        console.log(`[Bridge] Sent Telegram photo: ${img.url.substring(0, 60)}`);
+                    } catch (photoErr) {
+                        console.warn(`[Bridge] Failed to send photo to Telegram (${photoErr.message}), falling back to text.`);
+                    }
+                }
+                // If there was remaining text longer than 1024 chars that couldn't fit in caption
+                if (imagesSent && cleanedText && cleanedText.length > 1024) {
+                    await sendTelegramChunks(bot, chatId, cleanedText.substring(1024));
+                } else if (!imagesSent) {
+                    await sendTelegramChunks(bot, chatId, reply, {
+                        reply_to_message_id: msg.message_id,
+                        parse_mode: undefined
+                    });
+                }
                 console.log(`[Jarvis] ${reply.substring(0, 80)}... (${reply.length} chars)`);
-            } catch (sendErr) {
-                console.error("Failed to send message to Telegram:", sendErr.message);
+            } else {
+                try {
+                    await sendTelegramChunks(bot, chatId, reply, {
+                        reply_to_message_id: msg.message_id,
+                        parse_mode: undefined
+                    });
+                    console.log(`[Jarvis] ${reply.substring(0, 80)}... (${reply.length} chars)`);
+                } catch (sendErr) {
+                    console.error("Failed to send message to Telegram:", sendErr.message);
+                }
             }
         }
     });

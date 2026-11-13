@@ -121,10 +121,58 @@ export function ConversationInput() {
       }
     } else if (!result.ok) {
       setAIState('idle');
-      store.addMessage('I am JARVIS. I am currently running in offline demo mode. Please start the backend server to enable AI capabilities.', false);
-      store.addLog({ message: 'Backend not reachable — running in offline mode.', type: 'warning' });
+
+      let userMessage: string;
+      let logMessage: string;
+      let logType: 'warning' | 'error' = 'error';
+      let toastTitle: string;
+
+      if (result.status === 0) {
+        // Network error — backend is completely unreachable
+        userMessage = 'Unable to reach the backend server. Please ensure it is running and try again.';
+        logMessage = 'Backend not reachable — connection failed.';
+        logType = 'warning';
+        toastTitle = 'Server Connection Failed';
+      } else if (result.status === 401) {
+        userMessage = 'AI provider authentication failed. Please check your API key configuration in the .env file.';
+        logMessage = `Authentication error: ${result.detail}`;
+        toastTitle = 'Authentication Error';
+      } else if (result.status === 429) {
+        userMessage = 'All AI providers are currently rate-limited. Please wait a moment before trying again.';
+        logMessage = `Rate limited: ${result.detail}`;
+        logType = 'warning';
+        toastTitle = 'Rate Limit Exceeded';
+      } else if (result.status === 502) {
+        userMessage = 'Could not connect to any AI provider. Please check your network and provider settings.';
+        logMessage = `Provider connection failed: ${result.detail}`;
+        toastTitle = 'AI Provider Unreachable';
+      } else if (result.status === 503) {
+        userMessage = 'No AI provider is configured. Please set up a provider and API key in your .env file.';
+        logMessage = `No provider configured: ${result.detail}`;
+        toastTitle = 'Provider Not Configured';
+      } else if (result.status === 504) {
+        userMessage = 'The AI provider took too long to respond. Please try again.';
+        logMessage = `Provider timeout: ${result.detail}`;
+        toastTitle = 'Request Timeout';
+      } else if (result.status >= 500) {
+        userMessage = `An internal error occurred: ${result.detail || 'Unknown server error'}`;
+        logMessage = `Server error ${result.status}: ${result.detail}`;
+        toastTitle = 'Server Error';
+      } else {
+        userMessage = `Request failed: ${result.detail || 'Unknown error'}`;
+        logMessage = `API error ${result.status}: ${result.detail}`;
+        toastTitle = 'Request Error';
+      }
+
+      store.addMessage(userMessage, false);
+      store.addLog({ message: logMessage, type: logType });
+      toast({
+        title: toastTitle,
+        description: userMessage,
+        variant: 'destructive',
+      });
     }
-  }, [value, selectedFiles, setAIState, voiceOutput]);
+  }, [value, selectedFiles, setAIState, voiceOutput, toast]);
 
   const initialTextRef = useRef('');
   const wasVoiceInputRef = useRef(false);

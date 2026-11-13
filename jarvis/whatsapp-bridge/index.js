@@ -342,6 +342,55 @@ async function sendWhatsAppChunks(sock, targetJid, text, quotedMsg = null) {
     }
 }
 
+/**
+ * Resolves user-friendly error messages based on HTTP status and error details
+ */
+function getApiErrorMessage(error) {
+    if (!error.response) {
+        if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+            return '⚠️ Request to Jarvis backend timed out. Please try again.';
+        }
+        return '⚠️ Unable to reach the Jarvis backend server. Please ensure it is running and try again.';
+    }
+
+    const status = error.response.status;
+    const data = error.response.data;
+    const detail = typeof data === 'object' && data !== null
+        ? (data.detail || data.message || '')
+        : (typeof data === 'string' ? data : '');
+
+    if (status === 401) {
+        return '⚠️ AI provider authentication failed. Please check your API key configuration in the .env file.';
+    } else if (status === 429) {
+        return '⚠️ All AI providers are currently rate-limited. Please wait a moment before trying again.';
+    } else if (status === 502) {
+        return `⚠️ Could not connect to any AI provider. Please check your network and provider settings.${detail ? ` (${detail})` : ''}`;
+    } else if (status === 503) {
+        return `⚠️ No AI provider is configured. Please set up a provider and API key in the .env file.${detail ? ` (${detail})` : ''}`;
+    } else if (status === 504) {
+        return '⚠️ The AI provider took too long to respond. Please try again.';
+    } else if (status >= 500) {
+        return `⚠️ An internal error occurred: ${detail || error.message}`;
+    } else {
+        return `⚠️ Request failed (${status}): ${detail || error.message}`;
+    }
+}
+
+/**
+ * Extracts markdown image URLs and clean text for WhatsApp media sending
+ */
+function extractImageUrls(text) {
+    if (!text || typeof text !== 'string') return { text: '', images: [] };
+    const images = [];
+    const mdRegex = /!\[([^\]]*)\]\((https?:\/\/[^\s\)]+)\)/g;
+    let match;
+    while ((match = mdRegex.exec(text)) !== null) {
+        images.push({ caption: match[1], url: match[2] });
+    }
+    let cleanedText = text.replace(mdRegex, '').trim();
+    return { text: cleanedText, images };
+}
+
 async function connectToWhatsApp() {
     if (reconnectTimeout) {
         clearTimeout(reconnectTimeout);
@@ -767,7 +816,7 @@ async function connectToWhatsApp() {
                     });
                 } catch (primaryErr) {
                     const fallbackUrl = `http://127.0.0.1:${localPort}/api/chat`;
-                    if (`${JARVIS_BACKEND_URL}/api/chat` !== fallbackUrl) {
+                    if (!primaryErr.response && `${JARVIS_BACKEND_URL}/api/chat` !== fallbackUrl) {
                         console.warn(`[Bridge] Primary backend failed (${primaryErr.message}). Retrying via loopback ${fallbackUrl}...`);
                         response = await axios.post(fallbackUrl, {
                             message: finalMessage,
@@ -808,15 +857,41 @@ async function connectToWhatsApp() {
                 reply = formatMessageForChat(reply);
             } catch (error) {
                 console.error("Error communicating with Jarvis API:", error.message);
-                reply = "⚠️ Jarvis Backend is unreachable.";
+                reply = getApiErrorMessage(error);
             }
 
-            // Send reply back via WhatsApp with chunking
+            // Send reply back via WhatsApp with chunking or media
             // In self-chat, NEVER quote the message: quoting a fromMe message across companion
             // sessions causes Signal ratchet collisions and permanent "Waiting for this message" errors.
             const quoteArg = (isSelfChat || msg.key?.fromMe) ? null : msg;
             if (reply && globalSock) {
-                await sendWhatsAppChunks(globalSock, replyTarget, reply, quoteArg);
+                const { text: cleanedText, images } = extractImageUrls(reply);
+                if (images.length > 0) {
+                    let imagesSent = false;
+                    for (let i = 0; i < images.length; i++) {
+                        try {
+                            const img = images[i];
+                            const quoteOpt = (quoteArg && i === 0) ? { quoted: quoteArg } : {};
+                            const caption = i === 0
+                                ? (cleanedText || img.caption || undefined)
+                                : (img.caption || undefined);
+
+                            await globalSock.sendMessage(replyTarget, {
+                                image: { url: img.url },
+                                caption: caption
+                            }, quoteOpt);
+                            imagesSent = true;
+                            console.log(`[Bridge] Sent WhatsApp image: ${img.url.substring(0, 60)}`);
+                        } catch (imgErr) {
+                            console.warn(`[Bridge] Failed to send image via WhatsApp (${imgErr.message}), falling back to text.`);
+                        }
+                    }
+                    if (!imagesSent) {
+                        await sendWhatsAppChunks(globalSock, replyTarget, reply, quoteArg);
+                    }
+                } else {
+                    await sendWhatsAppChunks(globalSock, replyTarget, reply, quoteArg);
+                }
                 console.log(`[Jarvis] ${reply.substring(0, 80)}... (${reply.length} chars)`);
             }
 

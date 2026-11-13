@@ -134,6 +134,11 @@ class MemoryManager:
         """Clear the conversation buffer."""
         self._conversation_buffer.clear()
 
+    def remove_last_if_user(self) -> None:
+        """Remove the trailing message if it was an unfulfilled user message."""
+        if self._conversation_buffer and self._conversation_buffer[-1].get("role") == "user":
+            self._conversation_buffer.pop()
+
     # -- Long-term Memory (pgvector) ----------------------------------------
 
     async def store(

@@ -13,14 +13,24 @@ export function VisionPage() {
 
   const performVisionAction = async (endpoint: string, payload: any = {}) => {
     setLoading(true);
-    const res = await api.post<any>(`/api/vision/${endpoint}`, Object.keys(payload).length > 0 ? payload : undefined);
+    const res = await api.post<any>(`/api/vision/${endpoint}`, payload || {});
 
     if (res.ok) {
       setResult(res.data);
       setBackendConnected(true);
+      toast({
+        title: "Vision Analysis",
+        description: res.data.summary?.slice(0, 100) || "Action completed successfully.",
+      });
     } else {
-      setResult({ summary: 'Backend offline — cannot connect to vision system.', elements: [] });
+      const errorMsg = res.detail || 'Backend unreachable — failed to connect to vision system.';
+      setResult({ summary: errorMsg, elements: [] });
       setBackendConnected(false);
+      toast({
+        title: "Vision Action Failed",
+        description: errorMsg,
+        variant: "destructive",
+      });
     }
     setLoading(false);
   };

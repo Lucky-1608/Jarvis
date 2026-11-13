@@ -191,11 +191,19 @@ class ContextManager:
         # 4. Conversation history
         if include_conversation:
             conversation = self._memory.get_conversation(limit=10)
+            cleaned_history: list[Message] = []
             for msg in conversation:
-                messages.append(Message(
-                    role=msg["role"],
-                    content=msg["content"],
-                ))
+                role = msg.get("role", "user")
+                content = msg.get("content", "")
+                if cleaned_history and cleaned_history[-1].role == role:
+                    # Merge consecutive same-role messages so APIs don't fail
+                    if isinstance(cleaned_history[-1].content, str) and isinstance(content, str):
+                        cleaned_history[-1].content += f"\n\n{content}"
+                    else:
+                        cleaned_history.append(Message(role=role, content=content))
+                else:
+                    cleaned_history.append(Message(role=role, content=content))
+            messages.extend(cleaned_history)
         else:
             # 5. Current user message (if history is not included, we still need the current message)
             messages.append(Message(role="user", content=user_input))
