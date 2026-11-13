@@ -37,6 +37,27 @@ public class MainActivity extends BridgeActivity {
 
         // Start Foreground Service
         startJarvisService();
+
+        // Handle assistant launch if triggered via Assist gesture/button
+        handleAssistIntent(getIntent());
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleAssistIntent(intent);
+    }
+
+    private void handleAssistIntent(Intent intent) {
+        if (intent != null && Intent.ACTION_ASSIST.equals(intent.getAction())) {
+            Log.d(TAG, "Launched via Android Digital Assistant (ACTION_ASSIST)");
+            if (getBridge() != null && getBridge().getWebView() != null) {
+                getBridge().getWebView().post(() -> {
+                    getBridge().getWebView().loadUrl("javascript:window.location.hash = '/voice';");
+                });
+            }
+        }
     }
 
     @Override
@@ -91,6 +112,24 @@ public class MainActivity extends BridgeActivity {
         // Audio recording for wake word and voice commands
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             neededPermissions.add(Manifest.permission.RECORD_AUDIO);
+        }
+
+        // Location permissions for GPS and local weather/navigation
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            neededPermissions.add(Manifest.permission.ACCESS_FINE_LOCATION);
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            neededPermissions.add(Manifest.permission.ACCESS_COARSE_LOCATION);
+        }
+
+        // Phone calling capability
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) {
+            neededPermissions.add(Manifest.permission.CALL_PHONE);
+        }
+
+        // SMS sending capability
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
+            neededPermissions.add(Manifest.permission.SEND_SMS);
         }
 
         // Notification permission for Android 13+ (API 33+)

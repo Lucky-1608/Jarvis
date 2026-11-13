@@ -16,6 +16,13 @@ import android.os.BatteryManager
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.os.Bundle
+import android.os.Looper
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import okhttp3.*
@@ -266,6 +273,23 @@ class JarvisBackgroundService : Service() {
                     val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL
                     sendResult(taskId, true, "Battery level: $batteryPct%, Charging: $isCharging", null)
                 }
+                "get_location", "location" -> {
+                    fetchCurrentLocation { loc ->
+                        if (loc != null) {
+                            val locObj = JSONObject().apply {
+                                put("latitude", loc.latitude)
+                                put("longitude", loc.longitude)
+                                put("accuracy", loc.accuracy)
+                                put("altitude", loc.altitude)
+                                put("provider", loc.provider)
+                                put("time", loc.time)
+                            }
+                            sendResult(taskId, true, locObj.toString(), null)
+                        } else {
+                            sendResult(taskId, false, null, "Location permission not granted or GPS unavailable")
+                        }
+                    }
+                }
                 "open_app", "launch_app" -> {
                     val target = params.optString("app_name").ifBlank {
                         params.optString("name").ifBlank { params.optString("target") }
@@ -331,6 +355,94 @@ class JarvisBackgroundService : Service() {
             if (error != null) put("error", error)
         }
         sendToBackend(res)
+    }
+
+    private fun fetchCurrentLocation(callback: (Location?) -> Unit) {
+        val fineGranted = ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        val coarseGranted = ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+        if (!fineGranted && !coarseGranted) {
+            Log.w(TAG, "Location permission not granted")
+            callback(null)
+            return
+        }
+
+        val lm = getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+        if (lm == null) {
+            callback(null)
+            return
+        }
+
+        try {
+            // 1. Try to get most recent last known location
+            var bestLoc: Location? = null
+            if (lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                val gpsLoc = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                if (gpsLoc != null) bestLoc = gpsLoc
+            }
+            if (lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                val netLoc = lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+                if (netLoc != null && (bestLoc == null || netLoc.time > bestLoc.time)) {
+                    bestLoc = netLoc
+                }
+            }
+
+            // If last known location is less than 3 minutes old, use it immediately
+            val now = System.currentTimeMillis()
+            if (bestLoc != null && (now - bestLoc.time) < 180_000) {
+                callback(bestLoc)
+                return
+            }
+
+            // 2. Request single fresh update with a 6-second timeout
+            var callbackFired = false
+            val provider = when {
+                lm.isProviderEnabled(LocationManager.GPS_PROVIDER) -> LocationManager.GPS_PROVIDER
+                lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER) -> LocationManager.NETWORK_PROVIDER
+                else -> null
+            }
+
+            if (provider == null) {
+                callback(bestLoc)
+                return
+            }
+
+            val listener = object : LocationListener {
+                override fun onLocationChanged(location: Location) {
+                    if (!callbackFired) {
+                        callbackFired = true
+                        lm.removeUpdates(this)
+                        callback(location)
+                    }
+                }
+                override fun onProviderEnabled(provider: String) {}
+                override fun onProviderDisabled(provider: String) {}
+                @Deprecated("Deprecated in Java")
+                override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
+            }
+
+            Looper.getMainLooper()?.let { looper ->
+                lm.requestSingleUpdate(provider, listener, looper)
+            }
+
+            // Timeout safety
+            scheduler.schedule({
+                if (!callbackFired) {
+                    callbackFired = true
+                    try {
+                        lm.removeUpdates(listener)
+                    } catch (ignored: Exception) {}
+                    callback(bestLoc)
+                }
+            }, 6, TimeUnit.SECONDS)
+
+        } catch (e: SecurityException) {
+            Log.e(TAG, "SecurityException fetching location", e)
+            callback(null)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching location", e)
+            callback(null)
+        }
     }
 
     private fun showNativeAlert(title: String, message: String) {

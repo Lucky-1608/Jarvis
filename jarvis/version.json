@@ -1,0 +1,10 @@
+{
+  "version": "1.0.0",
+  "min_required_version": "1.0.0",
+  "latest_version": "1.0.0",
+  "mandatory": true,
+  "title": "Jarvis OS Update Required",
+  "release_notes": "Frontend UI enhancements, stability fixes, and core optimizations.",
+  "download_url": "https://github.com/Lucky-1608/Jarvis/releases/latest"
+}
+

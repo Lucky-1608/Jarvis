@@ -46,6 +46,7 @@ from jarvis.server.routes import (
     whatsapp,
     workflows,
     companion,
+    updates,
 )
 
 logger = structlog.get_logger(__name__)
@@ -228,7 +229,8 @@ def create_app() -> FastAPI:
             path.startswith("/api/oauth/login/")
             or path.startswith("/api/oauth/auth/")
         )
-        if path in ("/api/health", "/api/system/stats") or public_oauth_route:
+        public_update_route = path.startswith("/api/updates")
+        if path in ("/api/health", "/api/system/stats") or public_oauth_route or public_update_route:
             return await call_next(request)
 
         if "token" in request.query_params:
@@ -276,6 +278,7 @@ def create_app() -> FastAPI:
     app.include_router(companion.router, prefix="/api", tags=["Companion"])
     app.include_router(oauth.router, prefix="/api/oauth", tags=["OAuth"])
     app.include_router(settings.router, prefix="/api/settings", tags=["Settings"])
+    app.include_router(updates.router, prefix="/api", tags=["Updates"])
 
     @app.get("/", tags=["Root"])
     async def root():

@@ -16,14 +16,28 @@ export interface DeviceHandsPlugin {
   sendSMS(options: { number: string; message: string }): Promise<{ success: boolean; message?: string }>;
   makeCall(options: { number: string }): Promise<{ success: boolean; message?: string }>;
   getBattery(): Promise<{ level: number; charging: boolean; output: string }>;
+  getLocation(): Promise<{
+    success: boolean;
+    latitude?: number;
+    longitude?: number;
+    accuracy?: number;
+    altitude?: number;
+    time?: number;
+    output?: string;
+    error?: string;
+  }>;
   showNotification(options: { title: string; message: string }): Promise<{ success: boolean }>;
   openAccessibilitySettings(): Promise<{ success: boolean }>;
   openNotificationSettings(): Promise<{ success: boolean }>;
+  openLocationSettings(): Promise<{ success: boolean }>;
+  openDefaultAssistantSettings(): Promise<{ success: boolean }>;
   requestBatteryOptimization(): Promise<{ success: boolean }>;
+  installApk(options: { url: string }): Promise<{ success: boolean; message?: string; error?: string }>;
   getPermissionsStatus(): Promise<{
     accessibilityEnabled: boolean;
     batteryOptimizationIgnored: boolean;
     notificationAccessEnabled: boolean;
+    locationPermissionGranted?: boolean;
   }>;
   setBackendUrl(options: { url: string }): Promise<{ success: boolean }>;
   setBackendApiKey(options: { apiKey: string }): Promise<{ success: boolean }>;

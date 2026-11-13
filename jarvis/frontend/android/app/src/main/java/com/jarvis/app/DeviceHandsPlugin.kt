@@ -10,6 +10,14 @@ import android.os.BatteryManager
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
+import android.content.pm.PackageManager
+import android.location.Location
+import android.location.LocationManager
+import java.io.File
+import java.io.FileOutputStream
+import androidx.core.content.FileProvider
+import android.util.Log
+import androidx.core.content.ContextCompat
 import androidx.core.app.NotificationCompat
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
@@ -287,10 +295,172 @@ class DeviceHandsPlugin : Plugin() {
         )
         val isNotificationEnabled = flat != null && flat.contains(context.packageName)
 
+        val isLocationGranted = ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
         ret.put("accessibilityEnabled", isAccessibility)
         ret.put("batteryOptimizationIgnored", isBatteryIgnored)
         ret.put("notificationAccessEnabled", isNotificationEnabled)
+        ret.put("locationPermissionGranted", isLocationGranted)
         call.resolve(ret)
+    }
+
+    @PluginMethod
+    fun getLocation(call: PluginCall) {
+        val fineGranted = ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        val coarseGranted = ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+        if (!fineGranted && !coarseGranted) {
+            call.reject("Location permission not granted")
+            return
+        }
+
+        val lm = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+        if (lm == null) {
+            call.reject("LocationManager not available")
+            return
+        }
+
+        try {
+            var bestLoc: Location? = null
+            if (lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                bestLoc = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+            }
+            if (lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                val netLoc = lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+                if (netLoc != null && (bestLoc == null || netLoc.time > bestLoc.time)) {
+                    bestLoc = netLoc
+                }
+            }
+
+            if (bestLoc != null) {
+                val ret = JSObject().apply {
+                    put("success", true)
+                    put("latitude", bestLoc.latitude)
+                    put("longitude", bestLoc.longitude)
+                    put("accuracy", bestLoc.accuracy)
+                    put("altitude", bestLoc.altitude)
+                    put("time", bestLoc.time)
+                    put("output", "Latitude: ${bestLoc.latitude}, Longitude: ${bestLoc.longitude}")
+                }
+                call.resolve(ret)
+            } else {
+                call.reject("Unable to acquire location fix")
+            }
+        } catch (e: Exception) {
+            call.reject("Failed to retrieve location: ${e.message}")
+        }
+    }
+
+    @PluginMethod
+    fun openLocationSettings(call: PluginCall) {
+        try {
+            val intent = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            call.resolve(JSObject().apply { put("success", true) })
+        } catch (e: Exception) {
+            call.reject("Failed to open location settings: ${e.message}")
+        }
+    }
+
+    @PluginMethod
+    fun openDefaultAssistantSettings(call: PluginCall) {
+        try {
+            val intent = Intent(Settings.ACTION_VOICE_INPUT_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            call.resolve(JSObject().apply { put("success", true) })
+        } catch (e: Exception) {
+            try {
+                val fallback = Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(fallback)
+                call.resolve(JSObject().apply { put("success", true) })
+            } catch (e2: Exception) {
+                call.reject("Failed to open Assistant settings: ${e.message}")
+            }
+        }
+    }
+
+    @PluginMethod
+    fun installApk(call: PluginCall) {
+        val url = call.getString("url")
+        if (url.isNullOrBlank()) {
+            call.reject("Missing APK download URL")
+            return
+        }
+
+        // On Android 8.0+ verify if the user granted Unknown App Install permission
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (!context.packageManager.canRequestPackageInstalls()) {
+                try {
+                    val manageIntent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                        data = Uri.parse("package:${context.packageName}")
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(manageIntent)
+                } catch (e: Exception) {
+                    Log.w("DeviceHands", "Cannot open ACTION_MANAGE_UNKNOWN_APP_SOURCES", e)
+                }
+            }
+        }
+
+        Thread {
+            try {
+                val destFile = File(context.cacheDir, "jarvis-update.apk")
+                if (destFile.exists()) {
+                    destFile.delete()
+                }
+
+                val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                connection.connectTimeout = 15000
+                connection.readTimeout = 45000
+                connection.instanceFollowRedirects = true
+                connection.connect()
+
+                if (connection.responseCode in 200..299) {
+                    connection.inputStream.use { input ->
+                        FileOutputStream(destFile).use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+
+                    val apkUri = FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileprovider",
+                        destFile
+                    )
+
+                    val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(apkUri, "application/vnd.android.package-archive")
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+
+                    context.startActivity(installIntent)
+
+                    val ret = JSObject().apply {
+                        put("success", true)
+                        put("message", "Installer opened")
+                    }
+                    call.resolve(ret)
+                } else {
+                    call.reject("Failed to download APK: HTTP ${connection.responseCode}")
+                }
+            } catch (e: Exception) {
+                Log.e("DeviceHands", "Error downloading/installing APK", e)
+                call.reject("Failed to install APK: ${e.message}")
+            }
+        }.start()
     }
 
     @PluginMethod

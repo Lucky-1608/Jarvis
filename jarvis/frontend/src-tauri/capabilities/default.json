@@ -8,5 +8,12 @@
     "shell:default",
     "notification:default",
     "global-shortcut:default"
-  ]
+  ],
+  "remote": {
+    "urls": [
+      "https://jarvisos-gdhfgnc4gscqecav.centralindia-01.azurewebsites.net/*",
+      "http://127.0.0.1:8000/*",
+      "http://localhost:8000/*"
+    ]
+  }
 }

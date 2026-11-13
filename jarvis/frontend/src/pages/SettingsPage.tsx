@@ -1,17 +1,20 @@
 import { useState, useEffect } from 'react';
 import { PageShell } from '../components/ui/PageShell';
 import { PageHeader } from '../components/ui/PageHeader';
-import { Settings, Key, Link as LinkIcon, Shield, Server, Cpu, Box, Database, Webhook, Fingerprint } from 'lucide-react';
+import { Settings, Key, Link as LinkIcon, Shield, Server, Cpu, Box, Database, Webhook, Fingerprint, RefreshCw, Download, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { FaGithub } from 'react-icons/fa';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { api, getBaseUrl } from '../lib/api';
 import { useToast } from '../hooks/use-toast';
+import { useUpdateStore } from '../store/updateStore';
+import { UpdateService } from '../services/UpdateService';
 
 export function SettingsPage() {
   const { toast } = useToast();
+  const updateStore = useUpdateStore();
 
-  const [activeTab, setActiveTab] = useState<'security' | 'integrations' | 'plugins'>('security');
+  const [activeTab, setActiveTab] = useState<'security' | 'integrations' | 'plugins' | 'updates'>('security');
   
   const [keys, setKeys] = useState({
     opencode: '',
@@ -216,6 +219,16 @@ export function SettingsPage() {
               }`}
           >
             <Box size={16} /> Plugins & Tools
+          </button>
+          <button
+            onClick={() => setActiveTab('updates')}
+            className={`px-4 py-3 text-sm font-medium transition-colors border-b-2 flex items-center gap-2
+              ${activeTab === 'updates' 
+                ? 'border-emerald-400 text-emerald-400 bg-emerald-400/5' 
+                : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[rgba(255,255,255,0.02)]'
+              }`}
+          >
+            <RefreshCw size={16} /> App Updates
           </button>
         </div>
 
@@ -665,9 +678,116 @@ export function SettingsPage() {
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
 
+        {/* Updates Tab */}
+        {activeTab === 'updates' && (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="bg-[rgba(255,255,255,0.02)] border border-[var(--border-subtle)] rounded-xl p-6">
+              <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-4 mb-5">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                    <RefreshCw className="text-emerald-400" size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-medium text-white">Application Updates</h3>
+                    <p className="text-xs text-[var(--text-muted)]">Automatic update detection and version management</p>
+                  </div>
+                </div>
 
-              
+                <Button
+                  onClick={async () => {
+                    const hasUpdate = await UpdateService.checkForUpdates(false);
+                    if (!hasUpdate) {
+                      toast({ title: 'Jarvis is Up to Date', description: `Running latest version v${updateStore.currentVersion}.` });
+                    }
+                  }}
+                  disabled={updateStore.isChecking}
+                  variant="outline"
+                  className="gap-2 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 cursor-pointer"
+                >
+                  <RefreshCw className={`h-4 w-4 ${updateStore.isChecking ? 'animate-spin' : ''}`} />
+                  {updateStore.isChecking ? 'Checking...' : 'Check for Updates'}
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div className="bg-black/30 border border-white/5 rounded-lg p-4">
+                  <div className="text-xs font-mono uppercase text-[var(--text-muted)]">Installed Version</div>
+                  <div className="text-xl font-bold font-mono text-white mt-1">v{updateStore.currentVersion}</div>
+                </div>
+
+                <div className="bg-black/30 border border-white/5 rounded-lg p-4">
+                  <div className="text-xs font-mono uppercase text-[var(--text-muted)]">Latest Server Release</div>
+                  <div className="text-xl font-bold font-mono text-cyan-400 mt-1">v{updateStore.latestVersion}</div>
+                </div>
+
+                <div className="bg-black/30 border border-white/5 rounded-lg p-4">
+                  <div className="text-xs font-mono uppercase text-[var(--text-muted)]">System Status</div>
+                  <div className="flex items-center gap-2 mt-1">
+                    {updateStore.updateAvailable ? (
+                      <>
+                        <AlertTriangle className="text-red-400 h-5 w-5" />
+                        <span className="text-sm font-semibold text-red-400">Update Required</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="text-emerald-400 h-5 w-5" />
+                        <span className="text-sm font-semibold text-emerald-400">Up to Date</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {updateStore.updateAvailable ? (
+                <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-5 space-y-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="text-red-400 h-5 w-5 shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="text-sm font-bold text-red-300">Mandatory Update Available: v{updateStore.latestVersion}</h4>
+                      <p className="text-xs text-zinc-300 mt-1 leading-relaxed">
+                        A new update is required to continue using Jarvis. Updating now will download the latest installer and restart the app.
+                      </p>
+                    </div>
+                  </div>
+
+                  {updateStore.releaseNotes && (
+                    <div className="bg-black/40 border border-white/10 rounded-lg p-3 text-xs text-zinc-400 font-mono">
+                      {updateStore.releaseNotes}
+                    </div>
+                  )}
+
+                  <div className="flex gap-3">
+                    <Button
+                      onClick={() => UpdateService.startUpdateInstallation()}
+                      disabled={updateStore.isUpdating}
+                      className="gap-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:brightness-110 text-white cursor-pointer"
+                    >
+                      <Download className="h-4 w-4" />
+                      {updateStore.isUpdating ? 'Initiating Update...' : 'Install Update Now'}
+                    </Button>
+                    {updateStore.downloadUrl && (
+                      <Button
+                        variant="outline"
+                        onClick={() => window.open(updateStore.downloadUrl, '_blank')}
+                        className="gap-2 border-white/10 cursor-pointer"
+                      >
+                        <Download className="h-4 w-4" /> Manual Exe Download
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4 flex items-center gap-3">
+                  <CheckCircle2 className="text-emerald-400 h-5 w-5 shrink-0" />
+                  <div className="text-xs text-zinc-300">
+                    Auto-update detection is active. Whenever a new frontend or system release is deployed, Jarvis will automatically notify you and apply the mandatory update.
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

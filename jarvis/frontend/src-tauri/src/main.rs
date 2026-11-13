@@ -178,6 +178,78 @@ fn show_window(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
     Ok(json!({ "status": "success" }))
 }
 
+#[tauri::command]
+fn get_app_version(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    let version = app.package_info().version.to_string();
+    Ok(json!({
+        "status": "success",
+        "version": version
+    }))
+}
+
+#[tauri::command]
+fn exit_app(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    app.exit(0);
+    Ok(json!({ "status": "success" }))
+}
+
+#[tauri::command]
+fn install_update_and_restart(app: tauri::AppHandle, download_url: String) -> Result<serde_json::Value, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let temp_dir = std::env::temp_dir();
+        let target_installer = temp_dir.join("Jarvis-Setup-Update.exe");
+        let target_path_str = target_installer.to_string_lossy().to_string();
+        let clean_url = download_url.trim().to_string();
+
+        let script = format!(
+            "$wc = New-Object System.Net.WebClient; $wc.DownloadFile('{url}', '{dest}'); Start-Process -FilePath '{dest}'",
+            url = clean_url,
+            dest = target_path_str.replace('\\', "\\\\")
+        );
+
+        let _ = Command::new("powershell")
+            .args(["-NoProfile", "-WindowStyle", "Hidden", "-Command", &script])
+            .spawn();
+
+        let app_clone = app.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(1500));
+            app_clone.exit(0);
+        });
+
+        Ok(json!({
+            "status": "success",
+            "message": "Update process initiated"
+        }))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = open_app(download_url, None);
+        Ok(json!({
+            "status": "success",
+            "message": "Update URL opened in browser"
+        }))
+    }
+}
+
+#[tauri::command]
+fn sync_latest_frontend(app: tauri::AppHandle, target_url: Option<String>) -> Result<serde_json::Value, String> {
+    if let Some(window) = app.get_webview_window("main") {
+        let url_str = target_url.unwrap_or_else(|| {
+            "https://jarvisos-gdhfgnc4gscqecav.centralindia-01.azurewebsites.net".to_string()
+        });
+        if let Ok(parsed) = tauri::Url::parse(&url_str) {
+            let _ = window.navigate(parsed);
+            let _ = window.show();
+            let _ = window.set_focus();
+            return Ok(json!({ "status": "success", "url": url_str }));
+        }
+    }
+    Err("Failed to parse URL or find main window".to_string())
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -194,10 +266,15 @@ fn main() {
             close_app,
             show_notification,
             capture_screen,
-            show_window
+            show_window,
+            get_app_version,
+            exit_app,
+            install_update_and_restart,
+            sync_latest_frontend
         ])
         .setup(|app| {
             // System Tray Menu Setup
+            let sync_item = MenuItem::with_id(app, "sync_frontend", "⚡ Sync Latest Frontend (Live)", true, None::<&str>)?;
             let open_item = MenuItem::with_id(app, "open", "Open Jarvis", true, None::<&str>)?;
             let hide_item = MenuItem::with_id(app, "hide", "Minimize to Tray", true, None::<&str>)?;
             let shortcut_item = MenuItem::with_id(app, "shortcut", "Shortcut: Ctrl+Shift+J", false, None::<&str>)?;
@@ -206,6 +283,7 @@ fn main() {
             let tray_menu = Menu::with_items(
                 app,
                 &[
+                    &sync_item,
                     &open_item,
                     &hide_item,
                     &shortcut_item,
@@ -224,6 +302,16 @@ fn main() {
                 .show_menu_on_left_click(false)
                 .tooltip("Jarvis Companion OS")
                 .on_menu_event(|app, event| match event.id.as_ref() {
+                    "sync_frontend" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let target = "https://jarvisos-gdhfgnc4gscqecav.centralindia-01.azurewebsites.net";
+                            if let Ok(parsed) = tauri::Url::parse(target) {
+                                let _ = window.navigate(parsed);
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                        }
+                    }
                     "open" => {
                         if let Some(window) = app.get_webview_window("main") {
                             let _ = window.show();
