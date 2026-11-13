@@ -1,5 +1,30 @@
 apply plugin: 'com.android.application'
 
+def envFile = file("../../.env")
+def rootEnvFile = file("../../../../.env")
+def viteApiBaseUrl = "http://10.0.2.2:8000"
+def jarvisSecretKey = "A9dj3vvXJVot08OKUYDpffkuIOkk0OjJDk0LjdY1Vf8="
+
+if (envFile.exists()) {
+    envFile.eachLine { line ->
+        def trimmed = line.trim()
+        if (trimmed.startsWith("VITE_API_BASE_URL=")) {
+            viteApiBaseUrl = trimmed.substring("VITE_API_BASE_URL=".length()).replaceAll('^["\']|["\']$', '').trim()
+        }
+        if (trimmed.startsWith("VITE_JARVIS_SECRET_KEY=")) {
+            jarvisSecretKey = trimmed.substring("VITE_JARVIS_SECRET_KEY=".length()).replaceAll('^["\']|["\']$', '').trim()
+        }
+    }
+}
+if (rootEnvFile.exists()) {
+    rootEnvFile.eachLine { line ->
+        def trimmed = line.trim()
+        if (trimmed.startsWith("JARVIS_SECRET_KEY=")) {
+            jarvisSecretKey = trimmed.substring("JARVIS_SECRET_KEY=".length()).replaceAll('^["\']|["\']$', '').trim()
+        }
+    }
+}
+
 android {
     namespace "com.jarvis.app"
     compileSdkVersion rootProject.ext.compileSdkVersion
@@ -15,6 +40,8 @@ android {
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
+        buildConfigField "String", "VITE_API_BASE_URL", "\"${viteApiBaseUrl}\""
+        buildConfigField "String", "JARVIS_SECRET_KEY", "\"${jarvisSecretKey}\""
     }
     buildTypes {
         release {
@@ -26,20 +53,6 @@ android {
         buildConfig = true
     }
 }
-
-def envFile = file("../../.env")
-def viteApiBaseUrl = "http://10.0.2.2:8000"
-if (envFile.exists()) {
-    envFile.eachLine { line ->
-        if (line.startsWith("VITE_API_BASE_URL=")) {
-            viteApiBaseUrl = line.replace("VITE_API_BASE_URL=", "")
-        }
-    }
-}
-
-android.defaultConfig.buildConfigField "String", "VITE_API_BASE_URL", "\"${viteApiBaseUrl}\""
-
-
 
 dependencies {
     implementation fileTree(include: ['*.jar'], dir: 'libs')

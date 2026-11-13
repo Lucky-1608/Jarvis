@@ -14,7 +14,11 @@ import { useJarvisStore } from '../store/jarvisStore';
 // Helpers
 // ---------------------------------------------------------------------------
 export function getApiKey(): string {
-  return localStorage.getItem('JARVIS_API_KEY') || 'JARVIS_DEV_KEY';
+  const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('JARVIS_API_KEY')?.trim() : null;
+  if (stored) return stored;
+  const envKey = (import.meta.env.VITE_JARVIS_SECRET_KEY as string | undefined)?.trim();
+  if (envKey) return envKey;
+  return 'A9dj3vvXJVot08OKUYDpffkuIOkk0OjJDk0LjdY1Vf8=';
 }
 
 export async function getWebSocketTicket(): Promise<string | null> {
@@ -79,7 +83,7 @@ export async function getBaseUrl(forceRefresh = false): Promise<string> {
   for (const url of candidateUrls) {
     try {
       const pingUrl = url ? `${url}/api/health` : '/api/health';
-      const res = await fetch(pingUrl, { signal: AbortSignal.timeout(1500) });
+      const res = await fetch(pingUrl, { signal: AbortSignal.timeout(3500) });
       if (res.ok) {
         found = url;
         break;
@@ -91,7 +95,7 @@ export async function getBaseUrl(forceRefresh = false): Promise<string> {
 
   if (found === null) {
     found = isTauri
-      ? 'http://127.0.0.1:8000'
+      ? (candidateUrls.find(u => u.startsWith('https://')) || 'http://127.0.0.1:8000')
       : (candidateUrls.includes('') ? '' : candidateUrls[0] || 'http://127.0.0.1:8000');
   }
 

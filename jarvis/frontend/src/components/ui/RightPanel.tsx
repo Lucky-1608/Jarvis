@@ -157,7 +157,14 @@ export function RightPanelContent({ className = '' }: { className?: string }) {
       {/* Backend Connection Status */}
       <section>
         <h3 className="text-[10px] uppercase tracking-widest text-[var(--text-muted)] font-semibold mb-3">Backend Connection</h3>
-        <div className="bg-[rgba(0,0,0,0.2)] p-3 rounded-md border border-[rgba(255,255,255,0.03)] flex items-center justify-between">
+        <div 
+          onClick={() => {
+            useJarvisStore.getState().connectWebSocket();
+            useJarvisStore.getState().fetchSystemStats();
+          }}
+          className="bg-[rgba(0,0,0,0.2)] hover:bg-[rgba(255,255,255,0.03)] cursor-pointer transition-colors p-3 rounded-md border border-[rgba(255,255,255,0.03)] flex items-center justify-between"
+          title="Click to test connection / reconnect"
+        >
           <div className="flex items-center gap-2 text-xs font-medium">
             {backendConnected ? (
               <><Wifi size={14} className="text-green-400" /> <span className="text-green-400">Connected</span></>

@@ -483,6 +483,7 @@ class DeviceHandsPlugin : Plugin() {
         if (apiKey.isNotBlank()) {
             val prefs = context.getSharedPreferences("jarvis_prefs", Context.MODE_PRIVATE)
             prefs.edit().putString("api_key", apiKey).apply()
+            JarvisBackgroundService.instance?.reconnect()
             val ret = JSObject().apply { put("success", true) }
             call.resolve(ret)
         } else {

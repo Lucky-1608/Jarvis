@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { getBaseUrl, getWebSocketTicket } from '../lib/api';
+import { getBaseUrl, getWebSocketTicket, getApiKey } from '../lib/api';
 
 export type AIState = 'idle' | 'listening' | 'thinking' | 'executing' | 'speaking' | 'error' | 'success';
 
@@ -142,7 +142,7 @@ export const useJarvisStore = create<JarvisStore>((set, get) => ({
   fetchSystemStats: async () => {
     try {
       const base = await getBaseUrl();
-      const token = localStorage.getItem('JARVIS_API_KEY') || 'JARVIS_DEV_KEY';
+      const token = getApiKey();
       const res = await fetch(`${base}/api/system/stats`, {
         headers: { 'X-API-Key': token },
         signal: AbortSignal.timeout(3000),
@@ -265,8 +265,11 @@ export const useJarvisStore = create<JarvisStore>((set, get) => ({
 
     wsInstance.onclose = () => {
       set({ backendConnected: false });
-      get().addLog({ message: 'WebSocket disconnected.', type: 'warning' });
+      get().addLog({ message: 'WebSocket disconnected. Retrying in 5s...', type: 'warning' });
       wsInstance = null;
+      setTimeout(() => {
+        get().connectWebSocket();
+      }, 5000);
     };
   }
 }));

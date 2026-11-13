@@ -14,6 +14,7 @@ import android.net.NetworkRequest
 import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
 import android.os.PowerManager
 import android.os.Bundle
@@ -141,6 +142,13 @@ class JarvisBackgroundService : Service() {
     }
 
     private var currentUrlIndex = 0
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    fun reconnect() {
+        Log.d(TAG, "Triggering Companion WebSocket reconnect...")
+        reconnectAttempts = 0
+        mainHandler.post { connectWebSocket() }
+    }
 
     @Synchronized
     private fun connectWebSocket() {
@@ -166,8 +174,9 @@ class JarvisBackgroundService : Service() {
 
         val prefs = getSharedPreferences("jarvis_prefs", Context.MODE_PRIVATE)
         val requestBuilder = Request.Builder().url(url)
-        prefs.getString("api_key", null)?.takeIf { it.isNotBlank() }?.let {
-            requestBuilder.addHeader("X-API-Key", it)
+        val apiKey = prefs.getString("api_key", null)?.takeIf { it.isNotBlank() } ?: BuildConfig.JARVIS_SECRET_KEY
+        if (apiKey.isNotBlank()) {
+            requestBuilder.addHeader("X-API-Key", apiKey)
         }
         val request = requestBuilder.build()
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
