@@ -15,9 +15,22 @@ import { useJarvisStore } from '../store/jarvisStore';
 // ---------------------------------------------------------------------------
 export function getApiKey(): string {
   const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('JARVIS_API_KEY')?.trim() : null;
-  if (stored) return stored;
+  // Invalidate known revoked legacy key
+  if (stored === 'A9dj3vvXJVot08OKUYDpffkuIOkk0OjJDk0LjdY1Vf8=') {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem('JARVIS_API_KEY');
+    }
+  } else if (stored) {
+    return stored;
+  }
+
   const envKey = (import.meta.env.VITE_JARVIS_SECRET_KEY as string | undefined)?.trim();
-  if (envKey) return envKey;
+  if (envKey && envKey !== 'A9dj3vvXJVot08OKUYDpffkuIOkk0OjJDk0LjdY1Vf8=') {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('JARVIS_API_KEY', envKey);
+    }
+    return envKey;
+  }
   return '';
 }
 
@@ -165,6 +178,15 @@ export async function apiFetch<T = any>(
     useJarvisStore.getState().setBackendConnected(true);
 
     if (!res.ok) {
+      if (res.status === 401) {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.removeItem('JARVIS_API_KEY');
+        }
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('jarvis:unauthorized'));
+        }
+      }
+
       let detail = '';
       try {
         const body = await res.json();

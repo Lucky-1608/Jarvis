@@ -62,10 +62,14 @@ function App() {
   const [location] = useHashLocation();
   const [hasKey, setHasKey] = useState(() => {
     try {
-      const stored = localStorage.getItem('JARVIS_API_KEY')?.trim();
+      let stored = localStorage.getItem('JARVIS_API_KEY')?.trim();
+      if (stored === 'A9dj3vvXJVot08OKUYDpffkuIOkk0OjJDk0LjdY1Vf8=') {
+        localStorage.removeItem('JARVIS_API_KEY');
+        stored = undefined;
+      }
       if (stored) return true;
       const defaultKey = (import.meta.env.VITE_JARVIS_SECRET_KEY as string | undefined)?.trim();
-      if (defaultKey) {
+      if (defaultKey && defaultKey !== 'A9dj3vvXJVot08OKUYDpffkuIOkk0OjJDk0LjdY1Vf8=') {
         localStorage.setItem('JARVIS_API_KEY', defaultKey);
         return true;
       }
@@ -75,6 +79,14 @@ function App() {
     }
   });
   const [inputValue, setInputValue] = useState('');
+
+  useEffect(() => {
+    const onUnauthorized = () => {
+      setHasKey(false);
+    };
+    window.addEventListener('jarvis:unauthorized', onUnauthorized);
+    return () => window.removeEventListener('jarvis:unauthorized', onUnauthorized);
+  }, []);
 
   useEffect(() => {
     UpdateService.initialize();
