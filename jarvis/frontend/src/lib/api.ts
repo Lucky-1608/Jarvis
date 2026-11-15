@@ -18,7 +18,7 @@ export function getApiKey(): string {
   if (stored) return stored;
   const envKey = (import.meta.env.VITE_JARVIS_SECRET_KEY as string | undefined)?.trim();
   if (envKey) return envKey;
-  return 'A9dj3vvXJVot08OKUYDpffkuIOkk0OjJDk0LjdY1Vf8=';
+  return '';
 }
 
 export async function getWebSocketTicket(): Promise<string | null> {

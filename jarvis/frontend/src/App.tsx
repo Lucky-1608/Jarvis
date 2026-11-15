@@ -62,13 +62,16 @@ function App() {
   const [location] = useHashLocation();
   const [hasKey, setHasKey] = useState(() => {
     try {
-      const stored = localStorage.getItem('JARVIS_API_KEY');
+      const stored = localStorage.getItem('JARVIS_API_KEY')?.trim();
       if (stored) return true;
-      const defaultKey = (import.meta.env.VITE_JARVIS_SECRET_KEY as string | undefined)?.trim() || 'A9dj3vvXJVot08OKUYDpffkuIOkk0OjJDk0LjdY1Vf8=';
-      localStorage.setItem('JARVIS_API_KEY', defaultKey);
-      return true;
+      const defaultKey = (import.meta.env.VITE_JARVIS_SECRET_KEY as string | undefined)?.trim();
+      if (defaultKey) {
+        localStorage.setItem('JARVIS_API_KEY', defaultKey);
+        return true;
+      }
+      return false;
     } catch (e) {
-      return true;
+      return false;
     }
   });
   const [inputValue, setInputValue] = useState('');

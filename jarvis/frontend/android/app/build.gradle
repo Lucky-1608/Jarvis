@@ -1,37 +1,75 @@
 apply plugin: 'com.android.application'
 
-def envFile = file("../../.env")
-def rootEnvFile = file("../../../../.env")
-def viteApiBaseUrl = "http://10.0.2.2:8000"
-def jarvisSecretKey = "A9dj3vvXJVot08OKUYDpffkuIOkk0OjJDk0LjdY1Vf8="
+// Load shared variables if available
+def variablesFile = file("../variables.gradle")
+if (variablesFile.exists()) {
+    apply from: '../variables.gradle'
+}
 
-if (envFile.exists()) {
-    envFile.eachLine { line ->
-        def trimmed = line.trim()
-        if (trimmed.startsWith("VITE_API_BASE_URL=")) {
-            viteApiBaseUrl = trimmed.substring("VITE_API_BASE_URL=".length()).replaceAll('^["\']|["\']$', '').trim()
-        }
-        if (trimmed.startsWith("VITE_JARVIS_SECRET_KEY=")) {
-            jarvisSecretKey = trimmed.substring("VITE_JARVIS_SECRET_KEY=".length()).replaceAll('^["\']|["\']$', '').trim()
+def getProjectProperty = { String name, defaultValue ->
+    if (rootProject.hasProperty('ext') && rootProject.ext.has(name)) {
+        return rootProject.ext.get(name)
+    }
+    if (project.hasProperty(name)) {
+        return project.property(name)
+    }
+    return defaultValue
+}
+
+// 1. Defaults
+def viteApiBaseUrl = "http://10.0.2.2:8000"
+def jarvisSecretKey = ""
+
+// 2. Read from root .env and frontend .env (frontend overrides root if both exist)
+def rootEnvFile = file("../../../../.env")
+def envFile = file("../../.env")
+
+[rootEnvFile, envFile].each { f ->
+    if (f.exists()) {
+        f.eachLine { line ->
+            def trimmed = line.trim()
+            if (trimmed.startsWith("#") || trimmed.isEmpty()) return
+            if (trimmed.startsWith("VITE_API_BASE_URL=")) {
+                viteApiBaseUrl = trimmed.substring("VITE_API_BASE_URL=".length()).replaceAll('^["\']|["\']$', '').trim()
+            }
+            if (trimmed.startsWith("VITE_JARVIS_SECRET_KEY=")) {
+                jarvisSecretKey = trimmed.substring("VITE_JARVIS_SECRET_KEY=".length()).replaceAll('^["\']|["\']$', '').trim()
+            }
+            if (trimmed.startsWith("JARVIS_SECRET_KEY=")) {
+                jarvisSecretKey = trimmed.substring("JARVIS_SECRET_KEY=".length()).replaceAll('^["\']|["\']$', '').trim()
+            }
         }
     }
 }
-if (rootEnvFile.exists()) {
-    rootEnvFile.eachLine { line ->
-        def trimmed = line.trim()
-        if (trimmed.startsWith("JARVIS_SECRET_KEY=")) {
-            jarvisSecretKey = trimmed.substring("JARVIS_SECRET_KEY=".length()).replaceAll('^["\']|["\']$', '').trim()
-        }
-    }
+
+// 3. System environment variables and Gradle project properties take highest precedence
+if (System.getenv("VITE_API_BASE_URL")) {
+    viteApiBaseUrl = System.getenv("VITE_API_BASE_URL").trim()
 }
+if (project.hasProperty("viteApiBaseUrl")) {
+    viteApiBaseUrl = project.property("viteApiBaseUrl").toString().trim()
+}
+
+if (System.getenv("JARVIS_SECRET_KEY")) {
+    jarvisSecretKey = System.getenv("JARVIS_SECRET_KEY").trim()
+} else if (System.getenv("VITE_JARVIS_SECRET_KEY")) {
+    jarvisSecretKey = System.getenv("VITE_JARVIS_SECRET_KEY").trim()
+}
+if (project.hasProperty("jarvisSecretKey")) {
+    jarvisSecretKey = project.property("jarvisSecretKey").toString().trim()
+}
+
+def compileSdkVer = getProjectProperty('compileSdkVersion', 35) as Integer
+def minSdkVer = getProjectProperty('minSdkVersion', 22) as Integer
+def targetSdkVer = getProjectProperty('targetSdkVersion', 35) as Integer
 
 android {
     namespace "com.jarvis.app"
-    compileSdkVersion rootProject.ext.compileSdkVersion
+    compileSdkVersion compileSdkVer
     defaultConfig {
         applicationId "com.jarvis.app"
-        minSdkVersion rootProject.ext.minSdkVersion
-        targetSdkVersion rootProject.ext.targetSdkVersion
+        minSdkVersion minSdkVer
+        targetSdkVersion targetSdkVer
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -40,8 +78,8 @@ android {
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
-        buildConfigField "String", "VITE_API_BASE_URL", "\"${viteApiBaseUrl}\""
-        buildConfigField "String", "JARVIS_SECRET_KEY", "\"${jarvisSecretKey}\""
+        buildConfigField "String", "VITE_API_BASE_URL", "\"${viteApiBaseUrl.replace('\\', '\\\\').replace('"', '\\"')}\""
+        buildConfigField "String", "JARVIS_SECRET_KEY", "\"${jarvisSecretKey.replace('\\', '\\\\').replace('"', '\\"')}\""
     }
     buildTypes {
         release {
@@ -52,17 +90,28 @@ android {
     buildFeatures {
         buildConfig = true
     }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
+    }
 }
+
+def appCompatVersion = getProjectProperty('androidxAppCompatVersion', '1.6.1')
+def coordinatorLayoutVersion = getProjectProperty('androidxCoordinatorLayoutVersion', '1.2.0')
+def splashScreenVersion = getProjectProperty('coreSplashScreenVersion', '1.0.0')
+def junitVersionVal = getProjectProperty('junitVersion', '4.13.2')
+def androidxJunitVersionVal = getProjectProperty('androidxJunitVersion', '1.1.5')
+def espressoVersionVal = getProjectProperty('androidxEspressoCoreVersion', '3.5.1')
 
 dependencies {
     implementation fileTree(include: ['*.jar'], dir: 'libs')
-    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
-    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
-    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation "androidx.appcompat:appcompat:${appCompatVersion}"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:${coordinatorLayoutVersion}"
+    implementation "androidx.core:core-splashscreen:${splashScreenVersion}"
     implementation project(':capacitor-android')
-    testImplementation "junit:junit:$junitVersion"
-    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
-    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    testImplementation "junit:junit:${junitVersionVal}"
+    androidTestImplementation "androidx.test.ext:junit:${androidxJunitVersionVal}"
+    androidTestImplementation "androidx.test.espresso:espresso-core:${espressoVersionVal}"
     implementation project(':capacitor-cordova-android-plugins')
     implementation "com.squareup.okhttp3:okhttp:4.12.0"
 }

@@ -17,17 +17,24 @@ jobs:
       contents: read
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Set up Python version
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
+      - name: Verify Python Syntax
+        run: |
+          python -m compileall -q -x "frontend" jarvis/
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: './jarvis/frontend/package-lock.json'
 
       - name: Install and Build Frontend
         working-directory: ./jarvis/frontend
@@ -35,6 +42,12 @@ jobs:
           npm ci
           npm run build
           rm -rf node_modules
+
+      - name: Prepare Azure Deployment Package
+        run: |
+          chmod +x startup.sh
+          # Remove non-server artifacts to keep deployment fast, lean, and under upload limits
+          rm -rf .git .github tests jarvis/frontend/android jarvis/frontend/src-tauri
 
       - name: 'Deploy to Azure Web App'
         uses: azure/webapps-deploy@v3
