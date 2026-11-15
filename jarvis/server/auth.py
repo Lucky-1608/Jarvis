@@ -85,3 +85,11 @@ async def authenticate_websocket(websocket: WebSocket) -> bool:
         secret_is_configured(expected_key) and hmac.compare_digest(client_key, expected_key)
     ):
         return True
+
+    # Reject unauthenticated WebSocket cleanly before returning
+    # so Uvicorn does not log 'ASGI callable returned without completing handshake' (500)
+    try:
+        await websocket.close(code=1008, reason="Unauthorized")
+    except Exception:
+        pass
+    return False

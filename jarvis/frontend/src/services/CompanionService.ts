@@ -1,5 +1,6 @@
 import { Capacitor } from '@capacitor/core';
 import { DeviceHands } from '../lib/device-bridge';
+import { getWebSocketTicket } from '../lib/api';
 
 // CompanionService.ts
 // Connects to the Jarvis Backend via WebSocket to receive system commands.
@@ -24,7 +25,8 @@ function playAudio(audioBase64?: string, format: string = 'mp3', textFallback?: 
 
 export class CompanionService {
   private ws: WebSocket | null = null;
-  private backendUrl: string;
+  private baseUrl: string;
+  private initialTicket: string | null = null;
   private intentionalDisconnect = false;
   private reconnectAttempts = 0;
   private maxReconnectDelay = 60000; // 60s cap
@@ -34,16 +36,12 @@ export class CompanionService {
   private readonly HEARTBEAT_INTERVAL = 25000; // 25s — under typical 30s proxy timeout
   private readonly HEARTBEAT_TIMEOUT = 10000;  // 10s to receive pong
 
-  constructor(backendUrl: string, ticket: string | null) {
-    // If the url is http(s), convert it to ws(s)
-    const url = new URL(backendUrl);
-    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-    url.pathname = '/api/ws/companion';
-    if (ticket) url.searchParams.set('ticket', ticket);
-    this.backendUrl = url.toString();
+  constructor(backendUrl: string, ticket: string | null = null) {
+    this.baseUrl = backendUrl;
+    this.initialTicket = ticket;
   }
 
-  public connect() {
+  public async connect() {
     // Clean up any previous connection attempt
     this.cleanup();
 
@@ -51,8 +49,23 @@ export class CompanionService {
 
     console.log('[Companion] Connecting to backend companion endpoint');
 
+    let ticket = this.initialTicket;
+    this.initialTicket = null; // Consume initial ticket once, then fetch fresh ones
+    if (!ticket) {
+      try {
+        ticket = await getWebSocketTicket();
+      } catch (err) {
+        console.warn('[Companion] Failed to fetch WS ticket:', err);
+      }
+    }
+
+    const url = new URL(this.baseUrl);
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    url.pathname = '/api/ws/companion';
+    if (ticket) url.searchParams.set('ticket', ticket);
+
     try {
-      this.ws = new WebSocket(this.backendUrl);
+      this.ws = new WebSocket(url.toString());
     } catch (err) {
       console.error('[Companion] Failed to create WebSocket:', err);
       this.scheduleReconnect();
