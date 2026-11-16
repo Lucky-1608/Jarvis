@@ -185,7 +185,6 @@ class JarvisAccessibilityService : AccessibilityService() {
                     override fun onFailure(errorCode: Int) {
                         val errMsg = when (errorCode) {
                             ERROR_TAKE_SCREENSHOT_INTERNAL_ERROR -> "Internal screenshot error"
-                            ERROR_TAKE_SCREENSHOT_NO_END_OF_FRAME -> "No end of frame"
                             ERROR_TAKE_SCREENSHOT_INVALID_DISPLAY -> "Invalid display"
                             ERROR_TAKE_SCREENSHOT_INTERVAL_TIME_SHORT -> "Interval time too short"
                             else -> "Screenshot failed with error code $errorCode"
