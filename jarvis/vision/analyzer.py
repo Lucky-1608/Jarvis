@@ -213,24 +213,37 @@ class VisionAnalyzer:
 
     async def read_screen(self, target: str = "pc", query: str = "What application is open? What's happening on screen? Describe all visible elements.") -> VisionResult:
         """Capture and analyze the current screen."""
-        if target == "phone":
-            # Here we would request the UI dump from the mobile via WebSocket
-            # Mocking the response for the purpose of the architecture update
-            mock_ui_dump = '{"text": "Brave Browser", "contentDescription": "Search or type web address", "bounds": "0,100,1080,250"}'
-            return VisionResult(
-                summary="Mobile screen reading requested. Received UI dump from AccessibilityService.",
-                elements=[mock_ui_dump],
-                application="Brave",
-                confidence=1.0,
-            )
-
+        normalized_target = "mobile" if target in ("phone", "mobile", "android") else "pc"
         from jarvis.vision.screenshot import ScreenCapture
 
-        capture = await ScreenCapture.capture_full_screen()
-        return await self.analyze_screenshot(
-            capture["base64"],
-            query=query,
-        )
+        try:
+            capture = await ScreenCapture.capture_full_screen(target_device=normalized_target)
+            return await self.analyze_screenshot(
+                capture["base64"],
+                query=query,
+            )
+        except Exception:
+            # If visual screenshot failed on mobile, fall back to accessibility UI elements dump
+            if normalized_target == "mobile":
+                try:
+                    from jarvis.server.companion_manager import companion_manager
+                    if companion_manager.has_companions():
+                        ui_res = await companion_manager.send_command_and_wait(
+                            action="read_screen",
+                            params={},
+                            target_device="mobile",
+                            timeout=10,
+                        )
+                        elements_dump = ui_res.get("output", "[]")
+                        return VisionResult(
+                            summary=f"Mobile screen elements read via AccessibilityService: {elements_dump[:200]}...",
+                            elements=[elements_dump],
+                            application="Mobile Device",
+                            confidence=0.8,
+                        )
+                except Exception as inner_exc:
+                    logger.warning("mobile.ui_dump_fallback_failed", error=str(inner_exc))
+            raise
 
     async def find_element(self, description: str) -> VisionResult:
         """Find a specific UI element on screen."""

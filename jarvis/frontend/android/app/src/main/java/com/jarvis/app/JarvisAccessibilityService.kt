@@ -2,13 +2,19 @@ package com.jarvis.app
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
+import android.graphics.Bitmap
 import android.graphics.Path
 import android.graphics.Rect
+import android.os.Build
+import android.util.Base64
+import android.util.Log
+import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
-import android.util.Log
+import androidx.core.content.ContextCompat
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 
 class JarvisAccessibilityService : AccessibilityService() {
     
@@ -139,6 +145,59 @@ class JarvisAccessibilityService : AccessibilityService() {
         val elements = JSONArray()
         traverseNode(root, elements)
         return elements.toString()
+    }
+
+    fun captureScreen(callback: (success: Boolean, base64: String?, width: Int, height: Int, error: String?) -> Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val executor = ContextCompat.getMainExecutor(this)
+            takeScreenshot(
+                Display.DEFAULT_DISPLAY,
+                executor,
+                object : TakeScreenshotCallback {
+                    override fun onSuccess(screenshotResult: ScreenshotResult) {
+                        try {
+                            val hardwareBuffer = screenshotResult.hardwareBuffer
+                            val colorSpace = screenshotResult.colorSpace
+                            val bitmap = Bitmap.wrapHardwareBuffer(hardwareBuffer, colorSpace)
+                            if (bitmap != null) {
+                                val softwareBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, false)
+                                hardwareBuffer.close()
+
+                                val stream = ByteArrayOutputStream()
+                                softwareBitmap.compress(Bitmap.CompressFormat.JPEG, 80, stream)
+                                val byteArray = stream.toByteArray()
+                                val base64 = Base64.encodeToString(byteArray, Base64.NO_WRAP)
+                                val width = softwareBitmap.width
+                                val height = softwareBitmap.height
+                                softwareBitmap.recycle()
+                                bitmap.recycle()
+                                callback(true, base64, width, height, null)
+                            } else {
+                                hardwareBuffer.close()
+                                callback(false, null, 0, 0, "Failed to create bitmap from hardware buffer")
+                            }
+                        } catch (e: Exception) {
+                            Log.e("JarvisAccessibility", "Failed to process screenshot", e)
+                            callback(false, null, 0, 0, e.message ?: "Screenshot processing error")
+                        }
+                    }
+
+                    override fun onFailure(errorCode: Int) {
+                        val errMsg = when (errorCode) {
+                            ERROR_TAKE_SCREENSHOT_INTERNAL_ERROR -> "Internal screenshot error"
+                            ERROR_TAKE_SCREENSHOT_NO_END_OF_FRAME -> "No end of frame"
+                            ERROR_TAKE_SCREENSHOT_INVALID_DISPLAY -> "Invalid display"
+                            ERROR_TAKE_SCREENSHOT_INTERVAL_TIME_SHORT -> "Interval time too short"
+                            else -> "Screenshot failed with error code $errorCode"
+                        }
+                        Log.e("JarvisAccessibility", errMsg)
+                        callback(false, null, 0, 0, errMsg)
+                    }
+                }
+            )
+        } else {
+            callback(false, null, 0, 0, "Native screen capture requires Android 11+ (API 30+)")
+        }
     }
 
     private fun traverseNode(node: AccessibilityNodeInfo?, elements: JSONArray) {

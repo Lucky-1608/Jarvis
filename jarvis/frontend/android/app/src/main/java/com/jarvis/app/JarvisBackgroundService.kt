@@ -338,6 +338,27 @@ class JarvisBackgroundService : Service() {
                     val elements = JarvisAccessibilityService.instance?.readScreen() ?: "[]"
                     sendResult(taskId, true, elements, null)
                 }
+                "capture_screen", "take_screenshot" -> {
+                    val service = JarvisAccessibilityService.instance
+                    if (service == null) {
+                        sendResult(taskId, false, null, "Accessibility service not running. Enable it in Settings.")
+                    } else {
+                        service.captureScreen { success, base64, width, height, error ->
+                            if (success && base64 != null) {
+                                val res = JSONObject().apply {
+                                    put("task_id", taskId)
+                                    put("status", "success")
+                                    put("image_base64", base64)
+                                    put("width", width)
+                                    put("height", height)
+                                }
+                                sendToBackend(res)
+                            } else {
+                                sendResult(taskId, false, null, error ?: "Screen capture failed")
+                            }
+                        }
+                    }
+                }
                 "speak", "tts", "play_audio" -> {
                     val speechText = params.optString("text")
                     if (speechText.isNotBlank()) {

@@ -131,6 +131,33 @@ class DeviceHandsPlugin : Plugin() {
     }
 
     @PluginMethod
+    fun captureScreen(call: PluginCall) {
+        val service = JarvisAccessibilityService.instance
+        if (service == null) {
+            val ret = JSObject().apply {
+                put("status", "error")
+                put("error", "Jarvis Accessibility Service is not enabled. Please enable it in Settings -> Accessibility.")
+            }
+            call.resolve(ret)
+            return
+        }
+
+        service.captureScreen { success, base64, width, height, error ->
+            val ret = JSObject()
+            if (success && base64 != null) {
+                ret.put("status", "success")
+                ret.put("image_base64", base64)
+                ret.put("width", width)
+                ret.put("height", height)
+            } else {
+                ret.put("status", "error")
+                ret.put("error", error ?: "Mobile screen capture failed")
+            }
+            call.resolve(ret)
+        }
+    }
+
+    @PluginMethod
     fun sendSMS(call: PluginCall) {
         val number = call.getString("number") ?: ""
         val message = call.getString("message") ?: ""

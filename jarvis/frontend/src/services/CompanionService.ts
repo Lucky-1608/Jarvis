@@ -143,10 +143,27 @@ export class CompanionService {
             result = await invokeCmd('show_window');
           }
         } else if (Capacitor.isNativePlatform()) {
-
-
           // We are on Mobile (Android/iOS)
-          if (action === 'open_app') {
+          if (action === 'capture_screen' || action === 'take_screenshot') {
+            try {
+              const capRes = await DeviceHands.captureScreen();
+              if (capRes && capRes.status === 'success' && capRes.image_base64) {
+                result = {
+                  status: 'success',
+                  image_base64: capRes.image_base64,
+                  width: capRes.width || 1080,
+                  height: capRes.height || 2400,
+                };
+              } else {
+                result = {
+                  status: 'error',
+                  error: capRes?.error || 'Failed to capture mobile screen.',
+                };
+              }
+            } catch (err: any) {
+              result = { status: 'error', error: err?.message || String(err) };
+            }
+          } else if (action === 'open_app') {
             try {
               let res: { success: boolean; message?: string; error?: string };
               try {

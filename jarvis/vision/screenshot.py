@@ -33,36 +33,69 @@ class ScreenCapture:
     """
 
     @staticmethod
-    async def capture_full_screen() -> dict[str, Any]:
+    async def capture_full_screen(target_device: str | None = None) -> dict[str, Any]:
         """
         Capture the entire screen.
 
         Returns a dict with the image as base64 PNG and metadata.
         """
-        # 1. Forward to connected desktop companion (prioritized for cloud or remote setups)
+        # 1. Forward to connected desktop/mobile companion (prioritized for cloud or remote setups)
+        companion_attempted = False
+        companion_error: str | None = None
         try:
             from jarvis.server.companion_manager import companion_manager
+
             if companion_manager.has_companions():
+                companion_attempted = True
+
+                chosen_target = target_device
+                if not chosen_target:
+                    pc_cids = [cid for cid, dev in companion_manager.device_types.items() if dev == "pc"]
+                    mobile_cids = [cid for cid, dev in companion_manager.device_types.items() if dev == "mobile"]
+                    if not pc_cids and mobile_cids:
+                        chosen_target = "mobile"
+                    else:
+                        chosen_target = "pc"
+
                 res = await companion_manager.send_command_and_wait(
                     action="capture_screen",
                     params={},
-                    target_device="pc",
-                    timeout=10,
+                    target_device=chosen_target,
+                    timeout=12,
                 )
                 if res.get("status") == "success" and res.get("image_base64"):
                     img_data = res["image_base64"]
                     raw_b64 = img_data.split(",", 1)[1] if "," in img_data else img_data
+                    default_width = 1080 if chosen_target == "mobile" else 1920
+                    default_height = 2400 if chosen_target == "mobile" else 1080
                     return {
                         "type": "full_screen",
-                        "width": 1920,
-                        "height": 1080,
+                        "width": res.get("width", default_width),
+                        "height": res.get("height", default_height),
                         "format": "png",
                         "size_bytes": len(raw_b64),
                         "base64": raw_b64,
                         "timestamp": time.time(),
                     }
+                else:
+                    companion_error = res.get("error") or res.get("message") or "Companion returned non-success response"
+                    logger.warning("companion.screenshot_delegation_failed", error=companion_error)
         except Exception as e:
+            companion_error = str(e)
             logger.debug("companion.screenshot_delegation_skipped", error=str(e))
+
+        # Check for headless Linux environment without display server
+        import os
+        import sys
+
+        is_headless_linux = sys.platform.startswith("linux") and not os.environ.get("DISPLAY")
+        if is_headless_linux:
+            if companion_attempted:
+                msg = f"Screen capture failed: Desktop companion error ({companion_error}). Backend server is running headless (no DISPLAY) and cannot capture local screen."
+            else:
+                msg = "Screen capture requires a connected desktop companion when backend is running in a headless environment (no DISPLAY found)."
+            logger.error("screenshot.headless_unsupported", error=msg)
+            raise RuntimeError(msg)
 
         try:
             from PIL import ImageGrab
@@ -81,8 +114,14 @@ class ScreenCapture:
                 loop = asyncio.get_running_loop()
                 screenshot = await loop.run_in_executor(None, ImageGrab.grab)
             except Exception as e:
-                logger.error("screenshot.grab_failed", error=str(e))
-                raise
+                err_str = str(e)
+                if "X connection failed" in err_str or "DISPLAY" in err_str:
+                    err_str = (
+                        f"Screen capture failed (no X11 display available: {e}). "
+                        "Please ensure the Jarvis desktop companion is running and connected."
+                    )
+                logger.error("screenshot.grab_failed", error=err_str)
+                raise RuntimeError(err_str) from e
 
         # Convert to base64 PNG
         buffer = io.BytesIO()
@@ -115,6 +154,14 @@ class ScreenCapture:
         left: int, top: int, right: int, bottom: int
     ) -> dict[str, Any]:
         """Capture a specific region of the screen."""
+        import os
+        import sys
+
+        if sys.platform.startswith("linux") and not os.environ.get("DISPLAY"):
+            raise RuntimeError(
+                "Region capture is not supported on a headless Linux server without a display server."
+            )
+
         try:
             from PIL import ImageGrab
         except ImportError:
@@ -149,14 +196,8 @@ class ScreenCapture:
         output_path: str | Path | None = None,
     ) -> Path:
         """Capture screenshot and save to file. Returns the file path."""
-        try:
-            from PIL import ImageGrab
-        except ImportError:
-            raise RuntimeError("Pillow is required for screenshots.")
-
-        import asyncio
-        loop = asyncio.get_event_loop()
-        screenshot = await loop.run_in_executor(None, ImageGrab.grab)
+        capture = await ScreenCapture.capture_full_screen()
+        image_bytes = base64.b64decode(capture["base64"])
 
         if output_path is None:
             tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
@@ -165,11 +206,7 @@ class ScreenCapture:
 
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-
-        await loop.run_in_executor(
-            None,
-            lambda: screenshot.save(str(output_path), format="PNG"),
-        )
+        output_path.write_bytes(image_bytes)
 
         logger.info("screenshot.saved", path=str(output_path))
         return output_path

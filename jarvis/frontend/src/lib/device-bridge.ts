@@ -13,6 +13,13 @@ export interface DeviceHandsPlugin {
     direction?: string;
   }): Promise<{ success: boolean; message?: string }>;
   readScreen(): Promise<{ elements: string }>;
+  captureScreen(): Promise<{
+    status: string;
+    image_base64?: string;
+    width?: number;
+    height?: number;
+    error?: string;
+  }>;
   sendSMS(options: { number: string; message: string }): Promise<{ success: boolean; message?: string }>;
   makeCall(options: { number: string }): Promise<{ success: boolean; message?: string }>;
   getBattery(): Promise<{ level: number; charging: boolean; output: string }>;

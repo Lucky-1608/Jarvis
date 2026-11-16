@@ -161,11 +161,124 @@ fn show_notification(
 
 #[tauri::command]
 fn capture_screen() -> Result<serde_json::Value, String> {
-    // Screen capture fallback on desktop
-    Ok(json!({
-        "status": "error",
-        "error": "Screen capture via Tauri native is handled through OS display stream."
-    }))
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+
+        let ps_script = r#"
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+$b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+$bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+$g = [System.Drawing.Graphics]::FromImage($bmp)
+$g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+$ms = New-Object System.IO.MemoryStream
+$bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
+$b64 = [Convert]::ToBase64String($ms.ToArray())
+$ms.Dispose()
+$g.Dispose()
+$bmp.Dispose()
+Write-Output "$($b.Width)|$($b.Height)|$b64"
+"#;
+
+        let output = Command::new("powershell")
+            .args(["-NoProfile", "-NonInteractive", "-Command", ps_script])
+            .creation_flags(0x08000000) // CREATE_NO_WINDOW
+            .output();
+
+        match output {
+            Ok(out) => {
+                if !out.status.success() {
+                    let err = String::from_utf8_lossy(&out.stderr).to_string();
+                    return Ok(json!({
+                        "status": "error",
+                        "error": format!("PowerShell screen capture failed: {}", err)
+                    }));
+                }
+
+                let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                let parts: Vec<&str> = text.splitn(3, '|').collect();
+                if parts.len() == 3 {
+                    let width: u32 = parts[0].trim().parse().unwrap_or(1920);
+                    let height: u32 = parts[1].trim().parse().unwrap_or(1080);
+                    let b64 = parts[2].trim().to_string();
+                    Ok(json!({
+                        "status": "success",
+                        "image_base64": b64,
+                        "width": width,
+                        "height": height
+                    }))
+                } else if !text.is_empty() {
+                    Ok(json!({
+                        "status": "success",
+                        "image_base64": text,
+                        "width": 1920,
+                        "height": 1080
+                    }))
+                } else {
+                    Ok(json!({
+                        "status": "error",
+                        "error": "Empty screen capture received from PowerShell."
+                    }))
+                }
+            }
+            Err(e) => Ok(json!({
+                "status": "error",
+                "error": format!("Failed to spawn PowerShell: {}", e)
+            })),
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let script = "screencapture -x -C /tmp/jarvis_capture.png && base64 -i /tmp/jarvis_capture.png && rm -f /tmp/jarvis_capture.png";
+        let output = Command::new("sh").args(["-c", script]).output();
+
+        match output {
+            Ok(out) if out.status.success() => {
+                let b64 = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                Ok(json!({
+                    "status": "success",
+                    "image_base64": b64,
+                    "width": 1920,
+                    "height": 1080
+                }))
+            }
+            Ok(out) => {
+                let err = String::from_utf8_lossy(&out.stderr).to_string();
+                Ok(json!({
+                    "status": "error",
+                    "error": format!("screencapture failed: {}", err)
+                }))
+            }
+            Err(e) => Ok(json!({
+                "status": "error",
+                "error": format!("Failed to execute screencapture: {}", e)
+            })),
+        }
+    }
+
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    {
+        let script = "import -window root /tmp/jarvis_capture.png && base64 -w 0 /tmp/jarvis_capture.png && rm -f /tmp/jarvis_capture.png";
+        let output = Command::new("sh").args(["-c", script]).output();
+
+        match output {
+            Ok(out) if out.status.success() => {
+                let b64 = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                Ok(json!({
+                    "status": "success",
+                    "image_base64": b64,
+                    "width": 1920,
+                    "height": 1080
+                }))
+            }
+            _ => Ok(json!({
+                "status": "error",
+                "error": "Screen capture on Linux requires an active X11 display and 'import' (ImageMagick)."
+            })),
+        }
+    }
 }
 
 #[tauri::command]
