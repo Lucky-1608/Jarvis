@@ -39,7 +39,7 @@ jobs:
       - name: Install and Build Frontend
         working-directory: ./jarvis/frontend
         run: |
-          npm ci
+          npm install --legacy-peer-deps
           npm run build
           rm -rf node_modules
 
